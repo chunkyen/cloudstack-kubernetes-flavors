@@ -182,7 +182,7 @@ For BGP peering (e.g., with Calico or Cilium):
 
 Install Cilium on a cluster that was provisioned with the default Calico ISO — no custom ISO needed.
 
-**Note:** This approach pulls Cilium images from the internet during node bootstrap. If you need fully offline provisioning, use the Cilium ISO build script (Step 3, Option C) instead.
+**Note:** This approach pulls Cilium images from the internet during node bootstrap. If you need fully offline provisioning, use the Cilium ISO build in [CKS Custom ISO Build Guide](cks-custom-iso.md#option-b-build-cilium-iso-community-script) (Option B).
 
 **The Cilium CNI config** is archived in this repo at:
 `setup/cks/scripts/cilium-cni-config.yaml`
