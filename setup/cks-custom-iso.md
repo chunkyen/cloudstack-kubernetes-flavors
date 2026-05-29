@@ -97,7 +97,7 @@ For a Cilium-based ISO that also bundles CCM, CSI, and Cluster Autoscaler.
 
 **Source:** [nulcell/homecloud](https://github.com/nulcell/homecloud/blob/3f5a40a3332084a4ff7bd5ae13fc3c70dce28d96/cloudstack/compute/cks/create-cilium-kubernetes-binaries-iso.sh)
 
-**Archived in this repo:** `setup/cks/scripts/create-cilium-kubernetes-binaries-iso.sh`
+**Archived in this repo:** [`create-cilium-kubernetes-binaries-iso.sh`](setup/cks/scripts/create-cilium-kubernetes-binaries-iso.sh)
 
 ### Example Build
 
