@@ -16,6 +16,7 @@ This repository examines four primary approaches to running Kubernetes on CloudS
 ### Architecture
 
 - [`architecture/cloudstack-kubernetes-provider.md`](./architecture/cloudstack-kubernetes-provider.md) — **CloudStack Kubernetes Provider** (external CCM) — applies to all flavors
+- [`architecture/cloudstack-csi-driver.md`](./architecture/cloudstack-csi-driver.md) — **CloudStack CSI Driver** (persistent storage) — applies to all flavors
 - [`architecture/cks.md`](./architecture/cks.md) — CKS architecture
 - [`architecture/capc.md`](./architecture/capc.md) — CAPC architecture
 - [`architecture/talos.md`](./architecture/talos.md) — Talos architecture
