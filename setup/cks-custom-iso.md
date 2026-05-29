@@ -23,18 +23,7 @@ sudo apt install -y wget curl genisoimage containerd.io
 sudo apt install -y wget curl genisoimage containerd.io helm
 ```
 
-## Option A: Use Pre-built ISOs
-
-Download from:
-- `http://download.cloudstack.org/cks/`
-- `http://packages.shapeblue.com/cks/`
-
-Register in CloudStack:
-1. **Storage** → **ISOs** → **Register ISO**
-2. Select the downloaded ISO
-3. Mark as `Bootable` and `For CKS` if applicable
-
-## Option B: Build Calico ISO (Official Script)
+## Option A: Build Calico ISO (Official Script)
 
 ### Script Location
 
@@ -104,7 +93,7 @@ $ARCH \
 
 > **Note:** Dedicated etcd nodes require an ISO built with etcd binaries. Available pre-built ISOs: `https://download.cloudstack.org/testing/cks/custom_templates/iso-etcd/`
 
-## Option C: Build Cilium ISO (Community Script)
+## Option B: Build Cilium ISO (Community Script)
 
 For a Cilium-based ISO that also bundles CCM, CSI, and Cluster Autoscaler.
 
