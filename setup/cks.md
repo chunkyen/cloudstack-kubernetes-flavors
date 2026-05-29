@@ -296,8 +296,8 @@ ssh -i <key> -p 2223 cloud@<VR_PUBLIC_IP>
 ### Scale Cluster
 
 **UI:**
-1. Select the cluster
-2. Click **Scale**
+1. Hover over the cluster name and click the **three dots (⋮)** on the right
+2. Select **Scale**
 3. Adjust worker or control node count
 4. Click **OK**
 
@@ -313,8 +313,8 @@ scaleKubernetesCluster id=<cluster-id> controlnodes=5
 ### Upgrade Cluster
 
 **UI:**
-1. Select the cluster
-2. Click **Upgrade**
+1. Hover over the cluster name and click the **three dots (⋮)** on the right
+2. Select **Upgrade**
 3. Select the target Kubernetes version
 4. Click **OK**
 
@@ -340,8 +340,8 @@ removeKubernetesClusterNode id=<cluster-id> instanceids=<vm-id-1>
 ### Stop/Start Cluster
 
 **UI:**
-1. Select the cluster
-2. Click **Stop** or **Start** from the action menu
+1. Hover over the cluster name and click the **three dots (⋮)** on the right
+2. Select **Stop** or **Start**
 
 **API:**
 ```bash
@@ -352,8 +352,8 @@ startKubernetesCluster id=<cluster-id>
 ### Delete Cluster
 
 **UI:**
-1. Select the cluster
-2. Click **Delete** from the action menu
+1. Hover over the cluster name and click the **three dots (⋮)** on the right
+2. Select **Delete**
 3. Confirm deletion
 
 **API:**
