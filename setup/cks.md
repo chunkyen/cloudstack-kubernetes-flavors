@@ -49,7 +49,7 @@ Register in CloudStack:
 2. Select the downloaded ISO
 3. Mark as `Bootable` and `For CKS` if applicable
 
-### Option B: Build Your Own ISO
+### Option B: Build Your Own ISO (Calico)
 
 ```bash
 # Install cloudstack-common package for the script
@@ -88,6 +88,69 @@ cd /tmp
   setup-v1.33.1-calico-etcd \
   3.5.1
 ```
+
+### Option C: Build Your Own ISO (Cilium) — Community Alternative
+
+For a Cilium-based ISO that also bundles CCM, CSI, and Cluster Autoscaler, use the community script from [nulcell/homecloud](https://github.com/nulcell/homecloud/blob/3f5a40a3332084a4ff7bd5ae13fc3c70dce28d96/cloudstack/compute/cks/create-cilium-kubernetes-binaries-iso.sh):
+
+```bash
+git clone https://github.com/nulcell/homecloud.git
+cd homecloud/cloudstack/compute/cks
+
+# Example: Build ISO with Cilium, Hubble, CCM, CSI, Cluster Autoscaler
+./create-cilium-kubernetes-binaries-iso.sh \
+  . \
+  1.33.1 \
+  1.8.0 \
+  1.33.0 \
+  1.18.2 \
+  7.14.0 \
+  cks-v1.33.1-cilium
+
+# For ARM64:
+./create-cilium-kubernetes-binaries-iso.sh \
+  . \
+  1.33.1 \
+  1.8.0 \
+  1.33.0 \
+  1.18.2 \
+  7.14.0 \
+  cks-v1.33.1-cilium \
+  arm64
+
+# With dedicated etcd:
+./create-cilium-kubernetes-binaries-iso.sh \
+  . \
+  1.33.1 \
+  1.8.0 \
+  1.33.0 \
+  1.18.2 \
+  7.14.0 \
+  cks-v1.33.1-cilium-etcd \
+  amd64 \
+  3.5.0
+```
+
+**What the Cilium ISO includes (vs. official Calico ISO):**
+
+| Component | Official (Calico) | Community (Cilium) |
+|-----------|-------------------|-------------------|
+| **CNI** | Calico | Cilium + Hubble (relay + UI) |
+| **CCM** | Manual deploy | Auto-bundled |
+| **CSI Driver** | Manual deploy | Auto-bundled (v3.0.0) |
+| **Cluster Autoscaler** | Not included | Auto-bundled (CloudStack provider) |
+| **Kubernetes Dashboard** | Included | Included |
+| **ImagePullPolicy** | Default | Set to `IfNotPresent` |
+| **Pre-pulled images** | No (via ISO) | Yes (containerd) |
+| **Dedicated etcd** | Optional (9th param) | Optional (9th param) |
+
+**Key differences in the Cilium approach:**
+- Uses `helm template` to generate Cilium manifests with `kubeProxyReplacement=true` (eBPF-based)
+- Hubble observability (relay + UI) enabled by default
+- Pre-pulls all container images into containerd at build time and exports them to the ISO
+- Sets `imagePullPolicy: IfNotPresent` across all YAML files
+- Uses shapeblue's `kubelet.service` and `10-kubeadm.conf` for newer K8s versions
+- Includes Cluster Autoscaler manifest for CloudStack
 
 ### Register the ISO as a Supported K8s Version
 
