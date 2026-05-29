@@ -143,6 +143,7 @@ From CloudStack 4.21+, the cluster creation form includes an **Advanced Settings
 - **Template:** CKS-marked template for control plane nodes (e.g., with pre-installed monitoring agents)
 - **Service Offering:** CPU/RAM profile for control nodes (e.g., 4 CPU / 8 GB RAM)
 - **Default:** Uses the last registered SystemVM template with the global K8s service offering
+- **Note:** Step 4 (Register CKS-Compatible Templates) is optional — only needed if you want custom templates per node type. See [Step 4](#step-4-optional-register-cks-compatible-templates) for details.
 
 ##### 3. Worker Node Template & Service Offering
 - **Template:** CKS-marked template for worker nodes (e.g., GPU-enabled, or with specific runtime tools)
