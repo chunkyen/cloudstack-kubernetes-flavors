@@ -15,7 +15,7 @@ This repository examines four primary approaches to running Kubernetes on CloudS
 
 - [`architecture/`](./architecture/) - Architecture diagrams and component breakdowns
 - [`setup/`](./setup/) - Step-by-step setup guides for each flavor
-  - [`ckc/`](./setup/cks/) - CKS deployment
+  - [`cks/`](./setup/cks/) - CKS deployment
   - [`capc/`](./setup/capc/) - CAPC deployment (with user-defined OS)
   - [`talos/`](./setup/talos/) - Talos Linux standalone (with CAPI or bare-metal)
   - [`rancher-capc/`](./setup/rancher-capc/) - Rancher with CAPC
