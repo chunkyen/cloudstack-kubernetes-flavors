@@ -237,6 +237,14 @@ runcmd:
   - /home/cloud/custom-cni.sh
 ```
 
+##### 6. CloudStack CSI Driver Toggle
+- **What:** Enable/disable the CloudStack CSI Driver deployment on cluster creation
+- **Default:** Disabled
+- **Why:** When enabled, the CSI driver is automatically deployed to the cluster — no manual setup needed
+- **Benefit:** Eliminates manual CSI deployment steps (secret creation, manifest deployment) for new CKS clusters
+- **Manual deploy still needed for:** Pre-existing clusters, or clusters where this was not enabled during creation
+- **See also:** [CloudStack CSI Driver architecture](../../architecture/cloudstack-csi-driver.md) · [CSI setup guide](../../setup/cloudstack-csi-driver.md)
+
 #### UI Flow
 1. **Compute** → **Kubernetes** → **Add Kubernetes Cluster**
 2. Fill in basic fields (name, zone, network, version, node counts)
@@ -244,7 +252,8 @@ runcmd:
 4. Select templates/service offerings per node type
 5. Select hypervisor type if needed
 6. Select CNI configuration if needed
-7. Click **Create**
+7. **Enable CloudStack CSI Driver** if persistent storage is needed (disabled by default)
+8. Click **Create**
 
 #### API Equivalent
 The `createKubernetesCluster` API accepts additional parameters when advanced settings are used:
@@ -256,6 +265,7 @@ The `createKubernetesCluster` API accepts additional parameters when advanced se
 - `etcdserviceofferingid` — Service offering for etcd nodes
 - `hypervisortype` — Hypervisor type filter
 - `cniconfigurationid` — CNI configuration ID
+- `enablecloudstackcsidriver` — Enable CloudStack CSI Driver deployment (disabled by default)
 
 See the [official API docs](http://docs.cloudstack.apache.org/en/latest/plugins/cloudstack-kubernetes-service.html) for the complete parameter list.
 
