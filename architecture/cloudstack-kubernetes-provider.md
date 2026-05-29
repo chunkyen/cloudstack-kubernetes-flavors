@@ -77,7 +77,7 @@ This provider is relevant to **all four Kubernetes flavors** on CloudStack:
 
 | Flavor | How it applies |
 |--------|---------------|
-| **CKS** | Auto-deployed when CKS cluster is created (4.16+) |
+| **CKS** | Auto-deployed when CKS cluster is created (4.16+); enabled by default |
 | **CAPC** | Required for LoadBalancer services and node metadata on CAPC-managed clusters |
 | **Talos** | Must be manually deployed; Talos doesn't include an in-tree CCM |
 | **Rancher+CAPC** | Deployed by Rancher or manually for LoadBalancer support |

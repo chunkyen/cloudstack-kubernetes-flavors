@@ -92,7 +92,7 @@ The `cloudstack-csi-sc-syncer` tool synchronizes CloudStack disk offerings to Ku
 
 | Flavor | How it applies |
 |--------|---------------|
-| **CKS** | Deployed manually or via CKS cluster creation; same cloud-config as CCM |
+| **CKS** | **Enable via CKS cluster creation** (Advanced Settings → Enable CloudStack CSI Driver, disabled by default); manual deploy only for pre-existing clusters |
 | **CAPC** | Deployed manually on CAPC-managed clusters; requires shared disk offerings in CloudStack |
 | **Talos** | Deployed manually; Talos doesn't include CSI by default |
 | **Rancher+CAPC** | Deployed via Rancher or manually; Rancher can manage CSI lifecycle |
