@@ -37,14 +37,39 @@ Ensure a default network offering is configured:
    - Global setting: `cloud.kubernetes.cluster.network.offering`
    - Value: `DefaultNetworkOfferingforKubernetesService`
 
+## Step 3: Register Kubernetes Binaries ISO
 
-For pre-built ISOs, custom ISO builds (Calico/Cilium), and registration instructions, see the dedicated guide:
+### Pre-built ISOs
 
-- [**CKS Custom ISO Build Guide**](cks-custom-iso.md) → Complete instructions for building and registering custom ISOs
+Download from:
+- [`download.cloudstack.org/cks/`](http://download.cloudstack.org/cks/)
+- [`packages.shapeblue.com/cks/`](http://packages.shapeblue.com/cks/)
 
-Quick options:
-- **Pre-built ISOs:** Download from [`download.cloudstack.org/cks/`](http://download.cloudstack.org/cks/) or [`packages.shapeblue.com/cks/`](http://packages.shapeblue.com/cks/)
-- **Custom ISO:** Follow the [Custom ISO Build Guide](cks-custom-iso.md) for Calico or Cilium builds
+Register in CloudStack: **Storage** → **ISOs** → **Register ISO**
+
+### Custom ISO Builds
+
+For custom ISO builds (Calico or Cilium), see the dedicated guide:
+
+- [**CKS Custom ISO Build Guide**](cks-custom-iso.md)
+
+### Register the ISO as a Supported K8s Version
+
+After building or downloading an ISO, register it:
+
+**Via UI:** **Infrastructure** → **Kubernetes** → **Supported Versions** → **Add Kubernetes Supported Version**
+
+**Via API:**
+```bash
+addKubernetesSupportedVersion \
+  name=v1.33.1 \
+  semanticversion=1.33.1 \
+  url=http://<server>/setup-v1.33.1.iso \
+  zoneid=<zone-id> \
+  mincpunumber=2 \
+  minmemory=2048 \
+  checksum=<iso-checksum>
+```
 
 ## Step 4: (Optional) Register CKS-Compatible Templates
 
