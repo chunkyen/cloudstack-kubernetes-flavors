@@ -282,12 +282,6 @@ kubectl --kubeconfig=<kubeconfig-file> get nodes
 kubectl --kubeconfig=<kubeconfig-file> get pods -n kube-system
 ```
 
-### Access Kubernetes Dashboard
-```bash
-kubectl --kubeconfig=<kubeconfig-file> proxy --address=0.0.0.0 --port=8001
-# Visit: http://localhost:8001/api/v1/namespaces/kube-system/services/https:kubernetes-dashboard:/proxy/
-```
-
 ### SSH to Nodes
 ```bash
 # Control node (port 2222 + node_index)
@@ -350,9 +344,6 @@ kubectl get pods -n kube-system
 
 # Check CNI (Calico)
 kubectl get pods -n calico-system
-
-# Check dashboard
-kubectl get pods -n kubernetes-dashboard
 
 # View events
 kubectl get events --sort-by='.lastTimestamp'
