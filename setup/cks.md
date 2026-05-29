@@ -295,13 +295,17 @@ ssh -i <key> -p 2223 cloud@<VR_PUBLIC_IP>
 
 ### Scale Cluster
 
+> **Note:** Scaling changes the node **spec vertically** (CPU/RAM) by assigning a different compute offering. It does **not** change the number of nodes — for that, use the cluster creation form or the scale API with `workernodes`/`controlnodes`.
+
 **UI:**
 1. Hover over the cluster name and click the **three dots (⋮)** on the right
 2. Click the **Scale** icon (📐)
+3. Select a new service offering (compute spec) for the node type
+4. Click **OK**
 
 **API:**
 ```bash
-# Scale workers
+# Scale workers (change node count)
 scaleKubernetesCluster id=<cluster-id> workernodes=5
 
 # Scale control nodes (requires HA setup)
@@ -326,9 +330,17 @@ upgradeKubernetesCluster id=<cluster-id> kubernetesversionid=<new-version-id>
 ```
 
 ### Add Pre-created Worker Nodes
+
+> **Note:** The **Add Node** icon (➕) only appears when the cluster is in a **running** state.
+
+**UI:**
+1. Hover over the cluster name and click the **three dots (⋮)** on the right
+2. Click the **Add Node** icon (➕)
+3. Select VMs from the same network as the cluster
+4. Click **OK**
+
+**API:**
 ```bash
-# From UI: Select cluster → Nodes → Add Nodes → Select VMs from same network
-# From API:
 addKubernetesClusterNode \
   id=<cluster-id> \
   instanceids=<vm-id-1>,<vm-id-2>
