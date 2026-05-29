@@ -119,8 +119,6 @@ createKubernetesCluster \
 
 From CloudStack 4.21+, the cluster creation form includes an **Advanced Settings** toggle that unlocks granular control over each node type. This enables heterogeneous clusters where control, worker, and etcd nodes can use different templates, service offerings, and even hypervisor types.
 
-> **Note:** Step 4 (templates) is optional — only needed if you want custom templates per node type.
-
 #### When to Use Advanced Settings
 
 | Use Case | Why Advanced Settings |
