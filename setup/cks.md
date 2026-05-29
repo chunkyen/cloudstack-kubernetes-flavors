@@ -263,12 +263,71 @@ createKubernetesCluster \
 
 ### Flexible Cluster (ACS 4.21+)
 
-Enable **Advanced Settings** in the UI to configure:
-- **Control Node Template** and **Service Offering**
-- **Worker Node Template** and **Service Offering**
-- **Etcd Node Template** and **Service Offering** (if etcdnodes ≥ 1)
-- **Hypervisor Type** filter
-- **CNI Configuration** selection
+From CloudStack 4.21+, the cluster creation form includes an **Advanced Settings** toggle that unlocks granular control over each node type. This enables heterogeneous clusters where control, worker, and etcd nodes can use different templates, service offerings, and even hypervisor types.
+
+#### When to Use Flexible Clusters
+
+| Use Case | Why Flexible Settings |
+|----------|----------------------|
+| **Production HA** | Control nodes need more RAM/CPU than workers; dedicated etcd nodes for performance |
+| **Dedicated etcd** | Separate etcd from control plane for fault isolation and I/O performance |
+| **GPU workloads** | Workers on GPU-enabled templates/service offerings, control plane on standard |
+| **Hypervisor affinity** | Deploy nodes only on specific hypervisor types (e.g., KVM only, no VMware) |
+| **Custom base images** | Pre-bake control nodes with monitoring agents, workers with runtime tools |
+| **BGP CNI** | Register CNI config with BGP parameters (peer_ip, peer_as_number) |
+
+#### Advanced Settings Breakdown
+
+##### 1. Hypervisor Type Selection
+- **What:** Restricts node deployment to a specific hypervisor (KVM, VMware, etc.)
+- **Why:** Ensures consistent performance, enables hypervisor-specific features (e.g., GPU passthrough)
+- **Effect:** CloudStack only provisions CKS nodes on hosts matching the selected hypervisor
+
+##### 2. Control Node Template & Service Offering
+- **Template:** CKS-marked template for control plane nodes (e.g., with pre-installed monitoring agents)
+- **Service Offering:** CPU/RAM profile for control nodes (e.g., 4 CPU / 8 GB RAM)
+- **Default:** Uses the last registered SystemVM template with the global K8s service offering
+
+##### 3. Worker Node Template & Service Offering
+- **Template:** CKS-marked template for worker nodes (e.g., GPU-enabled, or with specific runtime tools)
+- **Service Offering:** CPU/RAM profile for workers (e.g., 8 CPU / 16 GB RAM for compute-heavy workloads)
+- **Default:** Uses the last registered SystemVM template with the global K8s service offering
+
+##### 4. Etcd Node Template & Service Offering (dedicated etcd)
+- **When:** Set `etcdnodes ≥ 1` during cluster creation
+- **Template:** CKS-marked template — **must be from an ISO built with etcd binaries** (use the `ETCD_VERSION` parameter in `create-kubernetes-binaries-iso.sh`)
+- **Service Offering:** CPU/RAM profile for etcd nodes (e.g., 2 CPU / 4 GB RAM with fast disk)
+- **Why:** Separating etcd from the control plane improves fault isolation and etcd performance
+- **Available ISOs:** `https://download.cloudstack.org/testing/cks/custom_templates/iso-etcd/`
+
+##### 5. CNI Configuration Selection
+- **What:** Pre-registered CNI user-data configuration (from 4.21+)
+- **How to register:** **Instances** → **CNI Configuration** → **Add CNI Configuration**
+- **Why:** Allows dynamic CNI parameter injection (e.g., BGP peer IP/AS number) without rebuilding ISOs
+- **Example parameters:** `peer_ip_address`, `peer_as_number` for BGP peering
+- **Alternative:** Build ISO with CNI baked in (Option B/C in Step 3)
+
+#### UI Flow
+1. **Compute** → **Kubernetes** → **Add Kubernetes Cluster**
+2. Fill in basic fields (name, zone, network, version, node counts)
+3. **Toggle "Advanced Settings"** to reveal the granular options
+4. Select templates/service offerings per node type
+5. Select hypervisor type if needed
+6. Select CNI configuration if needed
+7. Click **Create**
+
+#### API Equivalent
+The `createKubernetesCluster` API accepts additional parameters when advanced settings are used:
+- `controltemplateid` — Template ID for control nodes
+- `controlserviceofferingid` — Service offering for control nodes
+- `workertemplateid` — Template ID for worker nodes
+- `workerserviceofferingid` — Service offering for worker nodes
+- `etcdtemplateid` — Template ID for etcd nodes (if etcdnodes ≥ 1)
+- `etcdserviceofferingid` — Service offering for etcd nodes
+- `hypervisortype` — Hypervisor type filter
+- `cniconfigurationid` — CNI configuration ID
+
+See the [official API docs](http://docs.cloudstack.apache.org/en/latest/plugins/cloudstack-kubernetes-service.html) for the complete parameter list.
 
 ## Step 7: Access Your Cluster
 
