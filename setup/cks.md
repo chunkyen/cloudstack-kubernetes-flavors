@@ -257,7 +257,7 @@ createKubernetesCluster \
 
 From CloudStack 4.21+, the cluster creation form includes an **Advanced Settings** toggle that unlocks granular control over each node type. This enables heterogeneous clusters where control, worker, and etcd nodes can use different templates, service offerings, and even hypervisor types.
 
-> **Prerequisite:** Complete Step 4 (templates) before using Advanced Settings.
+> **Note:** Step 4 (templates) is optional — only needed if you want custom templates per node type.
 
 #### When to Use Advanced Settings
 
@@ -296,7 +296,7 @@ From CloudStack 4.21+, the cluster creation form includes an **Advanced Settings
 
 ##### 5. CNI Configuration Selection
 - **What:** Pre-registered CNI user-data configuration (from 4.21+)
-- **How to register:** **Instances** → **CNI Configuration** → **Add CNI Configuration** (Step 4)
+- **How to register:** **Instances** → **CNI Configuration** → **Add CNI Configuration**
 - **Why:** Allows dynamic CNI parameter injection (e.g., BGP peer IP/AS number) without rebuilding ISOs
 - **Example parameters:** `peer_ip_address`, `peer_as_number` for BGP peering
 - **Alternative:** Build ISO with CNI baked in (Step 3)
