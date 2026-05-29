@@ -160,34 +160,6 @@ helm upgrade --install cilium cilium/cilium --version ${CILIUM_VERSION} \
   --take-ownership
 ```
 
-## Register the ISO as a Supported K8s Version
-
-### Via CloudStack UI
-
-1. **Infrastructure** → **Kubernetes** → **Supported Versions**
-2. Click **Add Kubernetes Supported Version**
-3. Fill in:
-   - **Name:** `v1.33.1`
-   - **Semantic Version:** `1.33.1`
-   - **Zone:** Select your zone
-   - **URL:** Path to the ISO (HTTP/HTTPS accessible by management server)
-   - **Checksum:** MD5/SHA of the ISO
-   - **Min CPU:** `2`
-   - **Min Memory:** `2048` MB
-
-### Via API
-
-```bash
-addKubernetesSupportedVersion \
-  name=v1.33.1 \
-  semanticversion=1.33.1 \
-  url=http://<server>/setup-v1.33.1.iso \
-  zoneid=<zone-id> \
-  mincpunumber=2 \
-  minmemory=2048 \
-  checksum=<iso-checksum>
-```
-
 ## Troubleshooting
 
 | Issue | Solution |
