@@ -4,13 +4,15 @@
 
 The **CloudStack CSI Driver** provides persistent storage integration between Kubernetes and CloudStack. It enables dynamic provisioning, volume snapshots, and lifecycle management of CloudStack disk volumes from Kubernetes PersistentVolumeClaims.
 
-**Repository:** [shapeblue/cloudstack-csi-driver](https://github.com/shapeblue/cloudstack-csi-driver) (fork of [cloudstack/cloudstack-csi-driver](https://github.com/cloudstack/cloudstack-csi-driver))
-**Based on:** Original by Apalia SAS → forked by Leaseweb → ShapeBlue maintains
+**Canonical Repository:** [cloudstack/cloudstack-csi-driver](https://github.com/cloudstack/cloudstack-csi-driver) — CloudStack org (release artifacts, community-led project, not an ASF project)
+**Fork:** [shapeblue/cloudstack-csi-driver](https://github.com/shapeblue/cloudstack-csi-driver) — ShapeBlue maintains a fork with additional contributions
+**Based on:** Original by Apalia SAS → forked by Leaseweb → ShapeBlue fork
 **Requires:** Kubernetes 1.25+, CloudStack zone (tested on KVM)
 
 ## Background
 
-- Fork lineage: Apalia → Leaseweb → ShapeBlue
+- Fork lineage: Apalia SAS → Leaseweb → ShapeBlue fork
+- Canonical release repo: [cloudstack/cloudstack-csi-driver](https://github.com/cloudstack/cloudstack-csi-driver) (CloudStack org, community-led)
 - Goal: Widen scope to work across hypervisors (KVM, VMware, XenServer/XCP-ng)
 - Adds support for domains, projects, CKS, CAPC, and advanced storage operations (volume snapshots)
 - Uses the same `cloud-config` format as the CloudStack Kubernetes Provider
@@ -69,6 +71,8 @@ kubectl apply -f https://raw.githubusercontent.com/kubernetes-csi/external-snaps
 ```bash
 kubectl apply -f https://github.com/cloudstack/cloudstack-csi-driver/releases/latest/download/manifest.yaml
 ```
+
+> Use the manifest from the canonical [cloudstack/cloudstack-csi-driver](https://github.com/cloudstack/cloudstack-csi-driver) repo for release artifacts.
 
 ### 5. Create StorageClass
 
@@ -209,8 +213,8 @@ Kubernetes node names must match CloudStack instance names for volume attachment
 
 ## References
 
-- [ShapeBlue CSI Driver](https://github.com/shapeblue/cloudstack-csi-driver)
-- [CloudStack CSI Driver (main)](https://github.com/cloudstack/cloudstack-csi-driver)
+- [Canonical: cloudstack/cloudstack-csi-driver](https://github.com/cloudstack/cloudstack-csi-driver) (release artifacts)
+- [ShapeBlue Fork](https://github.com/shapeblue/cloudstack-csi-driver)
 - [CloudStack Storage Documentation](http://docs.cloudstack.apache.org/en/latest/adminguide/storage.html)
 - [CSI Specification](https://github.com/container-storage-interface/spec)
 - [CloudStack Kubernetes Provider](https://github.com/apache/cloudstack-kubernetes-provider)
