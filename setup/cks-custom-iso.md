@@ -11,19 +11,12 @@ This guide covers building custom Kubernetes binaries ISOs for CloudStack Kubern
 
 > **Run all build commands on the CloudStack management server.**
 
-## Prerequisites
+## Option A: Build Calico ISO (Official Script)
 
-### For Calico ISO (Official Script)
+### Prerequisites
 ```bash
 sudo apt install -y wget curl genisoimage containerd.io
 ```
-
-### For Cilium ISO (Community Script)
-```bash
-sudo apt install -y wget curl genisoimage containerd.io helm
-```
-
-## Option A: Build Calico ISO (Official Script)
 
 ### Script Location
 
@@ -94,6 +87,11 @@ $ARCH \
 > **Note:** Dedicated etcd nodes require an ISO built with etcd binaries. Available pre-built ISOs: `https://download.cloudstack.org/testing/cks/custom_templates/iso-etcd/`
 
 ## Option B: Build Cilium ISO (Community Script)
+
+### Prerequisites
+```bash
+sudo apt install -y wget curl genisoimage containerd.io helm
+```
 
 For a Cilium-based ISO that also bundles CCM, CSI, and Cluster Autoscaler.
 
