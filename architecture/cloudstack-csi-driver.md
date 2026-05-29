@@ -4,15 +4,13 @@
 
 The **CloudStack CSI Driver** provides persistent storage integration between Kubernetes and CloudStack. It enables dynamic provisioning, volume snapshots, and lifecycle management of CloudStack disk volumes from Kubernetes PersistentVolumeClaims.
 
-**Canonical Repository:** [cloudstack/cloudstack-csi-driver](https://github.com/cloudstack/cloudstack-csi-driver) — CloudStack org (release artifacts, community-led project, not an ASF project)
+**Canonical Repository:** [cloudstack/cloudstack-csi-driver](https://github.com/cloudstack/cloudstack-csi-driver) — CloudStack org (release artifacts, community-led project)
 **Fork:** [shapeblue/cloudstack-csi-driver](https://github.com/shapeblue/cloudstack-csi-driver) — ShapeBlue maintains a fork with additional contributions
-**Based on:** Original by Apalia SAS → forked by Leaseweb → ShapeBlue fork
 **Requires:** Kubernetes 1.25+, CloudStack zone (tested on KVM)
 
 ## Background
 
 - Fork lineage: Apalia SAS → Leaseweb → ShapeBlue fork
-- Canonical release repo: [cloudstack/cloudstack-csi-driver](https://github.com/cloudstack/cloudstack-csi-driver) (CloudStack org, community-led)
 - Goal: Widen scope to work across hypervisors (KVM, VMware, XenServer/XCP-ng)
 - Adds support for domains, projects, CKS, CAPC, and advanced storage operations (volume snapshots)
 - Uses the same `cloud-config` format as the CloudStack Kubernetes Provider
@@ -26,76 +24,13 @@ The CSI Driver manages CloudStack disk volumes as Kubernetes PersistentVolumes:
 3. **Volume lifecycle** — Attach, mount, detach, delete volumes
 4. **Storage classes** — Maps CloudStack disk offerings to Kubernetes StorageClasses
 
-## Prerequisites
-
-- **Kubernetes 1.25+** running in CloudStack
-- **Disk offering** with type `shared` and custom size available
-- **CloudStack account** credentials (same account that created the nodes)
-- **Node naming** — Kubernetes node names must match CloudStack instance names (or use cloud-init metadata)
-- **Root domain** — Kubernetes nodes must be in the Root domain
-- **KVM snapshots** (optional) — Set `kvm.snapshot.enabled=true` global setting
-
-## Deployment
-
-### 1. Create cloud-config
-
-```ini
-[Global]
-api-url = <CloudStack API URL>
-api-key = <CloudStack API Key>
-secret-key = <CloudStack API Secret>
-ssl-no-verify = <true or false (optional)>
-```
-
-> Reuse the same secret as the CloudStack Kubernetes Provider if deployed.
-
-### 2. Create Kubernetes Secret
-
-```bash
-kubectl create secret generic cloudstack-secret \
-  --namespace kube-system \
-  --from-file ./cloud-config \
-  cloudstack-secret
-```
-
-### 3. Install VolumeSnapshot CRDs (optional)
-
-```bash
-kubectl apply -f https://raw.githubusercontent.com/kubernetes-csi/external-snapshotter/v8.3.0/client/config/crd/snapshot.storage.k8s.io_volumesnapshotclasses.yaml
-kubectl apply -f https://raw.githubusercontent.com/kubernetes-csi/external-snapshotter/v8.3.0/client/config/crd/snapshot.storage.k8s.io_volumesnapshotcontents.yaml
-kubectl apply -f https://raw.githubusercontent.com/kubernetes-csi/external-snapshotter/v8.3.0/client/config/crd/snapshot.storage.k8s.io_volumesnapshotclasses.yaml
-```
-
-### 4. Deploy the CSI Driver
-
-```bash
-kubectl apply -f https://github.com/cloudstack/cloudstack-csi-driver/releases/latest/download/manifest.yaml
-```
-
-> Use the manifest from the canonical [cloudstack/cloudstack-csi-driver](https://github.com/cloudstack/cloudstack-csi-driver) repo for release artifacts.
-
-### 5. Create StorageClass
-
-```yaml
-apiVersion: storage.k8s.io/v1
-kind: StorageClass
-metadata:
-  name: cloudstack-ssd
-provisioner: csi.cloudstack.apache.org
-parameters:
-  csi.cloudstack.apache.org/disk-offering-id: <cloudstack-disk-offering-uuid>
-volumeBindingMode: WaitForFirstConsumer
-reclaimPolicy: Delete  # or Retain
-```
-
-> **Important:** `volumeBindingMode: WaitForFirstConsumer` is required to respect topology constraints (volume in the right zone).
-
-## StorageClass Parameters
+## StorageClass Configuration
 
 | Parameter | Description |
 |-----------|-------------|
+| `provisioner` | Must be `csi.cloudstack.apache.org` |
+| `volumeBindingMode` | Must be `WaitForFirstConsumer` (respects topology constraints) |
 | `csi.cloudstack.apache.org/disk-offering-id` | CloudStack disk offering UUID (required) |
-| `volumeBindingMode` | Must be `WaitForFirstConsumer` |
 | `reclaimPolicy` | `Delete` (default) or `Retain` |
 
 ### Reclaim Policy
@@ -109,77 +44,29 @@ reclaimPolicy: Delete  # or Retain
 
 ## Volume Snapshots
 
-### Create Snapshot
+The driver supports CloudStack volume snapshots via CSI snapshot APIs:
 
-```yaml
-apiVersion: snapshot.storage.k8s.io/v1
-kind: VolumeSnapshot
-metadata:
-  name: snapshot-1
-spec:
-  volumeSnapshotClassName: cloudstack-snapshot-class
-  source:
-    persistentVolumeClaimName: my-pvc
-```
+- **CRDs:** VolumeSnapshotClass, VolumeSnapshotContent, VolumeSnapshot (from kubernetes-csi/external-snapshotter v8.3.0)
+- **Controller pods:** `cloudstack-csi-controller`, `csi-snapshotter`, `snapshot-controller`
+- **Restore flow:** Snapshot → PVC from snapshot → PV bound → Pod scheduled → volume attached and mounted
 
-### Restore from Snapshot
+### KVM Snapshot Requirement
 
-```yaml
-apiVersion: snapshot.storage.k8s.io/v1
-kind: VolumeSnapshotContent
-# ... (auto-created from snapshot)
-
-# Create PVC from snapshot
-kubectl apply -f examples/k8s/snapshot/pvc-from-snapshot.yaml
-
-# Create pod using restored PVC
-kubectl apply -f examples/k8s/snapshot/restore-pod.yaml
-```
-
-### Delete Snapshot
-
+For volume snapshots on KVM zones, set:
 ```bash
-kubectl delete volumesnapshot snapshot-1
-```
-
-**Troubleshooting stuck snapshots:**
-```bash
-# Check for finalizers
-kubectl get volumesnapshot <snapshot-name> -o yaml
-
-# Patch to remove finalizers (bypasses cleanup — use with caution)
-kubectl patch volumesnapshot <snapshot-name> --type=merge \
-  -p '{"metadata":{"finalizers":[]}}'
-```
-
-### Debugging Snapshot Operations
-
-```bash
-# Controller logs
-kubectl logs -f <cloudstack-csi-controller-pod> -n kube-system -c csi-snapshotter
-kubectl logs -f <cloudstack-csi-controller-pod> -n kube-system -c snapshot-controller
-
-# Restore logs
-kubectl logs -f <cloudstack-csi-controller-pod> -n kube-system -c external-provisioner
-```
-
-## Storage Class Syncer
-
-The `cloudstack-csi-sc-syncer` tool synchronizes CloudStack disk offerings to Kubernetes StorageClasses automatically.
-
-**More info:** [cloudstack-csi-sc-syncer README](https://github.com/cloudstack/cloudstack-csi-driver/blob/main/cmd/cloudstack-csi-sc-syncer/README.md)
-
-## Build & Container Images
-
-```bash
-# Build driver binary
-make build-cloudstack-csi-driver
-
-# Build container images
-make container
+updateGlobalConfiguration name=kvm.snapshot.enabled value=true
+# Then restart management server
+service cloudstack-management restart
 ```
 
 ## Important Considerations
+
+### Node-Instance Naming
+
+Kubernetes node names must match CloudStack instance names for volume attachment. If using different names:
+- Enable cloud-init on nodes
+- Mount `/run/cloud-init/` in the CSI node plugin
+- Metadata available at `/run/cloud-init/instance-data.json`
 
 ### Node Scheduling
 
@@ -195,12 +82,11 @@ make container
 - Can prevent CSI driver initialization
 - May cause networking issues within the cluster
 
-### Node-Instance Naming
+## Storage Class Syncer
 
-Kubernetes node names must match CloudStack instance names for volume attachment. If using different names:
-- Enable cloud-init on nodes
-- Ensure `/run/cloud-init/` is mounted in the CSI node plugin
-- Metadata available at `/run/cloud-init/instance-data.json`
+The `cloudstack-csi-sc-syncer` tool synchronizes CloudStack disk offerings to Kubernetes StorageClasses automatically.
+
+**More info:** [cloudstack-csi-sc-syncer README](https://github.com/cloudstack/cloudstack-csi-driver/blob/main/cmd/cloudstack-csi-sc-syncer/README.md)
 
 ## Applicability Across Flavors
 
@@ -210,6 +96,20 @@ Kubernetes node names must match CloudStack instance names for volume attachment
 | **CAPC** | Deployed manually on CAPC-managed clusters; requires shared disk offerings in CloudStack |
 | **Talos** | Deployed manually; Talos doesn't include CSI by default |
 | **Rancher+CAPC** | Deployed via Rancher or manually; Rancher can manage CSI lifecycle |
+
+## Setup
+
+For deployment instructions, see [setup/cloudstack-csi-driver.md](../../setup/cloudstack-csi-driver.md).
+
+## Build
+
+```bash
+# Build driver binary
+make build-cloudstack-csi-driver
+
+# Build container images
+make container
+```
 
 ## References
 
