@@ -26,25 +26,24 @@ See the [Architecture](#architecture) section for details on each.
 
 ### Architecture
 
-- [`architecture/cloudstack-kubernetes-provider.md`](./architecture/cloudstack-kubernetes-provider.md) — **CloudStack Kubernetes Provider** (external CCM) — applies to all flavors
-- [`architecture/cloudstack-csi-driver.md`](./architecture/cloudstack-csi-driver.md) — **CloudStack CSI Driver** (persistent storage) — applies to all flavors
-- [`architecture/cks.md`](./architecture/cks.md) — CKS architecture
-- [`architecture/capc.md`](./architecture/capc.md) — CAPC architecture
-- [`architecture/talos.md`](./architecture/talos.md) — Talos architecture
-- [`architecture/rancher-capc.md`](./architecture/rancher-capc.md) — Rancher+CAPC architecture
+- [CloudStack Kubernetes Provider (external CCM)](architecture/cloudstack-kubernetes-provider.md) — applies to all flavors
+- [CloudStack CSI Driver (persistent storage)](architecture/cloudstack-csi-driver.md) — applies to all flavors
+- [CKS architecture](architecture/cks.md)
+- [CAPC architecture](architecture/capc.md)
+- [Talos architecture](architecture/talos.md)
+- [Rancher+CAPC architecture](architecture/rancher-capc.md)
 
 ### Setup Guides
 
-- [`setup/`](./setup/) - Step-by-step setup guides for each flavor
-  - [`cks/`](./setup/cks/) - CKS deployment
-  - [`capc/`](./setup/capc/) - CAPC deployment (with user-defined OS)
-  - [`talos/`](./setup/talos/) - Talos Linux standalone (with CAPI or bare-metal)
-  - [`rancher-capc/`](./setup/rancher-capc/) - Rancher with CAPC
+- [CKS deployment](setup/cks.md)
+- [CAPC deployment (with user-defined OS)](setup/capc.md)
+- [Talos Linux standalone (with CAPI or bare-metal)](setup/talos.md)
+- [Rancher with CAPC](setup/rancher-capc.md)
 
 ### Analysis
 
-- [`comparison/`](./comparison/) - Feature comparison matrix and analysis
-- [`references/`](./references/) - External references and documentation links
+- [Feature comparison matrix and analysis](comparison/)
+- [External references and documentation links](references/)
 
 ## Quick Comparison
 
