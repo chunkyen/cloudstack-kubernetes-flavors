@@ -297,9 +297,81 @@ From CloudStack 4.21+, the cluster creation form includes an **Advanced Settings
 ##### 5. CNI Configuration Selection
 - **What:** Pre-registered CNI user-data configuration (from 4.21+)
 - **How to register:** **Instances** → **CNI Configuration** → **Add CNI Configuration**
-- **Why:** Allows dynamic CNI parameter injection (e.g., BGP peer IP/AS number) without rebuilding ISOs
-- **Example parameters:** `peer_ip_address`, `peer_as_number` for BGP peering
+- **Why:** Allows dynamic CNI parameter injection without rebuilding ISOs
 - **Alternative:** Build ISO with CNI baked in (Step 3)
+
+###### How CNI Configuration Works
+
+When you register a CNI configuration, CloudStack injects it as **user-data** into the CKS cluster nodes during provisioning. This runs as a shell script (`runcmd:`) after the base Kubernetes installation, allowing you to install or replace the CNI plugin at runtime.
+
+###### Example 1: BGP CNI Configuration
+
+For BGP peering (e.g., with Calico or Cilium):
+
+```json
+{
+  "peer_ip_address": "10.0.0.1",
+  "peer_as_number": "64512",
+  "bgp_router_id": "10.0.0.2"
+}
+```
+
+###### Example 2: Cilium CNI via User-Data
+
+Install Cilium on a cluster that was provisioned with the default Calico ISO — no custom ISO needed.
+
+**Note:** This approach pulls Cilium images from the internet during node bootstrap. If you need fully offline provisioning, use the Cilium ISO build script (Step 3, Option C) instead.
+
+**The Cilium CNI config** is archived in this repo at:
+`setup/cks/scripts/cilium-cni-config.yaml`
+
+**Usage:**
+1. **Instances** → **CNI Configuration** → **Add CNI Configuration**
+2. Paste the YAML content from the archived script
+3. **Important:** Replace `{{ ds.meta_data.cilium_version }}` with your desired version (e.g., `1.18.2`) before saving
+4. Select this CNI configuration during cluster creation under Advanced Settings
+
+**What the Cilium config does:**
+
+| Setting | Purpose |
+|---------|---------|
+| `kubeProxyReplacement=true` | eBPF-based kube-proxy replacement (performance) |
+| `bgpControlPlane.enabled=true` | BGP control plane for external routing |
+| `encryption.enabled=true` | Pod-to-pod encryption enabled |
+| `encryption.type=wireguard` | WireGuard encryption |
+| `encryption.nodeEncryption=true` | Node-to-node encryption |
+| `gatewayAPI.enabled=true` | Kubernetes Gateway API support |
+| `ingressController.enabled=true` | Built-in ingress controller |
+| `l2announcements.enabled=true` | L2 announcements for load balancers |
+| `ipam.mode=cluster-pool` | Cluster-pool IPAM |
+| `clusterPoolIPv4PodCIDRList={10.168.0.0/16}` | Pod CIDR range (change to avoid conflicts) |
+| `clusterPoolIPv4MaskSize=24` | /24 subnets per node |
+
+**Pod CIDR Warning:** Avoid `10.0.0.0/16` if deploying on pre-existing CKS networks — it conflicts with Calico's default pod network. Use a different range like `10.168.0.0/16` or `192.168.0.0/16`.
+
+**Verification after deployment:**
+```bash
+kubectl get pods -n kube-system -l k8s-app=cilium
+kubectl -n kube-system exec -it daemonset/cilium -- cilium status
+```
+
+###### Example 3: Custom CNI Parameters
+
+You can also inject arbitrary shell commands to run on node bootstrap. For example, to install a custom CNI plugin:
+
+```yaml
+runcmd:
+  - |
+    cat >/home/cloud/custom-cni.sh <<'EOF'
+    #!/bin/bash
+    set -ex
+    export KUBECONFIG=/etc/kubernetes/admin.conf
+    # Your custom CNI installation commands here
+    kubectl apply -f /path/to/your-cni.yaml
+    EOF
+  - chmod +x /home/cloud/custom-cni.sh
+  - /home/cloud/custom-cni.sh
+```
 
 #### UI Flow
 1. **Compute** → **Kubernetes** → **Add Kubernetes Cluster**

@@ -1,0 +1,58 @@
+# Archived from: https://github.com/nulcell/homecloud/blob/3f5a40a3332084a4ff7bd5ae13fc3c70dce28d96/cloudstack/compute/cni-config/cilium.yaml
+# License: Apache License, Version 2.0 (see original source)
+# Archived by: CY (chunkyen) for preservation
+# 
+# This is a CloudStack CNI configuration that installs Cilium CNI via user-data.
+# Use this instead of building a custom CKS ISO with Cilium baked in.
+# Note: This approach pulls Cilium images from the internet during node bootstrap.
+#
+# Usage:
+#   1. In CloudStack UI: Instances → CNI Configuration → Add CNI Configuration
+#   2. Paste this entire YAML content
+#   3. When creating a CKS cluster, select this CNI configuration under Advanced Settings
+#   4. Set the cilium_version in the user-data meta_data section before deployment
+
+# Status: working
+# Description: Cilium CNI installation script for CloudStack K8s cluster
+runcmd: # don't add this line
+  # Copy from below and add to CNI configuration in CloudStack to install Cilium CNI
+  - |
+    cat >/home/cloud/cilium-install.sh <<'EOF'
+    #!/bin/bash
+    set -ex
+    export KUBECONFIG=/etc/kubernetes/admin.conf
+    export PATH=$PATH:/opt/bin:/usr/local/bin
+    export HOME=/root   # fix for cilium cache issue
+
+    # Wait until kube-apiserver is ready
+    until kubectl get nodes >/dev/null 2>&1; do
+      echo "Waiting for kube-apiserver..."
+      sleep 5
+    done
+
+    # Install cilium-cli
+    curl -L --remote-name-all https://github.com/cilium/cilium-cli/releases/latest/download/cilium-linux-amd64.tar.gz
+    tar xzf cilium-linux-amd64.tar.gz
+    mv cilium /usr/local/bin/cilium
+
+    # Deploy Cilium
+    kubectl apply --server-side -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.4.0/standard-install.yaml
+    cilium install --version {{ ds.meta_data.cilium_version }} --wait \
+      --set kubeProxyReplacement=true \
+      --set bgpControlPlane.enabled=true \
+      --set encryption.enabled=true \
+      --set encryption.type=wireguard \
+      --set encryption.nodeEncryption=true \
+      --set gatewayAPI.enabled=true \
+      --set ingressController.enabled=true \
+      --set l2announcements.enabled=true \
+      --set l2podAnnouncements.enabled=true \
+      --set l7Proxy=true \
+      --set ipam.mode=cluster-pool \
+      --set ipam.operator.clusterPoolIPv4PodCIDRList={10.168.0.0/16} \
+      --set ipam.operator.clusterPoolIPv4MaskSize=24
+    cilium status --wait
+    EOF
+  - chmod +x /home/cloud/cilium-install.sh
+  - /home/cloud/cilium-install.sh || true
+  - /usr/bin/echo "Cilium CNI installation complete."
