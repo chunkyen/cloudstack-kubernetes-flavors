@@ -51,91 +51,116 @@ Register in CloudStack:
 
 ### Option B: Build Your Own ISO (Calico)
 
+**Run on the CloudStack management server.**
+
+#### Prerequisites
 ```bash
-# Install cloudstack-common package for the script
-# The script is at: /usr/share/cloudstack-common/scripts/cks/create-kubernetes-binaries-iso.sh
-
-# Example: Build ISO for Kubernetes 1.33.1 with Calico
-cd /tmp
-./create-kubernetes-binaries-iso.sh \
-  . \
-  1.33.1 \
-  1.7.1 \
-  1.33.0 \
-  https://raw.githubusercontent.com/projectcalico/calico/v3.30.0/manifests/calico.yaml \
-  https://raw.githubusercontent.com/kubernetes/dashboard/v2.7.0/aio/deploy/recommended.yaml \
-  setup-v1.33.1-calico
-
-# For ARM64:
-./create-kubernetes-binaries-iso.sh \
-  . \
-  1.33.1 \
-  1.7.1 \
-  1.33.0 \
-  https://raw.githubusercontent.com/projectcalico/calico/v3.30.0/manifests/calico.yaml \
-  https://raw.githubusercontent.com/kubernetes/dashboard/v2.7.0/aio/deploy/recommended.yaml \
-  aarch64 \
-  setup-v1.33.1-calico-arm64
-
-# With dedicated etcd (optional):
-./create-kubernetes-binaries-iso.sh \
-  . \
-  1.33.1 \
-  1.7.1 \
-  1.33.0 \
-  https://raw.githubusercontent.com/projectcalico/calico/v3.30.0/manifests/calico.yaml \
-  https://raw.githubusercontent.com/kubernetes/dashboard/v2.7.0/aio/deploy/recommended.yaml \
-  setup-v1.33.1-calico-etcd \
-  3.5.1
+sudo apt install -y wget curl genisoimage containerd.io
+# or for ARM64:
+sudo apt install -y wget curl genisoimage containerd.io
 ```
+
+The script is provided by the `cloudstack-common` package:
+```bash
+# Official location (may vary by distribution)
+/usr/share/cloudstack-common/scripts/util/create-kubernetes-binaries-iso.sh
+# Alternative location:
+/usr/share/cloudstack-common/scripts/cks/create-kubernetes-binaries-iso.sh
+```
+
+#### Example: Build ISO for Kubernetes 1.33.1 with Calico
+```bash
+OUTPUT_PATH=/tmp/
+KUBERNETES_VERSION="1.33.1"
+CNI_VERSION="1.7.1"
+CRICTL_VERSION="1.33.0"
+CALICO_NETWORK_YAML="https://raw.githubusercontent.com/projectcalico/calico/v3.30.0/manifests/calico.yaml"
+DASHBOARD_YAML="https://raw.githubusercontent.com/kubernetes/dashboard/v2.7.0/aio/deploy/recommended.yaml"
+BUILD_NAME="v${KUBERNETES_VERSION}-cks-calico"
+ARCH="amd64"
+ETCD_VERSION="3.5.0"
+
+sudo /usr/share/cloudstack-common/scripts/util/create-kubernetes-binaries-iso.sh \
+  $OUTPUT_PATH \
+  $KUBERNETES_VERSION \
+  $CNI_VERSION \
+  $CRICTL_VERSION \
+  $CALICO_NETWORK_YAML \
+  $DASHBOARD_YAML \
+  $BUILD_NAME \
+  $ARCH \
+  $ETCD_VERSION
+```
+
+#### For ARM64
+```bash
+ARCH="arm64"  # or aarch64
+# ... same as above with ARCH=arm64
+```
+
+> **Note:** The official script takes a CNI YAML URL directly (Calico/Cilium via raw YAML). For Cilium, use Option C below which uses Helm templating.
 
 ### Option C: Build Your Own ISO (Cilium) — Community Alternative
 
-For a Cilium-based ISO that also bundles CCM, CSI, and Cluster Autoscaler, use the community script from [nulcell/homecloud](https://github.com/nulcell/homecloud/blob/3f5a40a3332084a4ff7bd5ae13fc3c70dce28d96/cloudstack/compute/cks/create-cilium-kubernetes-binaries-iso.sh):
+For a Cilium-based ISO that also bundles CCM, CSI, and Cluster Autoscaler, use the community script from [nulcell/homecloud](https://github.com/nulcell/homecloud/blob/3f5a40a3332084a4ff7bd5ae13fc3c70dce28d96/cloudstack/compute/cks/create-cilium-kubernetes-binaries-iso.sh).
+
+This script is archived locally in this repo at `setup/cks/scripts/create-cilium-kubernetes-binaries-iso.sh`.
+
+#### Prerequisites
+```bash
+sudo apt install -y wget curl genisoimage containerd.io helm
+```
+
+#### Example: Build ISO with Cilium, Hubble, CCM, CSI, Cluster Autoscaler
 
 ```bash
-git clone https://github.com/nulcell/homecloud.git
-cd homecloud/cloudstack/compute/cks
+OUTPUT_PATH=/tmp/
+KUBERNETES_VERSION="1.33.1"
+CNI_VERSION="1.8.0"
+CRICTL_VERSION="1.33.0"
+CILIUM_VERSION="1.18.2"
+DASHBOARD_YAML="https://raw.githubusercontent.com/kubernetes/dashboard/v2.7.0/aio/deploy/recommended.yaml"
+BUILD_NAME="v${KUBERNETES_VERSION}-cks-cilium"
+ARCH="amd64"
+ETCD_VERSION="3.5.0"
 
-# Example: Build ISO with Cilium, Hubble, CCM, CSI, Cluster Autoscaler
-./create-cilium-kubernetes-binaries-iso.sh \
-  . \
-  1.33.1 \
-  1.8.0 \
-  1.33.0 \
-  1.18.2 \
-  7.14.0 \
-  cks-v1.33.1-cilium
+# Using the archived script in this repo:
+./setup/cks/scripts/create-cilium-kubernetes-binaries-iso.sh \
+  $OUTPUT_PATH \
+  $KUBERNETES_VERSION \
+  $CNI_VERSION \
+  $CRICTL_VERSION \
+  $CILIUM_VERSION \
+  $DASHBOARD_YAML \
+  $BUILD_NAME \
+  $ARCH \
+  $ETCD_VERSION
+```
 
-# For ARM64:
-./create-cilium-kubernetes-binaries-iso.sh \
-  . \
-  1.33.1 \
-  1.8.0 \
-  1.33.0 \
-  1.18.2 \
-  7.14.0 \
-  cks-v1.33.1-cilium \
-  arm64
+#### For ARM64
+```bash
+ARCH="arm64"  # or aarch64
+# ... same as above with ARCH=arm64
+```
 
-# With dedicated etcd:
-./create-cilium-kubernetes-binaries-iso.sh \
-  . \
-  1.33.1 \
-  1.8.0 \
-  1.33.0 \
-  1.18.2 \
-  7.14.0 \
-  cks-v1.33.1-cilium-etcd \
-  amd64 \
-  3.5.0
+#### Post-Deployment: Update Cilium to Helm Management
+
+After the cluster is up, switch Cilium to Helm-managed mode to ensure proper configuration:
+
+```bash
+CILIUM_VERSION="1.18.2"
+helm repo add cilium https://helm.cilium.io/
+helm upgrade --install cilium cilium/cilium --version ${CILIUM_VERSION} \
+  --namespace kube-system \
+  --set kubeProxyReplacement=true \
+  --take-ownership
 ```
 
 **What the Cilium ISO includes (vs. official Calico ISO):**
 
 | Component | Official (Calico) | Community (Cilium) |
 |-----------|-------------------|-------------------|
-| **CNI** | Calico | Cilium + Hubble (relay + UI) |
+| **CNI** | Calico (raw YAML) | Cilium + Hubble (relay + UI) via Helm |
 | **CCM** | Manual deploy | Auto-bundled |
 | **CSI Driver** | Manual deploy | Auto-bundled (v3.0.0) |
 | **Cluster Autoscaler** | Not included | Auto-bundled (CloudStack provider) |
@@ -151,6 +176,12 @@ cd homecloud/cloudstack/compute/cks
 - Sets `imagePullPolicy: IfNotPresent` across all YAML files
 - Uses shapeblue's `kubelet.service` and `10-kubeadm.conf` for newer K8s versions
 - Includes Cluster Autoscaler manifest for CloudStack
+- **Important:** Post-deployment Helm upgrade with `--take-ownership` recommended for proper Cilium configuration
+
+**Troubleshooting:**
+- `ctr not found` error → Ensure `containerd` is installed on the build server
+- Helm errors → Ensure Helm sources are configured properly
+- For Helm install on Debian/Ubuntu: `sudo apt install -y helm`
 
 ### Register the ISO as a Supported K8s Version
 
