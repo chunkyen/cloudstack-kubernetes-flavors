@@ -73,7 +73,9 @@ addKubernetesSupportedVersion \
 
 ## Step 4: (Optional) Register CKS-Compatible Templates
 
-From ACS 4.21+, you can register custom templates for CKS:
+From ACS 4.21+, you can register custom templates for CKS.
+
+> **Note:** If no custom CKS template is registered, CloudStack will use the **SystemVM template** for all cluster nodes.
 
 1. **Compute** → **Templates** → **Register Template**
 2. Fill in template details
