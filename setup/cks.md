@@ -128,6 +128,7 @@ From CloudStack 4.21+, the cluster creation form includes an **Advanced Settings
 | **GPU workloads** | Workers on GPU-enabled templates/service offerings, control plane on standard |
 | **Hypervisor affinity** | Deploy nodes only on specific hypervisor types (e.g., KVM only, no VMware) |
 | **Custom base images** | Pre-bake control nodes with monitoring agents, workers with runtime tools |
+| **Persistent storage** | Enable CloudStack CSI Driver for dynamic provisioning and volume snapshots |
 
 
 #### Advanced Settings Breakdown
