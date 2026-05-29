@@ -295,12 +295,12 @@ ssh -i <key> -p 2223 cloud@<VR_PUBLIC_IP>
 
 ### Scale Cluster
 
-> **Note:** Scaling changes the node **spec vertically** (CPU/RAM) by assigning a different compute offering. It does **not** change the number of nodes — for that, use the cluster creation form or the scale API with `workernodes`/`controlnodes`.
+> **Note:** Scaling handles both **vertical scaling** (changing compute offering/CPU/RAM) and **horizontal scaling** (adding/removing worker nodes). The **Add Node** icon (➕) is separate — it adds existing VMs to the cluster.
 
 **UI:**
 1. Hover over the cluster name and click the **three dots (⋮)** on the right
 2. Click the **Scale** icon (📐)
-3. Select a new service offering (compute spec) for the node type
+3. Adjust worker or control node count, or select a new service offering (compute spec)
 4. Click **OK**
 
 **API:**
