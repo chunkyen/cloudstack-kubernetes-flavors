@@ -223,27 +223,7 @@ From ACS 4.21+, you can register custom templates for CKS:
 - SSH public key of `cloud` user at `~/.ssh/authorized_keys`
 - Pre-installed packages (see [official docs](http://docs.cloudstack.apache.org/en/latest/plugins/cloudstack-kubernetes-service.html))
 
-## Step 5: (Optional) Register CNI Configuration (ACS 4.21+)
-
-From ACS 4.21+, CNI can be configured via user data instead of rebuilding ISOs:
-
-1. **Instances** → **CNI Configuration** → **Add CNI Configuration**
-2. Define CNI parameters (e.g., `peer_ip_address`, `peer_as_number` for BGP peering)
-3. Save the configuration
-4. Select it during cluster creation under Advanced Settings
-
-**Example: BGP CNI Configuration**
-```json
-{
-  "peer_ip_address": "10.0.0.1",
-  "peer_as_number": "64512",
-  "bgp_router_id": "10.0.0.2"
-}
-```
-
-> **Note:** This is optional. If you baked CNI into the ISO (Step 3), you don't need this.
-
-## Step 6: Create a Kubernetes Cluster
+## Step 5: Create a Kubernetes Cluster
 
 ### Basic Cluster (Default Settings)
 
@@ -273,22 +253,22 @@ createKubernetesCluster \
   etcdnodes=0
 ```
 
-## Step 7: Flexible Cluster (ACS 4.21+) — Advanced Settings
+## Step 6: Advanced Settings (ACS 4.21+)
 
 From CloudStack 4.21+, the cluster creation form includes an **Advanced Settings** toggle that unlocks granular control over each node type. This enables heterogeneous clusters where control, worker, and etcd nodes can use different templates, service offerings, and even hypervisor types.
 
-> **Prerequisite:** Complete Steps 4 (templates) and/or 5 (CNI config) before using Advanced Settings.
+> **Prerequisite:** Complete Step 4 (templates) before using Advanced Settings.
 
-#### When to Use Flexible Clusters
+#### When to Use Advanced Settings
 
-| Use Case | Why Flexible Settings |
+| Use Case | Why Advanced Settings |
 |----------|----------------------|
 | **Production HA** | Control nodes need more RAM/CPU than workers; dedicated etcd nodes for performance |
 | **Dedicated etcd** | Separate etcd from control plane for fault isolation and I/O performance |
 | **GPU workloads** | Workers on GPU-enabled templates/service offerings, control plane on standard |
 | **Hypervisor affinity** | Deploy nodes only on specific hypervisor types (e.g., KVM only, no VMware) |
 | **Custom base images** | Pre-bake control nodes with monitoring agents, workers with runtime tools |
-| **BGP CNI** | Register CNI config with BGP parameters (peer_ip, peer_as_number) |
+
 
 #### Advanced Settings Breakdown
 
@@ -316,7 +296,7 @@ From CloudStack 4.21+, the cluster creation form includes an **Advanced Settings
 
 ##### 5. CNI Configuration Selection
 - **What:** Pre-registered CNI user-data configuration (from 4.21+)
-- **How to register:** **Instances** → **CNI Configuration** → **Add CNI Configuration** (Step 5)
+- **How to register:** **Instances** → **CNI Configuration** → **Add CNI Configuration** (Step 4)
 - **Why:** Allows dynamic CNI parameter injection (e.g., BGP peer IP/AS number) without rebuilding ISOs
 - **Example parameters:** `peer_ip_address`, `peer_as_number` for BGP peering
 - **Alternative:** Build ISO with CNI baked in (Step 3)
@@ -343,7 +323,7 @@ The `createKubernetesCluster` API accepts additional parameters when advanced se
 
 See the [official API docs](http://docs.cloudstack.apache.org/en/latest/plugins/cloudstack-kubernetes-service.html) for the complete parameter list.
 
-## Step 8: Access Your Cluster
+## Step 7: Access Your Cluster
 
 ### Get kubeconfig
 ```bash
@@ -371,7 +351,7 @@ ssh -i <key> -p 2222 cloud@<VR_PUBLIC_IP>
 ssh -i <key> -p 2223 cloud@<VR_PUBLIC_IP>
 ```
 
-## Step 9: Cluster Management
+## Step 8: Cluster Management
 
 ### Scale Cluster
 ```bash
@@ -413,7 +393,7 @@ startKubernetesCluster id=<cluster-id>
 deleteKubernetesCluster id=<cluster-id>
 ```
 
-## Step 10: Monitoring & Verification
+## Step 9: Monitoring & Verification
 
 ```bash
 # Check node status
