@@ -13,12 +13,24 @@ This repository examines four primary approaches to running Kubernetes on CloudS
 
 ## Contents
 
-- [`architecture/`](./architecture/) - Architecture diagrams and component breakdowns
+### Architecture
+
+- [`architecture/cloudstack-kubernetes-provider.md`](./architecture/cloudstack-kubernetes-provider.md) — **CloudStack Kubernetes Provider** (external CCM) — applies to all flavors
+- [`architecture/cks.md`](./architecture/cks.md) — CKS architecture
+- [`architecture/capc.md`](./architecture/capc.md) — CAPC architecture
+- [`architecture/talos.md`](./architecture/talos.md) — Talos architecture
+- [`architecture/rancher-capc.md`](./architecture/rancher-capc.md) — Rancher+CAPC architecture
+
+### Setup Guides
+
 - [`setup/`](./setup/) - Step-by-step setup guides for each flavor
   - [`cks/`](./setup/cks/) - CKS deployment
   - [`capc/`](./setup/capc/) - CAPC deployment (with user-defined OS)
   - [`talos/`](./setup/talos/) - Talos Linux standalone (with CAPI or bare-metal)
   - [`rancher-capc/`](./setup/rancher-capc/) - Rancher with CAPC
+
+### Analysis
+
 - [`comparison/`](./comparison/) - Feature comparison matrix and analysis
 - [`references/`](./references/) - External references and documentation links
 
