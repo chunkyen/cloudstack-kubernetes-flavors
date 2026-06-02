@@ -35,7 +35,7 @@ set -euo pipefail
 
 # ─── Defaults ───────────────────────────────────────────────────────────────
 KUBECONFIG="${HOME}/.kube/config"
-CAPC_VERSION="v0.6.0"
+CAPC_VERSION="v0.6.1"
 RELEASE_DIR=""
 DRY_RUN=false
 
