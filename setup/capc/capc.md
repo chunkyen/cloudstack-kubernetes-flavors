@@ -94,7 +94,25 @@ chmod +x ./kind-install-for-capd.sh
 
 This creates a kind cluster and configures it to use a local Docker registry for image builds.
 
-> **Note:** `kind` is ephemeral — all state is lost when deleted. However, you can use it as a temporary bootstrap: provision your workload cluster, then transfer CAPI management to the target so it runs independently. See **[Move From Bootstrap](./move-from-bootstrap.md)** for details.
+> **Warning:** `kind` is ephemeral — all state is lost when the cluster is deleted. Do not use this for production CAPC deployments.
+
+### Option C: Self-Managed Clusters (Move From Bootstrap)
+
+Use an ephemeral bootstrap cluster (e.g., `kind`) to provision your workload, then transfer full lifecycle management to the target cluster itself. After the move, the workload cluster runs its own CAPC controllers and manages CloudStack resources directly — no external management plane required.
+
+**How it works:**
+- Bootstrap cluster provisions VMs on CloudStack via CAPC controllers
+- Workload cluster comes up with K8s but no CAPI controllers
+- Install CAPC providers into the workload, then move all Cluster API objects from bootstrap to target
+- The workload cluster becomes fully self-managing; delete the bootstrap with zero impact
+
+**Use cases:**
+- **Dev/POC workflows** — ephemeral kind for provisioning, keep self-managing clusters afterward
+- **CI/CD pipelines** — temporary runners create clusters that outlive the pipeline
+- **Disaster recovery** — no single point of failure if your management plane goes down
+- **Multi-env provisioning** — one bootstrap creates dev/staging/prod, each manages itself independently
+
+See **[Move From Bootstrap](./move-from-bootstrap.md)** for a complete walkthrough with architecture diagrams and step-by-step instructions.
 
 ## Step 2: Configure CloudStack Credentials
 
