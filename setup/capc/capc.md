@@ -2,6 +2,8 @@
 
 This guide walks through deploying a Kubernetes cluster on Apache CloudStack using the [Cluster API Provider for CloudStack (CAPC)](https://github.com/kubernetes-sigs/cluster-api-provider-cloudstack).
 
+> **Note:** CAPC is one provider within the broader [Cluster API](https://cluster-api.sigs.k8s.io/introduction) project — a declarative, Kubernetes-native approach to cluster lifecycle management. Cluster API supports multiple infrastructure providers (AWS, Azure, GCP, vSphere, etc.) with a shared control plane model. See the [CAPI Introduction](https://cluster-api.sigs.k8s.io/introduction) for an overview of the project and its architecture.
+
 ## Prerequisites
 
 ### CloudStack Resources
