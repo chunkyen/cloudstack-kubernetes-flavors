@@ -56,10 +56,7 @@ CAPC requires an existing Kubernetes cluster as the **management cluster** — t
 
 Use a CKS-managed Kubernetes cluster deployed on your CloudStack infrastructure. This gives you a production-grade management plane with proper HA, persistent storage, and real networking.
 
-```bash
-# Deploy via CKS UI or API — see the CKS setup guide for details
-# https://github.com/chunkyen/cloudstack-kubernetes-flavors/blob/main/setup/cks.md
-```
+See the [CKS setup guide](./cks.md) for deployment instructions.
 
 **Advantages:**
 - Production-ready with HA control plane
