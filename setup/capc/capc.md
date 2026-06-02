@@ -423,6 +423,50 @@ kubectl delete cluster capc-cluster
 | Nodes not reaching `Ready` | CNI may not be installed yet; check `kubectl get pods -A` on the workload cluster |
 | CAPC controller crashes | Check logs: `kubectl logs -n capc-system deploy/capc-controller-manager` |
 | CloudStack API errors | Verify credentials in `cloud-config`; test connectivity to CloudStack API endpoint |
+| SSH access to nodes | See [SSH Access to Nodes](#ssh-access-to-nodes) below |
+
+### SSH Access to Nodes
+
+To SSH into CAPC-managed nodes, configure network access in CloudStack and use the appropriate credentials:
+
+**Prerequisites:**
+- An SSH keypair matching one of the node's `authorized_keys` (pass via `--flavor managed-ssh` or `CLOUDSTACK_SSH_KEY_NAME`)
+- Isolated network (VPC also works with additional routing configuration)
+
+**Step 1: Configure Network Access in CloudStack**
+
+```bash
+# Find the public IP assigned to your cluster's control plane endpoint
+# In CloudStack UI: Networking → Public IPs
+```
+
+Add firewall and port forwarding rules:
+
+```bash
+# Add a firewall rule allowing SSH (port 22)
+cmk addfirewallrule --ipaddressid <public-ip-id> --protocol tcp --startport 22 --endport 22
+
+# Add port forwarding to forward traffic to the control plane VM
+cmk createportforwardingrule \
+  --name ssh-forward \
+  --privateport 22 \
+  --publicport 22 \
+  --protocol tcp \
+  --ipaddressid <public-ip-id> \
+  --virtualmachineid <control-plane-vm-id>
+```
+
+**Step 2: SSH into the Node**
+
+```bash
+# Ubuntu images use 'ubuntu' as username
+ssh ubuntu@<public-ip> -i path/to/private/key
+
+# Rocky Linux images use 'cloud-user' as username
+ssh cloud-user@<public-ip> -i path/to/private/key
+```
+
+> **Note:** For worker nodes, you'll need to create separate port forwarding rules for each VM. The control plane endpoint IP forwards to one of the control plane nodes (round-robin via CloudStack LB).
 
 ## Next Steps
 
