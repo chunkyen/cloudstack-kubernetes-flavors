@@ -46,10 +46,6 @@ Prebuilt images are available from [shapeblue packages](http://packages.shapeblu
 | **VMware** | ova | Rocky 9, Ubuntu 22.04, Ubuntu 24.04 | Rocky 9, Ubuntu 22.04, Ubuntu 24.04 | Rocky 9, Ubuntu 22.04, Ubuntu 24.04 | Rocky 9, Ubuntu 22.04, Ubuntu 24.04 | Rocky 9, Ubuntu 22.04, Ubuntu 24.04 |
 | **XenServer** | vhd (bz2) | Rocky 9, Ubuntu 22.04, Ubuntu 24.04 | Rocky 9, Ubuntu 22.04, Ubuntu 24.04 | Rocky 9, Ubuntu 22.04, Ubuntu 24.04 | Rocky 9, Ubuntu 22.04, Ubuntu 24.04 | Rocky 9, Ubuntu 22.04, Ubuntu 24.04 |
 
-**Legacy Images (K8s v1.22–v1.27):**
-- KVM: Rocky Linux 8, Ubuntu 20.04
-- VMware: Rocky Linux 8, Ubuntu 20.04
-
 Each image is available with an MD5 checksum file for verification.
 
 #### Building Your Own Image
