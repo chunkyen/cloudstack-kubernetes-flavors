@@ -364,15 +364,7 @@ Upgrading a CAPC cluster requires a new image with the target K8s version baked 
 
 #### Step 1: Build or Obtain New Image
 
-Build a custom image for the target Kubernetes version (see [CAPC Custom Image Guide](./capc-custom-image.md)), or download a prebuilt one matching your hypervisor:
-
-```bash
-# Example: register new image in CloudStack
-curl -X POST 'https://your-cloudstack-host.com/client/api' \
-  --data-urlencode 'command=registerTemplate&'
-  --data-urlencode 'name=kube-v1.33/ubuntu-2404-upgrade&'
-  # ... other params
-```
+Build a custom image for the target Kubernetes version (see [CAPC Custom Image Guide](./capc-custom-image.md)), or download a prebuilt one matching your hypervisor. Upload it to CloudStack as a template using the GUI, `cmk` CLI, or API.
 
 #### Step 2: Create New CloudStackMachineTemplates
 
