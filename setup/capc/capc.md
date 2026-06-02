@@ -438,14 +438,32 @@ To SSH into CAPC-managed nodes, configure network access in CloudStack and use t
 Using the **CloudStack UI** (recommended — CLI syntax varies by version):
 
 1. Navigate to **Networking → Public IPs** and select the public IP assigned to your cluster's control plane endpoint
-2. Click **Add Firewall Rule**:
-   - Protocol: `TCP`
+2. Click **Add Firewall Rule**:   - Protocol: `TCP`
    - Start Port: `22`
    - End Port: `22`
 3. Click **Add Port Forwarding Rule** on the firewall rule you just created:
    - Private IP: `<control-plane-vm-private-ip>`
    - Private Port: `22`
    - Public Port: `22`
+
+Or using the **`cmk` CLI** (verified against CloudStack API cache):
+
+```bash
+# Add a firewall rule allowing SSH (port 22)
+cmk create firewallrule \
+  --ipaddressid <public-ip-id> \
+  --protocol TCP \
+  --startport 22 \
+  --endport 22
+
+# Add port forwarding to forward traffic to the control plane VM
+cmk create portforwardingrule \
+  --ipaddressid <public-ip-id> \
+  --virtualmachineid <control-plane-vm-id> \
+  --protocol TCP \
+  --privateport 22 \
+  --publicport 22
+```
 
 > **Note:** For worker nodes, repeat steps 2–3 for each VM. The control plane endpoint IP forwards to one of the control plane nodes (round-robin via CloudStack LB).
 
