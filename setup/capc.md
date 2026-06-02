@@ -25,15 +25,68 @@ Ensure these exist in your CloudStack environment:
 
 ### K8s-Compatible Templates
 
-Prebuilt images are available from [shapeblue packages](http://packages.shapeblue.com/cluster-api-provider-cloudstack/images/) for:
+CAPC requires pre-built images with Kubernetes prerequisites already installed:
+- **Container runtime** (containerd or Docker)
+- **kubelet**
+- **kubeadm**
+- **kubectl**
+- **cloud-init** for node bootstrapping
 
-| Hypervisor | Formats | OS Versions |
-|------------|---------|-------------|
-| KVM | qcow2 (bz2) | Rocky 9, Ubuntu 22.04, Ubuntu 24.04 |
-| VMware | ova | Rocky 9, Ubuntu 22.04, Ubuntu 24.04 |
-| XenServer | vhd (bz2) | Rocky 9, Ubuntu 22.04, Ubuntu 24.04 |
+Reference image definitions are maintained in the [kubernetes-sigs/image-builder](https://github.com/kubernetes-sigs/image-builder/tree/master/images/capi) project.
 
-Supported K8s versions: **v1.28 – v1.32**. Register the template in CloudStack and note its name — you'll reference it as `CLOUDSTACK_TEMPLATE_NAME`.
+#### Prebuilt Images (Recommended)
+
+Prebuilt images are available from [shapeblue packages](http://packages.shapeblue.com/cluster-api-provider-cloudstack/images/) for all supported hypervisors and Kubernetes versions:
+
+**Current Releases:**
+
+| Hypervisor | Format | K8s v1.28 | K8s v1.29 | K8s v1.30 | K8s v1.31 | K8s v1.32 |
+|------------|--------|-----------|-----------|-----------|-----------|-----------|
+| **KVM** | qcow2 (bz2) | Rocky 9, Ubuntu 22.04, Ubuntu 24.04 | Rocky 9, Ubuntu 22.04, Ubuntu 24.04 | Rocky 9, Ubuntu 22.04, Ubuntu 24.04 | Rocky 9, Ubuntu 22.04, Ubuntu 24.04 | Rocky 9, Ubuntu 22.04, Ubuntu 24.04 |
+| **VMware** | ova | Rocky 9, Ubuntu 22.04, Ubuntu 24.04 | Rocky 9, Ubuntu 22.04, Ubuntu 24.04 | Rocky 9, Ubuntu 22.04, Ubuntu 24.04 | Rocky 9, Ubuntu 22.04, Ubuntu 24.04 | Rocky 9, Ubuntu 22.04, Ubuntu 24.04 |
+| **XenServer** | vhd (bz2) | Rocky 9, Ubuntu 22.04, Ubuntu 24.04 | Rocky 9, Ubuntu 22.04, Ubuntu 24.04 | Rocky 9, Ubuntu 22.04, Ubuntu 24.04 | Rocky 9, Ubuntu 22.04, Ubuntu 24.04 | Rocky 9, Ubuntu 22.04, Ubuntu 24.04 |
+
+**Legacy Images (K8s v1.22–v1.27):**
+- KVM: Rocky Linux 8, Ubuntu 20.04
+- VMware: Rocky Linux 8, Ubuntu 20.04
+
+Each image is available with an MD5 checksum file for verification.
+
+#### Building Your Own Image
+
+If you need a custom OS or specific package versions, build your own using the [kubernetes-sigs/image-builder](https://github.com/kubernetes-sigs/image-builder/tree/master/images/capi) project:
+
+```bash
+# Clone the image-builder repo
+git clone https://github.com/kubernetes-sigs/image-builder.git
+cd image-builder/images/capi
+
+# Build for your hypervisor (example: KVM with Ubuntu 24.04)
+mage build-kube-aws --os ubuntu-2404 --kubernetes-version 1.32
+```
+
+Supported builders:
+- `mage build-kube-aws` — AWS AMI
+- `mage build-kube-docker` — Docker image (for local testing)
+- `mage build-kube-vsphere` — vSphere OVA
+- `mage build-kube-qemu` — QEMU/KVM qcow2
+
+After building, upload the image to CloudStack:
+
+```bash
+# Register the template in CloudStack
+curl -X POST 'https://your-cloudstack-host.com/client/api' \
+  --data 'command=registerTemplate&
+    url=http://path/to/your/image.qcow2.bz2&
+    zoneid=<zone-id>&
+    format=QCOW2&
+    hypervisortype=KVM&
+    ispublic=true&
+    ostype=Ubuntu Linux (64-bit)&
+    name=kube-v1.32/ubuntu-2404-custom'
+```
+
+> **Tip:** Use the prebuilt images unless you have specific requirements — they're tested and maintained by the CAPC community.
 
 ### Local Tooling
 
