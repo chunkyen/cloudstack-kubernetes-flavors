@@ -14,7 +14,7 @@ Ensure these exist in your CloudStack environment:
 |----------|---------|
 | **Zone** | A zone with available compute resources |
 | **Cluster/Pod** | Within the zone, with KVM/XenServer/VMware hypervisor |
-| **Network** | Isolated or VPC network (**isolated is recommended**) — CAPC does not support shared networks |
+| **Network** | Isolated (recommended) or VPC network |
 | **Public IP** | An unused public IP for the cluster API endpoint load balancer |
 | **SSH Key Pair** | Optional — for SSH access to VMs (used with `--flavor managed-ssh`) |
 | **Compute Offerings** | At least two: control plane (>2GB RAM, 2vCPU) and worker nodes |
