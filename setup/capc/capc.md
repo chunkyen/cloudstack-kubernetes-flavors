@@ -94,7 +94,7 @@ chmod +x ./kind-install-for-capd.sh
 
 This creates a kind cluster and configures it to use a local Docker registry for image builds.
 
-> **Warning:** `kind` is ephemeral — all state is lost when the cluster is deleted. Do not use this for production CAPC deployments.
+> **Note:** `kind` is ephemeral — all state is lost when deleted. However, you can use it as a temporary bootstrap: provision your workload cluster, then transfer CAPI management to the target so it runs independently. See **[Move From Bootstrap](./move-from-bootstrap.md)** for details.
 
 ## Step 2: Configure CloudStack Credentials
 
@@ -329,24 +329,6 @@ KUBECONFIG=capc-cluster.kubeconfig kubectl apply -f \
 ```
 
 See [CloudStack Kubernetes Provider](../architecture/cloudstack-kubernetes-provider.md) and [CloudStack CSI Driver](../setup/cloudstack-csi-driver.md) for detailed deployment instructions.
-
-## Self-Managed Clusters (Move From Bootstrap)
-
-When you create a CAPC cluster using a bootstrap management cluster (e.g., `kind`), the workload cluster starts with **no CAPI controllers** — it's just a plain K8s cluster managed externally. You can transfer full lifecycle management to the workload cluster itself, making it self-managing and independent of any external management plane.
-
-The process:
-1. Install CAPC providers into the workload cluster (`clusterctl --kubeconfig target.kubeconfig init --infrastructure cloudstack`)
-2. Move all CAPI objects from bootstrap to target (`clusterctl move --to-kubeconfig target.kubeconfig`)
-3. The workload cluster now runs its own controllers and manages CloudStack resources directly
-4. Delete the bootstrap — the workload continues running and managing itself
-
-This is useful for:
-- **Dev/POC workflows** — use ephemeral kind to provision, then keep self-managing clusters
-- **CI/CD pipelines** — temporary runners create clusters that outlive the pipeline
-- **Disaster recovery** — no single point of failure if your management plane goes down
-- **Multi-env provisioning** — one bootstrap creates dev/staging/prod, each manages itself independently
-
-See **[Move From Bootstrap](./move-from-bootstrap.md)** for a complete walkthrough with architecture diagrams and troubleshooting.
 
 ## Managing the Cluster
 
