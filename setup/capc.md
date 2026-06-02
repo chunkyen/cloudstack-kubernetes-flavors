@@ -192,7 +192,7 @@ Watch for these stages:
 
 ## Step 6: Install CNI
 
-CAPC does not install a CNI plugin — you must do this manually:
+CAPC does not install a CNI plugin — you must do this manually. Choose one:
 
 ### Calico (Recommended)
 
@@ -201,12 +201,47 @@ KUBECONFIG=$(clusterctl get kubeconfig capc-cluster) kubectl apply -f \
   https://raw.githubusercontent.com/projectcalico/calico/master/manifests/calico.yaml
 ```
 
+### Cilium
+
+Cilium provides eBPF-based networking, built-in Hubble observability, and native Kubernetes NetworkPolicy support:
+
+```bash
+# Install Cilium via Helm (recommended)
+kubectl create namespace cilium
+helm install cilium cilium/cilium --namespace cilium \
+  --set ipam.mode=kubernetes \
+  --set operator.replicas=1
+```
+
+Or install via manifest:
+
+```bash
+KUBECONFIG=$(clusterctl get kubeconfig capc-cluster) kubectl apply -f \
+  https://raw.githubusercontent.com/cilium/cilium/main/install/kubernetes/quickstep.yaml
+```
+
+> **Note:** Cilium requires kernel 4.9+ with eBPF support. On Ubuntu 22.04+/Rocky 9+, this is available by default.
+
 ### Weave Net (Alternative)
 
 ```bash
 KUBECONFIG=$(clusterctl get kubeconfig capc-cluster) kubectl apply -f \
   https://raw.githubusercontent.com/weaveworks/weave/master/prog/weave-kube/weave-daemonset-k8s-1.11.yaml
 ```
+
+### CNI Comparison for CAPC
+
+| Feature | Calico | Cilium | Weave Net |
+|---------|--------|--------|-----------|
+| **Data plane** | iptables/IPIP/VXLAN | eBPF | VXLAN/overlay |
+| **NetworkPolicy** | Yes (Calico-native) | Yes (native K8s + Calico-compatible) | Basic |
+| **Observability** | Tigera Enterprise (paid) | Hubble (free, built-in) | Limited |
+| **Encryption** | BGP/IPsec (Tigera) | Native eBPF encryption | Optional |
+| **Service mesh** | No (integrates with Istio/Linkerd) | Native (Helm chart includes Envoy sidecar option) | No |
+| **Resource overhead** | Low | Moderate (eBPF maps) | Moderate |
+| **Best for** | General-purpose, wide compatibility | Security-focused, observability needs | Simple setups |
+
+> **Recommendation:** Use Calico for simplicity and broad compatibility. Choose Cilium if you need eBPF features, Hubble observability, or a built-in service mesh path.
 
 ## Step 7: Verify the Cluster
 
