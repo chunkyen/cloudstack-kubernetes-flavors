@@ -36,8 +36,8 @@ See the [Architecture](#architecture) section for details on each.
 ### Setup Guides
 
 - [CKS deployment](setup/cks.md)
-- [CAPC deployment (with user-defined OS)](setup/capc.md)
-- [CAPC custom image building](setup/capc-custom-image.md) — build your own K8s-compatible images for CAPC
+- [CAPC deployment (with user-defined OS)](setup/capc/capc.md)
+- [CAPC custom image building](setup/capc/capc-custom-image.md) — build your own K8s-compatible images for CAPC
 - [Talos Linux standalone (with CAPI or bare-metal)](setup/talos.md)
 - [Rancher with CAPC](setup/rancher-capc.md)
 

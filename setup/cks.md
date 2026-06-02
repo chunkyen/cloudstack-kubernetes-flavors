@@ -51,7 +51,7 @@ Register in CloudStack: **Storage** → **ISOs** → **Register ISO**
 
 For custom ISO builds (Calico or Cilium), see the dedicated guide:
 
-- [**CKS Custom ISO Build Guide**](cks-custom-iso.md)
+- [**CKS Custom ISO Build Guide**](./cks/cks-custom-iso.md)
 
 ### Register the ISO as a Supported K8s Version
 
@@ -184,7 +184,7 @@ For BGP peering (e.g., with Calico or Cilium):
 
 Install Cilium on a cluster that was provisioned with the default Calico ISO — no custom ISO needed.
 
-**Note:** This approach pulls Cilium images from the internet during node bootstrap. If you need fully offline provisioning, use the Cilium ISO build in [CKS Custom ISO Build Guide](cks-custom-iso.md#option-b-build-cilium-iso-community-script) (Option B).
+**Note:** This approach pulls Cilium images from the internet during node bootstrap. If you need fully offline provisioning, use the Cilium ISO build in [CKS Custom ISO Build Guide](./cks/cks-custom-iso.md#option-b-build-cilium-iso-community-script) (Option B).
 
 **The Cilium CNI config** is archived in this repo at:
 [`cilium-cni-config.yaml`](setup/cks/scripts/cilium-cni-config.yaml)

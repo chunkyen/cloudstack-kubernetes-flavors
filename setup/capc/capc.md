@@ -73,7 +73,7 @@ CAPC requires an existing Kubernetes cluster as the **management cluster** — t
 
 Use a CKS-managed Kubernetes cluster deployed on your CloudStack infrastructure. This gives you a production-grade management plane with proper HA, persistent storage, and real networking.
 
-See the [CKS setup guide](./cks.md) for deployment instructions.
+See the [CKS setup guide](../cks.md) for deployment instructions.
 
 **Advantages:**
 - Production-ready with HA control plane
@@ -373,5 +373,5 @@ kubectl delete cluster capc-cluster
 ## Next Steps
 
 - Explore [Tilt-based development](https://cluster-api-cloudstack.sigs.k8s.io/development/tilt) for CAPC contribution
-- Check out the [CKS setup guide](./cks.md) for native CloudStack Kubernetes integration
+- Check out the [CKS setup guide](../cks.md) for native CloudStack Kubernetes integration
 - Compare all flavors in the [comparison analysis](../comparison/)
