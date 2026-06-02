@@ -50,7 +50,27 @@ clusterctl version   # requires v1.1.5+
 
 ## Step 1: Set Up Management Cluster
 
-Create a `kind` cluster with a local Docker registry:
+CAPC requires an existing Kubernetes cluster as the **management cluster** — this is where CAPC controllers run and manage workload clusters. You have two options:
+
+### Option A: CKS on CloudStack (Recommended for Production)
+
+Use a CKS-managed Kubernetes cluster deployed on your CloudStack infrastructure. This gives you a production-grade management plane with proper HA, persistent storage, and real networking.
+
+```bash
+# Deploy via CKS UI or API — see the CKS setup guide for details
+# https://github.com/chunkyen/cloudstack-kubernetes-flavors/blob/main/setup/cks.md
+```
+
+**Advantages:**
+- Production-ready with HA control plane
+- Runs on your CloudStack infrastructure (no external dependency)
+- Persistent storage available for etcd
+- Proper networking and security groups
+- Can manage multiple workload clusters from one management cluster
+
+### Option B: kind Cluster (Development / Testing Only)
+
+For local development or proof-of-concept, create a `kind` cluster with a local Docker registry:
 
 ```bash
 wget https://raw.githubusercontent.com/kubernetes-sigs/cluster-api/main/hack/kind-install-for-capd.sh
@@ -59,6 +79,8 @@ chmod +x ./kind-install-for-capd.sh
 ```
 
 This creates a kind cluster and configures it to use a local Docker registry for image builds.
+
+> **Warning:** `kind` is ephemeral — all state is lost when the cluster is deleted. Do not use this for production CAPC deployments.
 
 ## Step 2: Configure CloudStack Credentials
 
