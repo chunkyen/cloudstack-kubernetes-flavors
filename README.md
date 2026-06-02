@@ -38,6 +38,7 @@ See the [Architecture](#architecture) section for details on each.
 - [CKS deployment](setup/cks/cks.md)
 - [CAPC deployment (with user-defined OS)](setup/capc/capc.md)
 - [CAPC custom image building](setup/capc/capc-custom-image.md) — build your own K8s-compatible images for CAPC
+- [Move From Bootstrap](setup/capc/move-from-bootstrap.md) — make CAPC clusters self-managing by transferring CAPI objects from a bootstrap cluster
 - [Talos Linux standalone (with CAPI or bare-metal)](setup/talos.md)
 - [Rancher with CAPC](setup/rancher-capc.md)
 
