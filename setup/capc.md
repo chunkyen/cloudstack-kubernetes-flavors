@@ -54,9 +54,7 @@ Each image is available with an MD5 checksum file for verification.
 
 #### Building Your Own Image
 
-If you need a custom OS or specific package versions, build your own using the [kubernetes-sigs/image-builder](https://github.com/kubernetes-sigs/image-builder/tree/master/images/capi) project.
-
-See the **[CAPC Custom Image Guide](./capc-custom-image.md)** for detailed instructions on building images for KVM, VMware, AWS, and other hypervisors, plus CloudStack template registration.
+See [CAPC Custom Image Guide](./capc-custom-image.md) for full instructions.
 
 ### Local Tooling
 
