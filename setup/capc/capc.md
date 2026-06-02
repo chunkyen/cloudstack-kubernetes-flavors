@@ -360,16 +360,58 @@ kubectl edit machinedeployment capc-cluster-md-0
 
 ### Upgrading Kubernetes Version
 
-```bash
-# Update both KubeadmControlPlane and MachineDeployment versions
-clusterctl generate cluster capc-cluster \
-  --kubernetes-version v1.33 \
-  --control-plane-machine-count=3 \
-  --worker-machine-count=2 \
-  > capc-cluster-upgraded.yaml
+Upgrading a CAPC cluster requires a new image with the target K8s version baked in — kubelet, kubeadm, and containerd are installed at image build time, not managed by kubeadm upgrades.
 
-kubectl apply -f capc-cluster-upgraded.yaml
+#### Step 1: Build or Obtain New Image
+
+Build a custom image for the target Kubernetes version (see [CAPC Custom Image Guide](./capc-custom-image.md)), or download a prebuilt one matching your hypervisor:
+
+```bash
+# Example: register new image in CloudStack
+curl -X POST 'https://your-cloudstack-host.com/client/api' \
+  --data-urlencode 'command=registerTemplate&'
+  --data-urlencode 'name=kube-v1.33/ubuntu-2404-upgrade&'
+  # ... other params
 ```
+
+#### Step 2: Create New CloudStackMachineTemplates
+
+Copy the existing templates and update their `image` references:
+
+```bash
+# Get current templates
+kubectl get cloudstackmachinetemplate -o yaml > machine-templates.yaml
+
+# Edit: change image to new template name, increment version
+# (e.g., kube-v1.32/ubuntu-2404 → kube-v1.33/ubuntu-2404)
+```
+
+Apply the updated templates:
+
+```bash
+kubectl apply -f machine-templates.yaml
+```
+
+#### Step 3: Update KubeadmControlPlane and MachineDeployment
+
+Point them to the new templates and update the version field:
+
+```yaml
+# KubeadmControlPlane.spec.machineTemplate.infrastructureRef.name → new template name
+# KubeadmControlPlane.spec.version → v1.33
+---
+# MachineDeployment.spec.template.spec.infrastructureRef.name → new worker template name
+# MachineDeployment.spec.template.spec.version → v1.33
+```
+
+```bash
+kubectl edit kubeadmcontrolplane capc-cluster-control-plane
+kubectl edit machinedeployment capc-cluster-md-0
+```
+
+CAPC performs a rolling update — old VMs are terminated and new ones provisioned from the updated image.
+
+> **Note:** If using prebuilt images, you can skip Step 1 entirely. See [Prebuilt Images](#prebuilt-images) for available versions.
 
 ### Deleting the Cluster
 
