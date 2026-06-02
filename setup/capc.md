@@ -54,39 +54,9 @@ Each image is available with an MD5 checksum file for verification.
 
 #### Building Your Own Image
 
-If you need a custom OS or specific package versions, build your own using the [kubernetes-sigs/image-builder](https://github.com/kubernetes-sigs/image-builder/tree/master/images/capi) project:
+If you need a custom OS or specific package versions, build your own using the [kubernetes-sigs/image-builder](https://github.com/kubernetes-sigs/image-builder/tree/master/images/capi) project.
 
-```bash
-# Clone the image-builder repo
-git clone https://github.com/kubernetes-sigs/image-builder.git
-cd image-builder/images/capi
-
-# Build for your hypervisor (example: KVM with Ubuntu 24.04)
-mage build-kube-aws --os ubuntu-2404 --kubernetes-version 1.32
-```
-
-Supported builders:
-- `mage build-kube-aws` — AWS AMI
-- `mage build-kube-docker` — Docker image (for local testing)
-- `mage build-kube-vsphere` — vSphere OVA
-- `mage build-kube-qemu` — QEMU/KVM qcow2
-
-After building, upload the image to CloudStack:
-
-```bash
-# Register the template in CloudStack
-curl -X POST 'https://your-cloudstack-host.com/client/api' \
-  --data 'command=registerTemplate&
-    url=http://path/to/your/image.qcow2.bz2&
-    zoneid=<zone-id>&
-    format=QCOW2&
-    hypervisortype=KVM&
-    ispublic=true&
-    ostype=Ubuntu Linux (64-bit)&
-    name=kube-v1.32/ubuntu-2404-custom'
-```
-
-> **Tip:** Use the prebuilt images unless you have specific requirements — they're tested and maintained by the CAPC community.
+See the **[CAPC Custom Image Guide](./capc-custom-image.md)** for detailed instructions on building images for KVM, VMware, AWS, and other hypervisors, plus CloudStack template registration.
 
 ### Local Tooling
 
