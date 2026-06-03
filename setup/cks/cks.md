@@ -316,6 +316,8 @@ scaleKubernetesCluster id=<cluster-id> controlnodes=5
 
 ### Upgrade Cluster
 
+> **Full stack upgrade guide:** For a complete end-to-end upgrade covering K8s version, CNI, and CSI, see the [CKS Upgrade Guide](./cks-upgrade.md).
+
 > **Note:** The **Upgrade** icon (🔄) only appears when:
 > - The cluster is in a **running** state
 > - An eligible upgrade version is available
