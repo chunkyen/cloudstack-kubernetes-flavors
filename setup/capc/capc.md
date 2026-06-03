@@ -250,6 +250,8 @@ Watch for these stages:
 
 CAPC does not install a CNI plugin — you must do this manually. Choose one:
 
+> **💡 Automate CNI installation:** Instead of manual installation, see the [CNI Automation Options](./cni-automation-options.md) guide for three approaches to automate CNI as part of the cluster deployment workflow — including the CAPI-native `ClusterResourceSet` approach that integrates CNI installation into Step 5.
+
 ### Calico (Recommended)
 
 ```bash
