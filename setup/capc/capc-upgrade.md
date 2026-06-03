@@ -21,6 +21,8 @@ Meanwhile, CNI, CSI, and CCM are **workload deployments** — they run as pods i
 | **CSI driver** | Workload cluster | Re-apply manifests | ❌ No |
 | **CCM** (CloudStack K8s Provider) | Workload cluster | Re-apply manifests | ❌ No |
 
+> **Key point:** The CAPC controller is the only component that runs on the management cluster. Everything else — kubelet, kubeadm, CNI, CSI, CCM — runs on the workload cluster. The workload cluster is just a plain Kubernetes cluster; CAPC manages it from the outside.
+
 ## Upgrade Sequence
 
 The order matters. You can't just `kubectl apply` everything at once.
@@ -33,7 +35,7 @@ The order matters. You can't just `kubectl apply` everything at once.
 
 ### Why This Order?
 
-- **CAPC controller first**: New CAPC versions may have updated CRD schemas or controller logic. Upgrade the management plane before touching workload clusters.
+- **CAPC controller first**: New CAPC versions may have updated CRD schemas or controller logic. Upgrade the management plane before touching workload clusters. This only affects the management cluster — workload clusters are unaffected.
 - **K8s version second**: This is the longest step — CAPC replaces VMs one by one (rolling update). Wait for it to fully complete before upgrading anything else.
 - **CNI/CSI/CCM last**: These are DaemonSets/Deployments that run on the new nodes automatically once the K8s upgrade finishes. Applying them before the K8s upgrade would cause the old CNI/CSI pods to be evicted when nodes are replaced.
 
@@ -47,7 +49,9 @@ The order matters. You can't just `kubectl apply` everything at once.
 - New K8s-compatible image (prebuilt or custom-built)
 - New CNI/CSI/CCM manifests
 
-### Step 1: Upgrade CAPC Controller (Management Plane)
+### Step 1: Upgrade CAPC Controller (Management Cluster Only)
+
+> **Important:** This step applies **only to the management cluster**. The CAPC controller is a set of Kubernetes controllers (Deployments) that run on your management cluster — it watches workload cluster objects and talks to the CloudStack API. The workload cluster has **no CAPC controllers running inside it**. It's just a plain Kubernetes cluster managed from the outside.
 
 ```bash
 # Upgrade CAPC controller to the latest version
@@ -58,7 +62,7 @@ clusterctl upgrade --to ${capc_version}
 kubectl wait --for=condition=available deployment/capc-controller-manager -n capc-system --timeout=300s
 ```
 
-> **Note:** This upgrades the CAPC controller on your **management cluster**, not the workload cluster. The workload cluster is unaffected during this step.
+The workload cluster is completely unaffected during this step. You could have multiple workload clusters managed by the same CAPC controller, and upgrading the controller affects all of them (or none, depending on compatibility).
 
 ### Step 2: Upgrade K8s Version (Image-Based Rolling Update)
 

@@ -366,6 +366,8 @@ kubectl edit machinedeployment capc-cluster-md-0
 
 > **Full stack upgrade guide:** For a complete end-to-end upgrade covering CAPC controller, K8s version, CNI, CSI, and CCM, see the [CAPC Upgrade Guide](./capc-upgrade.md).
 
+> **Note:** The CAPC controller upgrade (covered in the full guide) applies **only to the management cluster**. The workload cluster has no CAPC controllers — it's just a plain Kubernetes cluster managed from the outside.
+
 Upgrading a CAPC cluster requires a new image with the target K8s version baked in — kubelet, kubeadm, and containerd are installed at image build time, not managed by kubeadm upgrades.
 
 #### Step 1: Build or Obtain New Image
