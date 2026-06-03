@@ -4,36 +4,39 @@ This guide covers upgrading a CKS-managed Kubernetes cluster **end-to-end**: the
 
 ## The Upgrade Model
 
-CKS clusters are managed by CloudStack's management server. The Kubernetes version upgrade is a **native CloudStack operation** — you don't need to manually orchestrate node replacement or image updates. CloudStack handles the rolling update automatically.
+CKS clusters are managed by CloudStack's management server. The Kubernetes version upgrade is an **in-place ISO-based upgrade** — CloudStack applies the new ISO to existing nodes and upgrades them in place, without replacing the VMs.
 
-Meanwhile, CNI and CSI are **workload deployments** — they run as pods inside the cluster. CNI is baked into the ISO at build time, and CSI is deployed as a separate manifest. You upgrade these the same way you would on any K8s cluster.
+This is fundamentally different from CAPC, which uses node replacement (new VMs from new images). CKS upgrades the existing nodes in place.
+
+Meanwhile, CNI and CSI are **workload deployments** — they run as pods inside the cluster. CNI and CSI are baked into the ISO at build time and upgrade together with the K8s version during the in-place upgrade.
 
 ### What Gets Upgraded Where
 
 | Component | Where | How Upgraded | Managed by CKS? |
 |-----------|-------|-------------|------------------|
-| **kubelet** | Workload nodes | CloudStack `upgradeKubernetesCluster` (via ISO) | ✅ Yes |
-| **kubeadm** | Workload nodes | CloudStack `upgradeKubernetesCluster` (via ISO) | ✅ Yes |
-| **containerd** | Workload nodes | CloudStack `upgradeKubernetesCluster` (via ISO) | ✅ Yes |
-| **K8s API version** | Workload cluster | CloudStack `upgradeKubernetesCluster` (via ISO) | ✅ Yes |
-| **CNI** (Calico/Cilium) | Workload nodes | Baked into ISO — upgrade via new ISO or manifest re-apply | ⚠️ ISO-baked |
+| **kubelet** | Workload nodes | In-place ISO upgrade via `upgradeKubernetesCluster` | ✅ Yes |
+| **kubeadm** | Workload nodes | In-place ISO upgrade via `upgradeKubernetesCluster` | ✅ Yes |
+| **containerd** | Workload nodes | In-place ISO upgrade via `upgradeKubernetesCluster` | ✅ Yes |
+| **K8s API version** | Workload cluster | In-place ISO upgrade via `upgradeKubernetesCluster` | ✅ Yes |
+| **CNI** (Calico/Cilium) | Workload nodes | Baked into ISO — upgrades with K8s version | ✅ Yes |
 | **CSI driver** | Workload nodes | Baked into ISO — upgrades with K8s version | ✅ Yes |
 | **CCM** (CloudStack K8s Provider) | Workload nodes | Baked into ISO — upgrades with K8s version | ✅ Yes |
 
-> **Key point:** CKS handles the K8s version upgrade automatically — CloudStack provisions new nodes from the new ISO and performs a rolling update. The ISO contains kubelet, kubeadm, containerd, CNI, CSI driver, and CCM. Upgrading the K8s version upgrades **all of these together**. The only exception is CNI — you can either upgrade it by using a new ISO with the newer CNI baked in, or re-apply CNI manifests to upgrade it independently.
+> **Key point:** CKS performs an **in-place ISO upgrade** — CloudStack applies the new ISO to existing nodes and upgrades them in place, without replacing the VMs. The ISO contains kubelet, kubeadm, containerd, CNI, CSI driver, and CCM. Upgrading the K8s version upgrades **all of these together** in a single operation. No separate CNI, CSI, or CCM upgrade steps are needed.
 
 ## Upgrade Sequence
 
-For CKS, the upgrade is straightforward:
+For CKS, the upgrade is a single step:
 
-1. **K8s version** — CloudStack handles the rolling update (this upgrades K8s, CSI, and CCM together)
-2. **CNI** — optionally re-apply manifests if you need a CNI version different from what's baked into the ISO
+1. **K8s version** — CloudStack performs an in-place ISO upgrade (this upgrades K8s, CNI, CSI, and CCM together)
 
-### Why This Order?
+That's it. No separate CNI, CSI, or CCM upgrade steps are needed.
 
-- **K8s version first**: CloudStack performs a rolling node replacement. Wait for it to fully complete before upgrading anything else.
-- **CSI and CCM upgrade automatically**: They are baked into the ISO and come up with the new K8s version — no manual step needed.
-- **CNI last (optional)**: If you need a CNI version different from what's baked into the ISO, re-apply CNI manifests after the K8s upgrade completes.
+### Why It's Simple
+
+- **In-place upgrade**: CloudStack applies the new ISO to existing nodes — no VM replacement, no new infrastructure.
+- **All components together**: The ISO contains kubelet, kubeadm, containerd, CNI, CSI driver, and CCM. They all upgrade together.
+- **No manual orchestration**: Just trigger the upgrade via UI, API, or CLI and CloudStack handles the rest.
 
 ## Step-by-Step Upgrade
 
@@ -41,7 +44,6 @@ For CKS, the upgrade is straightforward:
 
 - Access to the CloudStack management UI or API
 - Target K8s version registered in CloudStack
-- New CNI/CSI manifests (if upgrading those components)
 - Access to the workload cluster kubeconfig
 
 ### Step 1: Register New K8s Version (If Not Already Done)
@@ -98,9 +100,9 @@ upgradekubernetescluster \
   kubernetesversionid=<new-version-id>
 ```
 
-### Step 3: Wait for Rolling Update to Complete
+### Step 3: Wait for In-Place Upgrade to Complete
 
-CloudStack performs a rolling node replacement. Monitor progress:
+CloudStack performs an in-place upgrade on existing nodes. Monitor progress:
 
 **Via UI:**
 - Watch the cluster status indicator in the Kubernetes tab
@@ -122,60 +124,36 @@ kubectl version --short
 # Expected: server version matches target
 ```
 
-> **Estimated time:** Rolling update typically takes 5-15 minutes depending on cluster size. Control plane nodes are upgraded first, then workers.
+> **Estimated time:** In-place upgrade typically takes 10-30 minutes depending on cluster size and node count. Control plane nodes are upgraded first, then workers. The ISO is streamed to each node and applied in place.
 
-### Step 4: Upgrade CNI (Optional)
+### Step 4: Verify the Upgrade
 
-CSI and CCM upgrade automatically with the ISO — they don't need a separate step. CNI is also baked into the ISO, so it upgrades with the K8s version by default. However, if you need a CNI version different from what's baked into the ISO, you can re-apply CNI manifests after the K8s upgrade completes.
-
-#### Calico
+After the in-place ISO upgrade completes, verify all components are at the expected versions:
 
 ```bash
 kubeconfig="<path-to-kubeconfig>"
-calico_version="v3.29.0"
 
-kubectl apply --kubeconfig=${kubeconfig} -f \
-  "https://raw.githubusercontent.com/projectcalico/calico/${calico_version}/manifests/calico.yaml"
+# Check node versions
+kubectl --kubeconfig=${kubeconfig} get nodes
 
-# Wait for Calico pods to be ready
-kubectl wait --kubeconfig=${kubeconfig} --for=condition=ready pod -l k8s-app=calico-node -n kube-system --timeout=600s
+# Check K8s version
+kubectl --kubeconfig=${kubeconfig} version --short
+
+# Check CNI pods (should be running with new version)
+kubectl --kubeconfig=${kubeconfig} get pods -n kube-system -l k8s-app=calico-node
+
+# Check CSI pods (should be running with new version)
+kubectl --kubeconfig=${kubeconfig} get pods -n kube-system -l app.kubernetes.io/name=csi-smb-controller
+
+# Check CCM pods (should be running with new version)
+kubectl --kubeconfig=${kubeconfig} get pods -n kube-system -l k8s-app=cloudstack-ccm
 ```
 
-#### Cilium
-
-```bash
-cilium_version="1.16.0"
-
-kubectl --kubeconfig=${kubeconfig} apply -f \
-  "https://raw.githubusercontent.com/cilium/cilium/${cilium_version}/install/kubernetes/quickstep.yaml"
-
-# Wait for Cilium pods to be ready
-kubectl wait --kubeconfig=${kubeconfig} --for=condition=ready pod -l k8s-app=cilium -n cilium --timeout=600s
-```
-
-#### CNI Configuration (ACS 4.21+)
-
-If you registered a CNI configuration during cluster creation, note that **CNI configurations are applied at cluster creation time only**. To change the CNI version after deployment, you must upgrade via manifest (as shown above) or rebuild the ISO with the new CNI baked in.
-
-### Step 5: Upgrade CSI Driver
-
-```bash
-kubeconfig="<path-to-kubeconfig>"
-csi_version="v2.0.0"
-
-kubectl apply --kubeconfig=${kubeconfig} -f \
-  "https://raw.githubusercontent.com/kubernetes-csi/csi-driver-smb/${csi_version}/deploy/csi-smb-controller-smb.yaml"
-
-kubectl apply --kubeconfig=${kubeconfig} -f \
-  "https://raw.githubusercontent.com/kubernetes-csi/csi-driver-smb/${csi_version}/deploy/csi-smb-node-smb.yaml"
-
-# Wait for CSI pods to be ready
-kubectl wait --kubeconfig=${kubeconfig} --for=condition=ready pod -l app.kubernetes.io/name=csi-smb-controller -n kube-system --timeout=300s
-```
+> **Note:** CNI, CSI, and CCM are all baked into the ISO and upgrade together with the K8s version. No separate upgrade steps are needed.
 
 ## Full Upgrade Script
 
-Here's a complete script that strings all steps together:
+Here's a complete script that performs the CKS in-place upgrade:
 
 ```bash
 #!/bin/bash
@@ -185,27 +163,20 @@ set -euo pipefail
 cluster_id="<cluster-id>"
 kubeconfig="<path-to-kubeconfig>"
 k8s_version="v1.33"
-calico_version="v3.29.0"
-csi_version="v2.0.0"
-
-# === Step 1: Upgrade K8s Version (CloudStack-Native) ===
-echo "=== Step 1: Upgrading K8s version to ${k8s_version} ==="
-
-# Via API
 cloudstack_url="https://<mgmt-server>/client/api"
 api_key="<api-key>"
 secret_key="<secret-key>"
 
-# Generate signed request
-# (Use your preferred CloudStack API client or the UI)
-# Example:
-# upgradeKubernetesCluster id=${cluster_id} kubernetesversionid=<new-version-id>
+# === Step 1: Upgrade K8s Version (In-Place ISO Upgrade) ===
+echo "=== Step 1: Upgrading K8s version to ${k8s_version} ==="
 
-echo "Triggering CKS upgrade via CloudStack API..."
-# Replace with actual API call
+# Trigger CKS upgrade via CloudStack API
+# Note: Replace with actual signed API call using your CloudStack API client
+echo "Triggering CKS in-place upgrade via CloudStack API..."
+# Example:
 # curl -s "${cloudstack_url}/?command=upgradeKubernetesCluster&id=${cluster_id}&kubernetesversionid=<new-version-id>&apiKey=${api_key}&signature=<signature>"
 
-echo "Waiting for rolling update to complete..."
+echo "Waiting for in-place upgrade to complete..."
 
 # Poll until upgrade completes
 while true; do
@@ -218,21 +189,16 @@ while true; do
   sleep 30
 done
 
-# Verify nodes
+# === Step 2: Verify the Upgrade ===
+echo "=== Step 2: Verifying upgrade ==="
 kubectl --kubeconfig=${kubeconfig} get nodes
 kubectl --kubeconfig=${kubeconfig} version --short
-
-# === Step 2: Upgrade CNI (Optional) ===
-# CSI and CCM upgrade automatically with the ISO — no separate step needed.
-# Only re-apply CNI manifests if you need a version different from what's baked into the ISO.
-echo "=== Step 2: Upgrading CNI to Calico ${calico_version} (optional) ==="
-kubectl apply --kubeconfig=${kubeconfig} -f \
-  "https://raw.githubusercontent.com/projectcalico/calico/${calico_version}/manifests/calico.yaml"
-kubectl wait --kubeconfig=${kubeconfig} --for=condition=ready pod -l k8s-app=calico-node -n kube-system --timeout=600s
-echo "CNI upgraded."
+kubectl --kubeconfig=${kubeconfig} get pods -n kube-system -l k8s-app=calico-node
+kubectl --kubeconfig=${kubeconfig} get pods -n kube-system -l app.kubernetes.io/name=csi-smb-controller
+kubectl --kubeconfig=${kubeconfig} get pods -n kube-system -l k8s-app=cloudstack-ccm
 
 echo "=== Upgrade complete ==="
-echo "Note: CSI and CCM upgraded automatically with the ISO (K8s version upgrade)."
+echo "All components (K8s, CNI, CSI, CCM) upgraded together via ISO in-place upgrade."
 ```
 
 ## Rollback
@@ -252,11 +218,11 @@ upgradeKubernetesCluster \
   kubernetesversionid=<previous-version-id>
 ```
 
-> **Warning:** Rolling back the K8s version will replace nodes again. Applications may experience downtime during the rolling update.
+> **Warning:** Rolling back the K8s version will perform another in-place upgrade. Applications may experience downtime during the upgrade.
 
 ### Rollback CNI
 
-Simply re-apply the old manifests:
+If you separately re-applied CNI manifests after the ISO upgrade, you can rollback by re-applying the old CNI manifests:
 
 ```bash
 kubectl apply --kubeconfig=${kubeconfig} -f calico-v3.28.yaml
@@ -268,11 +234,10 @@ CSI and CCM rollback is handled by rolling back the K8s version (re-apply the pr
 
 Use this checklist to ensure a smooth upgrade:
 
-- [ ] Document current versions (K8s, CNI, CSI)
+- [ ] Document current versions (K8s, CNI, CSI, CCM)
 - [ ] Test upgrade on a non-production cluster first
 - [ ] Ensure target K8s ISO is registered in CloudStack
-- [ ] Ensure new CNI manifests are compatible with target K8s version (if upgrading CNI independently)
-- [ ] Schedule maintenance window (rolling update takes time)
+- [ ] Schedule maintenance window (in-place upgrade takes time)
 - [ ] Have rollback plan ready
 - [ ] Verify cluster health after each step
 - [ ] Run application health checks after full upgrade
@@ -289,7 +254,7 @@ Use this checklist to ensure a smooth upgrade:
 | Nodes not reaching `Ready` | Check `kubectl get nodes` and `kubectl describe node <node-name>` |
 | CNI pods not ready after upgrade | Check `kubectl get pods -n kube-system -l k8s-app=calico-node` |
 | CSI pods not ready after upgrade | Check `kubectl get pods -n kube-system -l app.kubernetes.io/name=csi-smb-controller` |
-| Old nodes still running | Check `kubectl get nodes` — old nodes should be replaced during rolling update |
+| CCM pods not ready after upgrade | Check `kubectl get pods -n kube-system -l k8s-app=cloudstack-ccm` |
 | Port forwarding broken after upgrade | Re-configure firewall rules and port forwarding in CloudStack |
 
 ## ISO-Baked Components
@@ -313,15 +278,6 @@ The only component you might need to upgrade separately is **CNI** — if you ne
 
 1. Upgrade K8s version via CloudStack (upgrades everything else automatically)
 2. Re-apply CNI manifests to get the desired CNI version
-
-### When to Rebuild the ISO for CNI
-
-| Scenario | Approach |
-|----------|----------|
-| CNI minor version bump (e.g., Calico 3.28 → 3.29) | Re-apply manifests |
-| CNI major version bump (e.g., Calico 3.x → 4.x) | Consider rebuilding ISO |
-| Switching CNI (e.g., Calico → Cilium) | Re-apply manifests or rebuild ISO |
-| Custom CNI parameters | Use CNI configuration (ACS 4.21+) or rebuild ISO |
 
 ### When to Rebuild the ISO for CNI
 
