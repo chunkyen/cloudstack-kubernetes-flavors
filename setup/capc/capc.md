@@ -364,6 +364,8 @@ kubectl edit machinedeployment capc-cluster-md-0
 
 ### Upgrading Kubernetes Version
 
+> **Full stack upgrade guide:** For a complete end-to-end upgrade covering CAPC controller, K8s version, CNI, CSI, and CCM, see the [CAPC Upgrade Guide](./capc-upgrade.md).
+
 Upgrading a CAPC cluster requires a new image with the target K8s version baked in — kubelet, kubeadm, and containerd are installed at image build time, not managed by kubeadm upgrades.
 
 #### Step 1: Build or Obtain New Image
@@ -483,6 +485,7 @@ ssh cloud-user@<public-ip> -i path/to/private/key
 
 ## Next Steps
 
+- See the [CAPC Upgrade Guide](./capc-upgrade.md) for end-to-end upgrade procedures
 - Explore [Tilt-based development](https://cluster-api-cloudstack.sigs.k8s.io/development/tilt) for CAPC contribution
 - Check out the [CKS setup guide](../cks/cks.md) for native CloudStack Kubernetes integration
 - Compare all flavors in the [comparison analysis](../comparison/)
