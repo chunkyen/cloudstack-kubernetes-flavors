@@ -204,6 +204,27 @@ while [[ $# -gt 0 ]]; do
     --csi)                 CSI_ENABLED=true; shift ;;
     --dry-run)             DRY_RUN=true; shift ;;
     -i|--interactive)      INTERACTIVE=true; shift ;;
+    -h|--help)
+      echo "Usage: $0 [OPTIONS]"
+      echo ""
+      echo "Options:"
+      echo "  -p PROFILE        cmk profile name (default: localcloud)"
+      echo "  -z ZONE           Zone ID or name"
+      echo "  -n NETWORK        Network ID or name"
+      echo "  -v K8S_VERSION    Kubernetes version (e.g., v1.32.0)"
+      echo "  -c CONTROL_NODES  Control plane node count (default: 3)"
+      echo "  -w WORKER_NODES   Worker node count (default: 2)"
+      echo "  -k KEYPAIR        SSH keypair name"
+      echo "  -s SERVICE_OFFER  Service offering ID"
+      echo "  -t TEMPLATE       Node template ID"
+      echo "  --csi             Enable CloudStack CSI driver"
+      echo "  --dry-run         Show what would be done (skips writes)"
+      echo "  -i                Interactive mode (prompt for sizing)"
+      echo "  -h                Show this help"
+      echo ""
+      echo "When a flag is omitted, you'll be prompted to select from"
+      echo "available options. Pass a flag to skip the prompt."
+      exit 0 ;;
     *)                     error "Unknown option: $1"; exit 1 ;;
   esac
 done
