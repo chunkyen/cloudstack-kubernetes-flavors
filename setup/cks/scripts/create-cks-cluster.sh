@@ -675,7 +675,9 @@ log "Endpoint URL: $ENDPOINT_URL"
 # ─── Step 8: Create CKS Cluster ─────────────────────────────────────────────
 log "Creating CKS cluster..."
 
-CLUSTER_NAME="cks-$(date +%Y%m%d-%H%M%S)"
+DEFAULT_CLUSTER_NAME="cks-$(date +%Y%m%d-%H%M%S)"
+read -p "Cluster name (default $DEFAULT_CLUSTER_NAME): " input
+CLUSTER_NAME=${input:-$DEFAULT_CLUSTER_NAME}
 KUBECONFIG_FILE="${CLUSTER_NAME}.kubeconfig"
 log "Cluster name: $CLUSTER_NAME"
 
