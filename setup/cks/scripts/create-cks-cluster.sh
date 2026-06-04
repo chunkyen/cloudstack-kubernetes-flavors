@@ -61,6 +61,7 @@ NETWORK_NAME=""
 TEMPLATE_NAME=""
 OFFERING_NAME=""
 KEYPAIR_NAME=""
+CLUSTER_NAME=""
 CLUSTER_ID=""
 KUBECONFIG_FILE=""
 
@@ -196,6 +197,7 @@ show_menu() {
 while [[ $# -gt 0 ]]; do
   case $1 in
     -p|--profile)          PROFILE="$2"; shift 2 ;;
+    -C|--cluster-name)     CLUSTER_NAME="$2"; shift 2 ;;
     -z|--zone)             ZONE="$2"; shift 2 ;;
     -n|--network)          NETWORK="$2"; shift 2 ;;
     -v|--k8s-version)      K8S_VERSION="$2"; shift 2 ;;
@@ -250,7 +252,16 @@ if ! command -v jq &>/dev/null; then
   exit 1
 fi
 
-# ─── Step 0: Detect Zone ────────────────────────────────────────────────────
+# ─── Step 0: Cluster Name ───────────────────────────────────────────────────
+DEFAULT_CLUSTER_NAME="cks-$(date +%Y%m%d-%H%M%S)"
+if [[ -z "$CLUSTER_NAME" ]]; then
+  read -p "Cluster name (default $DEFAULT_CLUSTER_NAME): " input
+  CLUSTER_NAME=${input:-$DEFAULT_CLUSTER_NAME}
+fi
+KUBECONFIG_FILE="${CLUSTER_NAME}.kubeconfig"
+log "Cluster name: $CLUSTER_NAME"
+
+# ─── Step 1: Detect Zone ────────────────────────────────────────────────────
 log "Detecting zones..."
 
 cmk list zones pagesize=50 page=1
@@ -309,7 +320,7 @@ else
   log "Selected zone: $ZONE_NAME ($ZONE_ID)"
 fi
 
-# ─── Step 1: Detect Isolated Networks ───────────────────────────────────────
+# ─── Step 2: Detect Isolated Networks ───────────────────────────────────────
 log "Detecting isolated networks in zone..."
 
 cmk list networks zoneid="$ZONE_ID" ispublic=false pagesize=50 page=1
@@ -370,7 +381,7 @@ else
   log "Selected network: $NETWORK_NAME ($NETWORK_ID)"
 fi
 
-# ─── Step 2: Detect Templates ───────────────────────────────────────────────
+# ─── Step 3: Detect Templates ───────────────────────────────────────────────
 log "Detecting available templates..."
 
 cmk list templates zoneid="$ZONE_ID" type=user pagesize=50 page=1
@@ -429,7 +440,7 @@ else
   fi
 fi
 
-# ─── Step 3: Detect Service Offerings ───────────────────────────────────────
+# ─── Step 4: Detect Service Offerings ───────────────────────────────────────
 log "Detecting service offerings..."
 
 cmk list serviceofferings pagesize=50 page=1
@@ -485,7 +496,7 @@ else
   log "Worker offering: ID $SERVICE_OFFERING"
 fi
 
-# ─── Step 4: Detect K8s Supported Versions ──────────────────────────────────
+# ─── Step 5: Detect K8s Supported Versions ──────────────────────────────────
 log "Detecting registered K8s versions..."
 
 cmk listKubernetesSupportedVersions pagesize=50 page=1
@@ -544,7 +555,7 @@ else
   log "Selected K8s version: $K8S_VERSION ($K8S_VERSION_ID)"
 fi
 
-# ─── Step 5: Detect Keypairs ────────────────────────────────────────────────
+# ─── Step 6: Detect Keypairs ────────────────────────────────────────────────
 log "Detecting SSH keypairs..."
 
 cmk list sshkeypairs pagesize=50 page=1
@@ -604,7 +615,7 @@ else
   fi
 fi
 
-# ─── Step 6: Node Counts ────────────────────────────────────────────────────
+# ─── Step 7: Node Counts ────────────────────────────────────────────────────
 if [[ -z "$CONTROL_NODES" ]]; then
   read -p "Control plane nodes (default 3): " input
   CONTROL_NODES=${input:-3}
@@ -647,7 +658,7 @@ if [[ "$DRY_RUN" != true ]]; then
   fi
 fi
 
-# ─── Step 7: Verify CKS Plugin Is Enabled ───────────────────────────────────
+# ─── Step 8: Verify CKS Plugin Is Enabled ───────────────────────────────────
 log "Verifying CKS plugin is enabled..."
 
 cmk listConfigurations name="cloud.kubernetes.service.enabled"
@@ -672,14 +683,8 @@ if [[ -z "$ENDPOINT_URL" ]]; then
 fi
 log "Endpoint URL: $ENDPOINT_URL"
 
-# ─── Step 8: Create CKS Cluster ─────────────────────────────────────────────
+# ─── Step 9: Create CKS Cluster ─────────────────────────────────────────────
 log "Creating CKS cluster..."
-
-DEFAULT_CLUSTER_NAME="cks-$(date +%Y%m%d-%H%M%S)"
-read -p "Cluster name (default $DEFAULT_CLUSTER_NAME): " input
-CLUSTER_NAME=${input:-$DEFAULT_CLUSTER_NAME}
-KUBECONFIG_FILE="${CLUSTER_NAME}.kubeconfig"
-log "Cluster name: $CLUSTER_NAME"
 
 CREATE_ARGS=(
   "name=$CLUSTER_NAME"
