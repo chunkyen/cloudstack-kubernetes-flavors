@@ -17,6 +17,7 @@
 #   -S CONTROL_OFFERING  Control plane service offering ID
 #   -t TEMPLATE       Node template ID
 #   --csi             Enable CloudStack CSI driver
+#   --no-csi          Disable CloudStack CSI driver
 #   --dry-run         Print commands without executing (skips writes only)
 #   -i                Interactive mode (prompt for all values)
 #
@@ -50,7 +51,7 @@ KEYPAIR=""
 SERVICE_OFFERING=""
 CONTROL_OFFERING=""
 TEMPLATE=""
-CSI_ENABLED=false
+CSI_ENABLED=""  # empty = not yet decided
 DRY_RUN=false
 INTERACTIVE=false
 ZONE_ID=""
@@ -205,6 +206,7 @@ while [[ $# -gt 0 ]]; do
     -S|--control-offering) CONTROL_OFFERING="$2"; shift 2 ;;
     -t|--template)         TEMPLATE="$2"; shift 2 ;;
     --csi)                 CSI_ENABLED=true; shift ;;
+    --no-csi)              CSI_ENABLED=false; shift ;;
     --dry-run)             DRY_RUN=true; shift ;;
     -i|--interactive)      INTERACTIVE=true; shift ;;
     -h|--help)
@@ -221,6 +223,7 @@ while [[ $# -gt 0 ]]; do
       echo "  -s SERVICE_OFFER  Service offering ID"
       echo "  -t TEMPLATE       Node template ID"
       echo "  --csi             Enable CloudStack CSI driver"
+      echo "  --no-csi          Disable CloudStack CSI driver"
       echo "  --dry-run         Show what would be done (skips writes)"
       echo "  -i                Interactive mode (prompt for sizing)"
       echo "  -h                Show this help"
@@ -607,8 +610,12 @@ if [[ "$INTERACTIVE" == true ]]; then
   CONTROL_NODES=${input:-3}
   read -p "Worker nodes (default 2): " input
   WORKER_NODES=${input:-2}
+fi
+
+# Always prompt for CSI if not explicitly set via --csi or --no-csi
+if [[ -z "$CSI_ENABLED" ]]; then
   read -p "Enable CSI driver? [y/N]: " input
-  [[ "$input" == "y" || "$input" == "Y" ]] && CSI_ENABLED=true
+  [[ "$input" == "y" || "$input" == "Y" ]] && CSI_ENABLED=true || CSI_ENABLED=false
 fi
 
 # ─── Summary ────────────────────────────────────────────────────────────────
