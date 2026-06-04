@@ -45,8 +45,8 @@ ZONE=""
 NETWORK=""
 K8S_VERSION=""
 K8S_VERSION_ID=""
-CONTROL_NODES=3
-WORKER_NODES=2
+CONTROL_NODES=""
+WORKER_NODES=""
 KEYPAIR=""
 SERVICE_OFFERING=""
 CONTROL_OFFERING=""
@@ -603,11 +603,13 @@ else
   fi
 fi
 
-# ─── Step 6: Interactive Node Counts ────────────────────────────────────────
-if [[ "$INTERACTIVE" == true ]]; then
-  echo -e "\n${BOLD}${CYAN}═══ Cluster Sizing ═══${NC}"
+# ─── Step 6: Node Counts ────────────────────────────────────────────────────
+if [[ -z "$CONTROL_NODES" ]]; then
   read -p "Control plane nodes (default 3): " input
   CONTROL_NODES=${input:-3}
+fi
+
+if [[ -z "$WORKER_NODES" ]]; then
   read -p "Worker nodes (default 2): " input
   WORKER_NODES=${input:-2}
 fi
