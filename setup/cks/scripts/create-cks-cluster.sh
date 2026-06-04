@@ -239,15 +239,27 @@ if [[ $ZONE_COUNT -eq 0 ]]; then
   exit 1
 fi
 
-if [[ $ZONE_COUNT -eq 1 ]] && [[ -z "$ZONE" ]]; then
-  ZONE_ID=$(echo "$CMK_OUT" | jq -r '.zone[0].id // empty')
-  ZONE_NAME=$(echo "$CMK_OUT" | jq -r '.zone[0].name // empty')
-  log "Auto-selected zone: $ZONE_NAME ($ZONE_ID)"
-elif [[ -z "$ZONE" ]] && [[ "$INTERACTIVE" != true ]]; then
-  # Multiple zones, no flag given, non-interactive: pick first but warn
-  ZONE_ID=$(echo "$CMK_OUT" | jq -r '.zone[0].id // empty')
-  ZONE_NAME=$(echo "$CMK_OUT" | jq -r '.zone[0].name // empty')
-  warn "Multiple zones found ($ZONE_COUNT). Auto-selecting first: $ZONE_NAME. Use -z or -i to choose."
+if [[ -z "$ZONE" ]]; then
+  # Always prompt when no flag given
+  ZONE_ITEMS=""
+  while IFS= read -r line; do
+    [[ -z "$line" ]] && continue
+    [[ -n "$ZONE_ITEMS" ]] && ZONE_ITEMS+=","
+    ZONE_ITEMS+="$line"
+  done < <(echo "$CMK_OUT" | jq -r '.zone[] | [.id, .name, .state] | @csv' 2>/dev/null | sed 's/"//g' | sed 's/,/|/g')
+
+  if [[ -z "$ZONE_ITEMS" ]]; then
+    error "Failed to parse zone data."
+    exit 1
+  fi
+
+  if ! show_menu "Available Zones" "ID|Name|State" "$ZONE_ITEMS"; then
+    error "Failed to select a zone."
+    exit 1
+  fi
+  ZONE_ID="$SELECTED_ID"
+  ZONE_NAME="$SELECTED_NAME"
+  log "Selected zone: $ZONE_NAME ($ZONE_ID)"
 else
   ZONE_ITEMS=""
   while IFS= read -r line; do
@@ -285,14 +297,26 @@ if [[ $NET_COUNT -eq 0 ]]; then
   exit 1
 fi
 
-if [[ $NET_COUNT -eq 1 ]] && [[ -z "$NETWORK" ]]; then
-  NETWORK_ID=$(echo "$CMK_OUT" | jq -r '.network[0].id // empty')
-  NETWORK_NAME=$(echo "$CMK_OUT" | jq -r '.network[0].name // empty')
-  log "Auto-selected network: $NETWORK_NAME ($NETWORK_ID)"
-elif [[ -z "$NETWORK" ]] && [[ "$INTERACTIVE" != true ]]; then
-  NETWORK_ID=$(echo "$CMK_OUT" | jq -r '.network[0].id // empty')
-  NETWORK_NAME=$(echo "$CMK_OUT" | jq -r '.network[0].name // empty')
-  warn "Multiple networks found ($NET_COUNT). Auto-selecting first: $NETWORK_NAME. Use -n or -i to choose."
+if [[ -z "$NETWORK" ]]; then
+  NET_ITEMS=""
+  while IFS= read -r line; do
+    [[ -z "$line" ]] && continue
+    [[ -n "$NET_ITEMS" ]] && NET_ITEMS+=","
+    NET_ITEMS+="$line"
+  done < <(echo "$CMK_OUT" | jq -r '.network[] | [.id, .name, .state, .traffictype] | @csv' 2>/dev/null | sed 's/"//g' | sed 's/,/|/g')
+
+  if [[ -z "$NET_ITEMS" ]]; then
+    error "Failed to parse network data."
+    exit 1
+  fi
+
+  if ! show_menu "Available Networks" "ID|Name|State|Traffic" "$NET_ITEMS"; then
+    error "Failed to select a network."
+    exit 1
+  fi
+  NETWORK_ID="$SELECTED_ID"
+  NETWORK_NAME="$SELECTED_NAME"
+  log "Selected network: $NETWORK_NAME ($NETWORK_ID)"
 else
   NET_ITEMS=""
   while IFS= read -r line; do
@@ -331,14 +355,26 @@ else
     warn "No user templates found. Will use default template from K8s version."
     TEMPLATE="default"
     TEMPLATE_NAME="(default from K8s version)"
-  elif [[ $TPL_COUNT -eq 1 ]] && [[ -z "$TEMPLATE" ]]; then
-    TEMPLATE=$(echo "$CMK_OUT" | jq -r '.template[0].id // empty')
-    TEMPLATE_NAME=$(echo "$CMK_OUT" | jq -r '.template[0].name // empty')
-    log "Auto-selected template: $TEMPLATE_NAME ($TEMPLATE)"
-  elif [[ -z "$TEMPLATE" ]] && [[ "$INTERACTIVE" != true ]]; then
-    TEMPLATE=$(echo "$CMK_OUT" | jq -r '.template[0].id // empty')
-    TEMPLATE_NAME=$(echo "$CMK_OUT" | jq -r '.template[0].name // empty')
-    warn "Multiple templates found ($TPL_COUNT). Auto-selecting first: $TEMPLATE_NAME. Use -t or -i to choose."
+  elif [[ -z "$TEMPLATE" ]]; then
+    TPL_ITEMS=""
+    while IFS= read -r line; do
+      [[ -z "$line" ]] && continue
+      [[ -n "$TPL_ITEMS" ]] && TPL_ITEMS+=","
+      TPL_ITEMS+="$line"
+    done < <(echo "$CMK_OUT" | jq -r '.template[] | [.id, .name, .ostypename, .hypervisor] | @csv' 2>/dev/null | sed 's/"//g' | sed 's/,/|/g')
+
+    if [[ -z "$TPL_ITEMS" ]]; then
+      error "Failed to parse template data."
+      exit 1
+    fi
+
+    if ! show_menu "Available Templates" "ID|Name|OS|Hypervisor" "$TPL_ITEMS"; then
+      error "Failed to select a template."
+      exit 1
+    fi
+    TEMPLATE="$SELECTED_ID"
+    TEMPLATE_NAME="$SELECTED_NAME"
+    log "Selected template: $TEMPLATE_NAME ($TEMPLATE)"
   else
     TPL_ITEMS=""
     while IFS= read -r line; do
@@ -377,14 +413,26 @@ if [[ $OFF_COUNT -eq 0 ]]; then
   exit 1
 fi
 
-if [[ $OFF_COUNT -eq 1 ]] && [[ -z "$SERVICE_OFFERING" ]]; then
-  SERVICE_OFFERING=$(echo "$CMK_OUT" | jq -r '.serviceoffering[0].id // empty')
-  OFFERING_NAME=$(echo "$CMK_OUT" | jq -r '.serviceoffering[0].name // empty')
-  log "Auto-selected offering: $OFFERING_NAME ($SERVICE_OFFERING)"
-elif [[ -z "$SERVICE_OFFERING" ]] && [[ "$INTERACTIVE" != true ]]; then
-  SERVICE_OFFERING=$(echo "$CMK_OUT" | jq -r '.serviceoffering[0].id // empty')
-  OFFERING_NAME=$(echo "$CMK_OUT" | jq -r '.serviceoffering[0].name // empty')
-  warn "Multiple offerings found ($OFF_COUNT). Auto-selecting first: $OFFERING_NAME. Use -s or -i to choose."
+if [[ -z "$SERVICE_OFFERING" ]]; then
+  OFF_ITEMS=""
+  while IFS= read -r line; do
+    [[ -z "$line" ]] && continue
+    [[ -n "$OFF_ITEMS" ]] && OFF_ITEMS+=","
+    OFF_ITEMS+="$line"
+  done < <(echo "$CMK_OUT" | jq -r '.serviceoffering[] | [.id, .name, (.cpunumber|tostring), (.memory|tostring), (.servicetype // "")] | @csv' 2>/dev/null | sed 's/"//g' | sed 's/,/|/g')
+
+  if [[ -z "$OFF_ITEMS" ]]; then
+    error "Failed to parse service offering data."
+    exit 1
+  fi
+
+  if ! show_menu "Available Service Offerings" "ID|Name|CPU|Mem(MB)|Type" "$OFF_ITEMS"; then
+    error "Failed to select a service offering."
+    exit 1
+  fi
+  SERVICE_OFFERING="$SELECTED_ID"
+  OFFERING_NAME="$SELECTED_NAME"
+  log "Selected offering: $OFFERING_NAME ($SERVICE_OFFERING)"
 else
   OFF_ITEMS=""
   while IFS= read -r line; do
@@ -424,14 +472,26 @@ if [[ $K8S_COUNT -eq 0 ]]; then
   exit 1
 fi
 
-if [[ $K8S_COUNT -eq 1 ]] && [[ -z "$K8S_VERSION" ]]; then
-  K8S_VERSION_ID=$(echo "$CMK_OUT" | jq -r '.kubernetessupportedversion[0].id // empty')
-  K8S_VERSION=$(echo "$CMK_OUT" | jq -r '.kubernetessupportedversion[0].name // empty')
-  log "Auto-selected K8s version: $K8S_VERSION ($K8S_VERSION_ID)"
-elif [[ -z "$K8S_VERSION" ]] && [[ "$INTERACTIVE" != true ]]; then
-  K8S_VERSION_ID=$(echo "$CMK_OUT" | jq -r '.kubernetessupportedversion[0].id // empty')
-  K8S_VERSION=$(echo "$CMK_OUT" | jq -r '.kubernetessupportedversion[0].name // empty')
-  warn "Multiple K8s versions found ($K8S_COUNT). Auto-selecting first: $K8S_VERSION. Use -v or -i to choose."
+if [[ -z "$K8S_VERSION" ]]; then
+  K8S_ITEMS=""
+  while IFS= read -r line; do
+    [[ -z "$line" ]] && continue
+    [[ -n "$K8S_ITEMS" ]] && K8S_ITEMS+=","
+    K8S_ITEMS+="$line"
+  done < <(echo "$CMK_OUT" | jq -r '.kubernetessupportedversion[] | [.id, .name, (.semanticversion // ""), (.state // "")] | @csv' 2>/dev/null | sed 's/"//g' | sed 's/,/|/g')
+
+  if [[ -z "$K8S_ITEMS" ]]; then
+    error "Failed to parse K8s version data."
+    exit 1
+  fi
+
+  if ! show_menu "Registered K8s Versions" "ID|Name|Semantic|State" "$K8S_ITEMS"; then
+    error "Failed to select a K8s version."
+    exit 1
+  fi
+  K8S_VERSION_ID="$SELECTED_ID"
+  K8S_VERSION="$SELECTED_NAME"
+  log "Selected K8s version: $K8S_VERSION ($K8S_VERSION_ID)"
 else
   K8S_ITEMS=""
   while IFS= read -r line; do
@@ -469,14 +529,27 @@ else
     warn "No SSH keypairs found. Cluster will be created without SSH keypair."
     KEYPAIR=""
     KEYPAIR_NAME="(none)"
-  elif [[ $KEY_COUNT -eq 1 ]] && [[ -z "$KEYPAIR" ]]; then
-    KEYPAIR=$(echo "$CMK_OUT" | jq -r '.sshkeypair[0].name // empty')
-    KEYPAIR_NAME="$KEYPAIR"
-    log "Auto-selected keypair: $KEYPAIR"
-  elif [[ -z "$KEYPAIR" ]] && [[ "$INTERACTIVE" != true ]]; then
-    KEYPAIR=$(echo "$CMK_OUT" | jq -r '.sshkeypair[0].name // empty')
-    KEYPAIR_NAME="$KEYPAIR"
-    warn "Multiple keypairs found ($KEY_COUNT). Auto-selecting first: $KEYPAIR. Use -k or -i to choose."
+  elif [[ -z "$KEYPAIR" ]]; then
+    KEY_ITEMS=""
+    while IFS= read -r line; do
+      [[ -z "$line" ]] && continue
+      [[ -n "$KEY_ITEMS" ]] && KEY_ITEMS+=","
+      KEY_ITEMS+="$line"
+    done < <(echo "$CMK_OUT" | jq -r '.sshkeypair[] | [.name, .fingerprint, .hypervisor] | @csv' 2>/dev/null | sed 's/"//g' | sed 's/,/|/g')
+
+    if [[ -z "$KEY_ITEMS" ]]; then
+      warn "Failed to parse keypair data. Skipping."
+      KEYPAIR=""
+      KEYPAIR_NAME="(none)"
+    else
+      if ! show_menu "SSH Keypairs" "Name|Fingerprint|Hypervisor" "$KEY_ITEMS"; then
+        error "Failed to select a keypair."
+        exit 1
+      fi
+      KEYPAIR="$SELECTED_ID"
+      KEYPAIR_NAME="$KEYPAIR"
+      log "Selected keypair: $KEYPAIR"
+    fi
   else
     KEY_ITEMS=""
     while IFS= read -r line; do
