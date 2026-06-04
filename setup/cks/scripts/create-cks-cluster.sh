@@ -1,10 +1,9 @@
 #!/usr/bin/env bash
 #
-# bootstrap-cks-for-capc.sh — Automate bringing up a CKS cluster on CloudStack
-# and preparing it as a CAPC management cluster.
+# create-cks-cluster.sh — Automate creating a CKS cluster on CloudStack.
 #
 # Usage:
-#   ./bootstrap-cks-for-capc.sh [OPTIONS]
+#   ./create-cks-cluster.sh [OPTIONS]
 #
 # Options:
 #   -p PROFILE        cmk profile name (default: localcloud)
