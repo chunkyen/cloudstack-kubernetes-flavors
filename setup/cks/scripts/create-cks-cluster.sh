@@ -700,7 +700,7 @@ CREATE_ARGS=(
 [[ -n "$NETWORK_ID" ]] && CREATE_ARGS+=("networkid=$NETWORK_ID")
 [[ -n "$KEYPAIR" ]] && CREATE_ARGS+=("keypair=$KEYPAIR")
 [[ -n "$SERVICE_OFFERING" ]] && CREATE_ARGS+=("serviceofferingid=$SERVICE_OFFERING")
-[[ -n "$CONTROL_OFFERING" ]] && CREATE_ARGS+=("nodeofferings[controlplane]=$CONTROL_OFFERING")
+[[ -n "$CONTROL_OFFERING" ]] && CREATE_ARGS+=("nodeofferings.controlplane=$CONTROL_OFFERING")
 [[ -n "$TEMPLATE" && "$TEMPLATE" != "default" ]] && CREATE_ARGS+=("nodetemplates=$TEMPLATE")
 $CSI_ENABLED && CREATE_ARGS+=("enablecsi=true")
 
