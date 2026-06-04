@@ -239,10 +239,15 @@ if [[ $ZONE_COUNT -eq 0 ]]; then
   exit 1
 fi
 
-if [[ $ZONE_COUNT -eq 1 ]] || [[ -z "$ZONE" && "$INTERACTIVE" != true ]]; then
+if [[ $ZONE_COUNT -eq 1 ]] && [[ -z "$ZONE" ]]; then
   ZONE_ID=$(echo "$CMK_OUT" | jq -r '.zone[0].id // empty')
   ZONE_NAME=$(echo "$CMK_OUT" | jq -r '.zone[0].name // empty')
   log "Auto-selected zone: $ZONE_NAME ($ZONE_ID)"
+elif [[ -z "$ZONE" ]] && [[ "$INTERACTIVE" != true ]]; then
+  # Multiple zones, no flag given, non-interactive: pick first but warn
+  ZONE_ID=$(echo "$CMK_OUT" | jq -r '.zone[0].id // empty')
+  ZONE_NAME=$(echo "$CMK_OUT" | jq -r '.zone[0].name // empty')
+  warn "Multiple zones found ($ZONE_COUNT). Auto-selecting first: $ZONE_NAME. Use -z or -i to choose."
 else
   ZONE_ITEMS=""
   while IFS= read -r line; do
@@ -280,10 +285,14 @@ if [[ $NET_COUNT -eq 0 ]]; then
   exit 1
 fi
 
-if [[ $NET_COUNT -eq 1 ]] || [[ -z "$NETWORK" && "$INTERACTIVE" != true ]]; then
+if [[ $NET_COUNT -eq 1 ]] && [[ -z "$NETWORK" ]]; then
   NETWORK_ID=$(echo "$CMK_OUT" | jq -r '.network[0].id // empty')
   NETWORK_NAME=$(echo "$CMK_OUT" | jq -r '.network[0].name // empty')
   log "Auto-selected network: $NETWORK_NAME ($NETWORK_ID)"
+elif [[ -z "$NETWORK" ]] && [[ "$INTERACTIVE" != true ]]; then
+  NETWORK_ID=$(echo "$CMK_OUT" | jq -r '.network[0].id // empty')
+  NETWORK_NAME=$(echo "$CMK_OUT" | jq -r '.network[0].name // empty')
+  warn "Multiple networks found ($NET_COUNT). Auto-selecting first: $NETWORK_NAME. Use -n or -i to choose."
 else
   NET_ITEMS=""
   while IFS= read -r line; do
@@ -322,10 +331,14 @@ else
     warn "No user templates found. Will use default template from K8s version."
     TEMPLATE="default"
     TEMPLATE_NAME="(default from K8s version)"
-  elif [[ $TPL_COUNT -eq 1 ]] || [[ -z "$TEMPLATE" && "$INTERACTIVE" != true ]]; then
+  elif [[ $TPL_COUNT -eq 1 ]] && [[ -z "$TEMPLATE" ]]; then
     TEMPLATE=$(echo "$CMK_OUT" | jq -r '.template[0].id // empty')
     TEMPLATE_NAME=$(echo "$CMK_OUT" | jq -r '.template[0].name // empty')
     log "Auto-selected template: $TEMPLATE_NAME ($TEMPLATE)"
+  elif [[ -z "$TEMPLATE" ]] && [[ "$INTERACTIVE" != true ]]; then
+    TEMPLATE=$(echo "$CMK_OUT" | jq -r '.template[0].id // empty')
+    TEMPLATE_NAME=$(echo "$CMK_OUT" | jq -r '.template[0].name // empty')
+    warn "Multiple templates found ($TPL_COUNT). Auto-selecting first: $TEMPLATE_NAME. Use -t or -i to choose."
   else
     TPL_ITEMS=""
     while IFS= read -r line; do
@@ -364,10 +377,14 @@ if [[ $OFF_COUNT -eq 0 ]]; then
   exit 1
 fi
 
-if [[ $OFF_COUNT -eq 1 ]] || [[ -z "$SERVICE_OFFERING" && "$INTERACTIVE" != true ]]; then
+if [[ $OFF_COUNT -eq 1 ]] && [[ -z "$SERVICE_OFFERING" ]]; then
   SERVICE_OFFERING=$(echo "$CMK_OUT" | jq -r '.serviceoffering[0].id // empty')
   OFFERING_NAME=$(echo "$CMK_OUT" | jq -r '.serviceoffering[0].name // empty')
   log "Auto-selected offering: $OFFERING_NAME ($SERVICE_OFFERING)"
+elif [[ -z "$SERVICE_OFFERING" ]] && [[ "$INTERACTIVE" != true ]]; then
+  SERVICE_OFFERING=$(echo "$CMK_OUT" | jq -r '.serviceoffering[0].id // empty')
+  OFFERING_NAME=$(echo "$CMK_OUT" | jq -r '.serviceoffering[0].name // empty')
+  warn "Multiple offerings found ($OFF_COUNT). Auto-selecting first: $OFFERING_NAME. Use -s or -i to choose."
 else
   OFF_ITEMS=""
   while IFS= read -r line; do
@@ -407,10 +424,14 @@ if [[ $K8S_COUNT -eq 0 ]]; then
   exit 1
 fi
 
-if [[ $K8S_COUNT -eq 1 ]] || [[ -z "$K8S_VERSION" && "$INTERACTIVE" != true ]]; then
+if [[ $K8S_COUNT -eq 1 ]] && [[ -z "$K8S_VERSION" ]]; then
   K8S_VERSION_ID=$(echo "$CMK_OUT" | jq -r '.kubernetessupportedversion[0].id // empty')
   K8S_VERSION=$(echo "$CMK_OUT" | jq -r '.kubernetessupportedversion[0].name // empty')
   log "Auto-selected K8s version: $K8S_VERSION ($K8S_VERSION_ID)"
+elif [[ -z "$K8S_VERSION" ]] && [[ "$INTERACTIVE" != true ]]; then
+  K8S_VERSION_ID=$(echo "$CMK_OUT" | jq -r '.kubernetessupportedversion[0].id // empty')
+  K8S_VERSION=$(echo "$CMK_OUT" | jq -r '.kubernetessupportedversion[0].name // empty')
+  warn "Multiple K8s versions found ($K8S_COUNT). Auto-selecting first: $K8S_VERSION. Use -v or -i to choose."
 else
   K8S_ITEMS=""
   while IFS= read -r line; do
@@ -448,10 +469,14 @@ else
     warn "No SSH keypairs found. Cluster will be created without SSH keypair."
     KEYPAIR=""
     KEYPAIR_NAME="(none)"
-  elif [[ $KEY_COUNT -eq 1 ]] || [[ -z "$KEYPAIR" && "$INTERACTIVE" != true ]]; then
+  elif [[ $KEY_COUNT -eq 1 ]] && [[ -z "$KEYPAIR" ]]; then
     KEYPAIR=$(echo "$CMK_OUT" | jq -r '.sshkeypair[0].name // empty')
     KEYPAIR_NAME="$KEYPAIR"
     log "Auto-selected keypair: $KEYPAIR"
+  elif [[ -z "$KEYPAIR" ]] && [[ "$INTERACTIVE" != true ]]; then
+    KEYPAIR=$(echo "$CMK_OUT" | jq -r '.sshkeypair[0].name // empty')
+    KEYPAIR_NAME="$KEYPAIR"
+    warn "Multiple keypairs found ($KEY_COUNT). Auto-selecting first: $KEYPAIR. Use -k or -i to choose."
   else
     KEY_ITEMS=""
     while IFS= read -r line; do
