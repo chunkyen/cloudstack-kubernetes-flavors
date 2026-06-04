@@ -13,7 +13,8 @@
 #   -c CONTROL_NODES  Control plane node count (default: 3)
 #   -w WORKER_NODES   Worker node count (default: 2)
 #   -k KEYPAIR        SSH keypair name
-#   -s SERVICE_OFFERING  Service offering ID
+#   -s SERVICE_OFFERING  Worker node service offering ID
+#   -S CONTROL_OFFERING  Control plane service offering ID
 #   -t TEMPLATE       Node template ID
 #   --csi             Enable CloudStack CSI driver
 #   --dry-run         Print commands without executing (skips writes only)
@@ -47,6 +48,7 @@ CONTROL_NODES=3
 WORKER_NODES=2
 KEYPAIR=""
 SERVICE_OFFERING=""
+CONTROL_OFFERING=""
 TEMPLATE=""
 CSI_ENABLED=false
 DRY_RUN=false
@@ -200,6 +202,7 @@ while [[ $# -gt 0 ]]; do
     -w|--worker-nodes)     WORKER_NODES="$2"; shift 2 ;;
     -k|--keypair)          KEYPAIR="$2"; shift 2 ;;
     -s|--service-offering) SERVICE_OFFERING="$2"; shift 2 ;;
+    -S|--control-offering) CONTROL_OFFERING="$2"; shift 2 ;;
     -t|--template)         TEMPLATE="$2"; shift 2 ;;
     --csi)                 CSI_ENABLED=true; shift ;;
     --dry-run)             DRY_RUN=true; shift ;;
@@ -437,46 +440,45 @@ if [[ $OFF_COUNT -eq 0 ]]; then
   exit 1
 fi
 
+# Build offering menu items once
+OFF_ITEMS=""
+while IFS= read -r line; do
+  [[ -z "$line" ]] && continue
+  [[ -n "$OFF_ITEMS" ]] && OFF_ITEMS+=","
+  OFF_ITEMS+="$line"
+done < <(echo "$CMK_OUT" | jq -r '.serviceoffering[] | [.id, .name, (.cpunumber|tostring), (.memory|tostring), (.servicetype // "")] | @csv' 2>/dev/null | sed 's/"//g' | sed 's/,/|/g')
+
+if [[ -z "$OFF_ITEMS" ]]; then
+  error "Failed to parse service offering data."
+  exit 1
+fi
+
+# Worker node offering
 if [[ -z "$SERVICE_OFFERING" ]]; then
-  OFF_ITEMS=""
-  while IFS= read -r line; do
-    [[ -z "$line" ]] && continue
-    [[ -n "$OFF_ITEMS" ]] && OFF_ITEMS+=","
-    OFF_ITEMS+="$line"
-  done < <(echo "$CMK_OUT" | jq -r '.serviceoffering[] | [.id, .name, (.cpunumber|tostring), (.memory|tostring), (.servicetype // "")] | @csv' 2>/dev/null | sed 's/"//g' | sed 's/,/|/g')
-
-  if [[ -z "$OFF_ITEMS" ]]; then
-    error "Failed to parse service offering data."
-    exit 1
-  fi
-
-  if ! show_menu "Available Service Offerings" "ID|Name|CPU|Mem(MB)|Type" "$OFF_ITEMS"; then
-    error "Failed to select a service offering."
+  if ! show_menu "Worker Node Service Offering" "ID|Name|CPU|Mem(MB)|Type" "$OFF_ITEMS"; then
+    error "Failed to select a worker node offering."
     exit 1
   fi
   SERVICE_OFFERING="$SELECTED_ID"
   OFFERING_NAME="$SELECTED_NAME"
-  log "Selected offering: $OFFERING_NAME ($SERVICE_OFFERING)"
+  log "Selected worker offering: $OFFERING_NAME ($SERVICE_OFFERING)"
 else
-  OFF_ITEMS=""
-  while IFS= read -r line; do
-    [[ -z "$line" ]] && continue
-    [[ -n "$OFF_ITEMS" ]] && OFF_ITEMS+=","
-    OFF_ITEMS+="$line"
-  done < <(echo "$CMK_OUT" | jq -r '.serviceoffering[] | [.id, .name, (.cpunumber|tostring), (.memory|tostring), (.servicetype // "")] | @csv' 2>/dev/null | sed 's/"//g' | sed 's/,/|/g')
+  OFFERING_NAME="(by ID)"
+  log "Worker offering: ID $SERVICE_OFFERING"
+fi
 
-  if [[ -z "$OFF_ITEMS" ]]; then
-    error "Failed to parse service offering data."
+# Control plane offering
+if [[ -z "$CONTROL_OFFERING" ]]; then
+  if ! show_menu "Control Plane Service Offering" "ID|Name|CPU|Mem(MB)|Type" "$OFF_ITEMS"; then
+    error "Failed to select a control plane offering."
     exit 1
   fi
-
-  if ! show_menu "Available Service Offerings" "ID|Name|CPU|Mem(MB)|Type" "$OFF_ITEMS"; then
-    error "Failed to select a service offering."
-    exit 1
-  fi
-  SERVICE_OFFERING="$SELECTED_ID"
-  OFFERING_NAME="$SELECTED_NAME"
-  log "Selected offering: $OFFERING_NAME ($SERVICE_OFFERING)"
+  CONTROL_OFFERING="$SELECTED_ID"
+  CONTROL_OFFERING_NAME="$SELECTED_NAME"
+  log "Selected control offering: $CONTROL_OFFERING_NAME ($CONTROL_OFFERING)"
+else
+  CONTROL_OFFERING_NAME="(by ID)"
+  log "Control offering: ID $CONTROL_OFFERING"
 fi
 
 # ─── Step 4: Detect K8s Supported Versions ──────────────────────────────────
@@ -617,7 +619,8 @@ log "  Profile:       $PROFILE"
 log "  Zone:          $ZONE_NAME ($ZONE_ID)"
 log "  Network:       $NETWORK_NAME ($NETWORK_ID)"
 log "  Template:      $TEMPLATE_NAME ($TEMPLATE)"
-log "  Service Offer: $OFFERING_NAME ($SERVICE_OFFERING)"
+log "  Worker Offer:  $OFFERING_NAME ($SERVICE_OFFERING)"
+log "  Control Offer: $CONTROL_OFFERING_NAME ($CONTROL_OFFERING)"
 log "  K8s Version:   $K8S_VERSION ($K8S_VERSION_ID)"
 log "  Control Nodes: $CONTROL_NODES"
 log "  Worker Nodes:  $WORKER_NODES"
@@ -694,6 +697,7 @@ CREATE_ARGS=(
 [[ -n "$NETWORK_ID" ]] && CREATE_ARGS+=(--networkid "$NETWORK_ID")
 [[ -n "$KEYPAIR" ]] && CREATE_ARGS+=(--keypair "$KEYPAIR")
 [[ -n "$SERVICE_OFFERING" ]] && CREATE_ARGS+=(--serviceofferingid "$SERVICE_OFFERING")
+[[ -n "$CONTROL_OFFERING" ]] && CREATE_ARGS+=(--nodeofferings "controlplane=$CONTROL_OFFERING")
 [[ -n "$TEMPLATE" && "$TEMPLATE" != "default" ]] && CREATE_ARGS+=(--nodetemplates "$TEMPLATE")
 $CSI_ENABLED && CREATE_ARGS+=(--enablecsi true)
 
