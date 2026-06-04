@@ -117,6 +117,9 @@ cmk() {
 
 cmk_ok() { [[ $CMK_RC -eq 0 ]]; }
 
+# Return the last cmk error message
+cmk_err() { echo "$CMK_ERR"; }
+
 # ─── Interactive Menu Helper ────────────────────────────────────────────────
 # Usage: show_menu "Title" "Header1|Header2|..." "id1|name1|desc1,id2|name2|desc2,..."
 # Sets SELECTED_ID and SELECTED_NAME
