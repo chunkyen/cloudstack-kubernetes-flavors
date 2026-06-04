@@ -647,7 +647,9 @@ if [[ "$DRY_RUN" != true ]]; then
 fi
 
 # ─── Step 7: Enable CKS Plugin ──────────────────────────────────────────────
-log "Enabling CKS plugin..."
+log "Checking CKS plugin configuration..."
+
+RESTART_NEEDED=false
 
 cmk listConfigurations name="cloud.kubernetes.service.enabled"
 CKS_ENABLED=$(echo "$CMK_OUT" | jq -r '.configuration[0].value // empty' 2>/dev/null || true)
@@ -658,6 +660,7 @@ if [[ "$CKS_ENABLED" != "true" ]]; then
     error "Failed to enable CKS plugin: $(cmk_err)"
     exit 1
   fi
+  RESTART_NEEDED=true
 else
   log "CKS plugin already enabled."
 fi
@@ -674,11 +677,12 @@ if [[ -z "$ENDPOINT_URL" ]]; then
     error "Failed to set endpoint URL: $(cmk_err)"
     exit 1
   fi
+  RESTART_NEEDED=true
 else
   log "Endpoint URL already set: $ENDPOINT_URL"
 fi
 
-if [[ "$DRY_RUN" != true ]]; then
+if [[ "$RESTART_NEEDED" == true ]] && [[ "$DRY_RUN" != true ]]; then
   log "⚠️  Management server restart required for changes to take effect."
   warn "Run: service cloudstack-management restart (or reboot the management host)"
   read -p "Continue after restart? [y/N]: " confirm
@@ -686,6 +690,8 @@ if [[ "$DRY_RUN" != true ]]; then
     log "Aborted. Restart the management server and re-run this script."
     exit 0
   fi
+elif [[ "$RESTART_NEEDED" == false ]]; then
+  log "No configuration changes needed — skipping restart prompt."
 fi
 
 # ─── Step 8: Create CKS Cluster ─────────────────────────────────────────────
