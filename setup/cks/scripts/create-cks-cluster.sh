@@ -313,11 +313,6 @@ if ! cmk_ok; then
 fi
 NET_COUNT=$(echo "$CMK_OUT" | jq '.network | length // 0' 2>/dev/null || echo 0)
 
-if [[ $NET_COUNT -eq 0 ]]; then
-  error "No isolated networks found in zone $ZONE_NAME. Create one first."
-  exit 1
-fi
-
 if [[ -z "$NETWORK" ]]; then
   NET_ITEMS=""
   while IFS= read -r line; do
@@ -326,18 +321,26 @@ if [[ -z "$NETWORK" ]]; then
     NET_ITEMS+="$line"
   done < <(echo "$CMK_OUT" | jq -r '.network[] | [.id, .name, .state, .traffictype] | @csv' 2>/dev/null | sed 's/"//g' | sed 's/,/|/g')
 
-  if [[ -z "$NET_ITEMS" ]]; then
-    error "Failed to parse network data."
-    exit 1
+  # Add auto-create option at the end
+  if [[ -n "$NET_ITEMS" ]]; then
+    NET_ITEMS+=","
   fi
+  NET_ITEMS+="__auto__|__Auto-create (default CKS network)__|—|CloudStack will create <cluster>-network"
 
   if ! show_menu "Available Networks" "ID|Name|State|Traffic" "$NET_ITEMS"; then
     error "Failed to select a network."
     exit 1
   fi
-  NETWORK_ID="$SELECTED_ID"
-  NETWORK_NAME="$SELECTED_NAME"
-  log "Selected network: $NETWORK_NAME ($NETWORK_ID)"
+
+  if [[ "$SELECTED_ID" == "__auto__" ]]; then
+    NETWORK_ID=""
+    NETWORK_NAME="(auto-created: <cluster>-network)"
+    log "Selected: CloudStack will auto-create isolated network named <cluster>-network"
+  else
+    NETWORK_ID="$SELECTED_ID"
+    NETWORK_NAME="$SELECTED_NAME"
+    log "Selected network: $NETWORK_NAME ($NETWORK_ID)"
+  fi
 else
   NET_ITEMS=""
   while IFS= read -r line; do
@@ -683,12 +686,12 @@ log "Cluster name: $CLUSTER_NAME"
 CREATE_ARGS=(
   --name "$CLUSTER_NAME"
   --zoneid "$ZONE_ID"
-  --networkid "$NETWORK_ID"
   --kubernetesversionid "$K8S_VERSION_ID"
   --controlnodes "$CONTROL_NODES"
   --size "$WORKER_NODES"
 )
 
+[[ -n "$NETWORK_ID" ]] && CREATE_ARGS+=(--networkid "$NETWORK_ID")
 [[ -n "$KEYPAIR" ]] && CREATE_ARGS+=(--keypair "$KEYPAIR")
 [[ -n "$SERVICE_OFFERING" ]] && CREATE_ARGS+=(--serviceofferingid "$SERVICE_OFFERING")
 [[ -n "$TEMPLATE" && "$TEMPLATE" != "default" ]] && CREATE_ARGS+=(--nodetemplates "$TEMPLATE")
