@@ -29,7 +29,7 @@
 # What this script does:
 #   1. Detects available resources (zones, networks, templates, offerings)
 #   2. Prompts interactively or auto-selects first option
-#   3. Enables the CKS plugin via global configuration
+#   3. Verifies CKS plugin is enabled (must be set up manually first)
 #   4. Creates a CKS cluster with the specified parameters
 #   5. Waits for the cluster to become ready
 #   6. Downloads the kubeconfig
@@ -644,53 +644,30 @@ if [[ "$DRY_RUN" != true ]]; then
   fi
 fi
 
-# ─── Step 7: Enable CKS Plugin ──────────────────────────────────────────────
-log "Checking CKS plugin configuration..."
-
-RESTART_NEEDED=false
+# ─── Step 7: Verify CKS Plugin Is Enabled ───────────────────────────────────
+log "Verifying CKS plugin is enabled..."
 
 cmk listConfigurations name="cloud.kubernetes.service.enabled"
 CKS_ENABLED=$(echo "$CMK_OUT" | jq -r '.configuration[0].value // empty' 2>/dev/null || true)
 if [[ "$CKS_ENABLED" != "true" ]]; then
-  log "Enabling cloud.kubernetes.service.enabled=true..."
-  cmk updateConfiguration name=cloud.kubernetes.service.enabled value=true
-  if ! cmk_ok; then
-    error "Failed to enable CKS plugin: $(cmk_err)"
-    exit 1
-  fi
-  RESTART_NEEDED=true
-else
-  log "CKS plugin already enabled."
+  error "CKS plugin is not enabled (cloud.kubernetes.service.enabled=false)."
+  error "Please enable it manually first:"
+  echo "  cmk -p $PROFILE updateConfiguration name=cloud.kubernetes.service.enabled value=true"
+  echo "  Then restart the management server and re-run this script."
+  exit 1
 fi
+log "CKS plugin is enabled."
 
 cmk listConfigurations name="endpoint.url"
 ENDPOINT_URL=$(echo "$CMK_OUT" | jq -r '.configuration[0].value // empty' 2>/dev/null || true)
 if [[ -z "$ENDPOINT_URL" ]]; then
-  cmk listConfigurations category="Management Server"
-  MGMT_SERVER=$(echo "$CMK_OUT" | jq -r '.configuration[] | select(.name == "management.server") | .value' 2>/dev/null || echo "localhost")
-  ENDPOINT_URL="http://${MGMT_SERVER}:8080/client/api"
-  log "Setting endpoint.url=$ENDPOINT_URL..."
-  cmk updateConfiguration name=endpoint.url value="$ENDPOINT_URL"
-  if ! cmk_ok; then
-    error "Failed to set endpoint URL: $(cmk_err)"
-    exit 1
-  fi
-  RESTART_NEEDED=true
-else
-  log "Endpoint URL already set: $ENDPOINT_URL"
+  error "endpoint.url is not set."
+  error "Please set it manually first:"
+  echo "  cmk -p $PROFILE updateConfiguration name=endpoint.url value=http://<mgmt-server>:8080/client/api"
+  echo "  Then restart the management server and re-run this script."
+  exit 1
 fi
-
-if [[ "$RESTART_NEEDED" == true ]] && [[ "$DRY_RUN" != true ]]; then
-  log "⚠️  Management server restart required for changes to take effect."
-  warn "Run: service cloudstack-management restart (or reboot the management host)"
-  read -p "Continue after restart? [y/N]: " confirm
-  if [[ "$confirm" != "y" && "$confirm" != "Y" ]]; then
-    log "Aborted. Restart the management server and re-run this script."
-    exit 0
-  fi
-elif [[ "$RESTART_NEEDED" == false ]]; then
-  log "No configuration changes needed — skipping restart prompt."
-fi
+log "Endpoint URL: $ENDPOINT_URL"
 
 # ─── Step 8: Create CKS Cluster ─────────────────────────────────────────────
 log "Creating CKS cluster..."
