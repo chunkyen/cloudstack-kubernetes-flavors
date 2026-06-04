@@ -680,19 +680,19 @@ KUBECONFIG_FILE="${CLUSTER_NAME}.kubeconfig"
 log "Cluster name: $CLUSTER_NAME"
 
 CREATE_ARGS=(
-  --name "$CLUSTER_NAME"
-  --zoneid "$ZONE_ID"
-  --kubernetesversionid "$K8S_VERSION_ID"
-  --controlnodes "$CONTROL_NODES"
-  --size "$WORKER_NODES"
+  "name=$CLUSTER_NAME"
+  "zoneid=$ZONE_ID"
+  "kubernetesversionid=$K8S_VERSION_ID"
+  "controlnodes=$CONTROL_NODES"
+  "size=$WORKER_NODES"
 )
 
-[[ -n "$NETWORK_ID" ]] && CREATE_ARGS+=(--networkid "$NETWORK_ID")
-[[ -n "$KEYPAIR" ]] && CREATE_ARGS+=(--keypair "$KEYPAIR")
-[[ -n "$SERVICE_OFFERING" ]] && CREATE_ARGS+=(--serviceofferingid "$SERVICE_OFFERING")
-[[ -n "$CONTROL_OFFERING" ]] && CREATE_ARGS+=(--nodeofferings "controlplane=$CONTROL_OFFERING")
-[[ -n "$TEMPLATE" && "$TEMPLATE" != "default" ]] && CREATE_ARGS+=(--nodetemplates "$TEMPLATE")
-$CSI_ENABLED && CREATE_ARGS+=(--enablecsi true)
+[[ -n "$NETWORK_ID" ]] && CREATE_ARGS+=("networkid=$NETWORK_ID")
+[[ -n "$KEYPAIR" ]] && CREATE_ARGS+=("keypair=$KEYPAIR")
+[[ -n "$SERVICE_OFFERING" ]] && CREATE_ARGS+=("serviceofferingid=$SERVICE_OFFERING")
+[[ -n "$CONTROL_OFFERING" ]] && CREATE_ARGS+=("nodeofferings[controlplane]=$CONTROL_OFFERING")
+[[ -n "$TEMPLATE" && "$TEMPLATE" != "default" ]] && CREATE_ARGS+=("nodetemplates=$TEMPLATE")
+$CSI_ENABLED && CREATE_ARGS+=("enablecsi=true")
 
 log "Creating cluster with args: ${CREATE_ARGS[*]}"
 cmk createKubernetesCluster "${CREATE_ARGS[@]}"
