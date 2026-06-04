@@ -54,7 +54,12 @@ DRY_RUN=false
 INTERACTIVE=false
 ISO_URL=""
 ZONE_ID=""
+ZONE_NAME=""
 NETWORK_ID=""
+NETWORK_NAME=""
+TEMPLATE_NAME=""
+OFFERING_NAME=""
+KEYPAIR_NAME=""
 CLUSTER_ID=""
 
 # ─── Colors ─────────────────────────────────────────────────────────────────
@@ -64,21 +69,36 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 CYAN='\033[0;36m'
 BOLD='\033[1m'
-NC='\033[0m' # No Color
+NC='\033[0m'
 
 # ─── Helpers ────────────────────────────────────────────────────────────────
 log()   { echo -e "${GREEN}[INFO]${NC} $*"; }
 warn()  { echo -e "${YELLOW}[WARN]${NC} $*"; }
 error() { echo -e "${RED}[ERROR]${NC} $*" >&2; }
-dry_run_cmd() {
+
+# cmk wrapper — always returns 0, stores output in CMK_OUT.
+# On failure, sets CMK_ERR and CMK_RC. Never kills the script.
+CMK_OUT=""
+CMK_ERR=""
+CMK_RC=0
+
+cmk() {
   if [[ "$DRY_RUN" == true ]]; then
-    log "[DRY-RUN] $*"
-  else
-    "$@"
+    log "[DRY-RUN] cmk -p $PROFILE $*"
+    CMK_OUT='{}'
+    CMK_ERR=""
+    CMK_RC=0
+    return 0
   fi
+  CMK_OUT=$(cmk -p "$PROFILE" "$@" 2>&1) || CMK_RC=$?
+  if [[ $CMK_RC -ne 0 ]]; then
+    CMK_ERR="$CMK_OUT"
+    CMK_OUT='{}'
+  fi
+  return 0
 }
 
-cmk() { dry_run_cmd cmk -p "$PROFILE" "$@"; }
+cmk_ok() { [[ $CMK_RC -eq 0 ]]; }
 
 # ─── Interactive Menu Helper ────────────────────────────────────────────────
 # Usage: show_menu "Title" "Header1|Header2|..." "id1|name1|desc1,id2|name2|desc2,..."
@@ -87,10 +107,9 @@ show_menu() {
   local title="$1"
   local headers="$2"
   local items="$3"
-  local IFS=','
+  local IFS='|'
   local cols
-  IFS='|' read -ra cols <<< "$headers"
-  local num_cols=${#cols[@]}
+  read -ra cols <<< "$headers"
 
   echo -e "\n${BOLD}${CYAN}═══ $title ═══${NC}"
 
@@ -152,7 +171,6 @@ show_menu() {
     SELECTED_ID="${fields[0]}"
     SELECTED_NAME="${fields[1]}"
   elif [[ "$choice" =~ ^[a-f0-9-]{36}$ ]]; then
-    # UUID entered directly
     SELECTED_ID="$choice"
     SELECTED_NAME="(by ID)"
   else
@@ -200,8 +218,13 @@ fi
 log "Detecting zones..."
 
 if [[ -z "$ZONE" ]] || [[ "$INTERACTIVE" == true ]]; then
-  ZONES_JSON=$(cmk list zones pagesize=50 2>/dev/null || echo '{}')
-  ZONE_COUNT=$(echo "$ZONES_JSON" | jq '.zone | length // 0')
+  cmk list zones pagesize=50
+  if ! cmk_ok; then
+    error "Failed to list zones: $(cmk_err)"
+    error "Is CloudStack management server reachable? (Profile: $PROFILE)"
+    exit 1
+  fi
+  ZONE_COUNT=$(echo "$CMK_OUT" | jq '.zone | length // 0' 2>/dev/null || echo 0)
 
   if [[ $ZONE_COUNT -eq 0 ]]; then
     error "No zones found."
@@ -209,18 +232,22 @@ if [[ -z "$ZONE" ]] || [[ "$INTERACTIVE" == true ]]; then
   fi
 
   if [[ $ZONE_COUNT -eq 1 ]] && [[ -z "$ZONE" ]]; then
-    # Only one zone, auto-select
-    ZONE_ID=$(echo "$ZONES_JSON" | jq -r '.zone[0].id')
-    ZONE_NAME=$(echo "$ZONES_JSON" | jq -r '.zone[0].name')
+    ZONE_ID=$(echo "$CMK_OUT" | jq -r '.zone[0].id // empty')
+    ZONE_NAME=$(echo "$CMK_OUT" | jq -r '.zone[0].name // empty')
     log "Auto-selected zone: $ZONE_NAME ($ZONE_ID)"
   else
-    # Build menu items: id|name|state
     ZONE_ITEMS=""
     while IFS= read -r line; do
       [[ -z "$line" ]] && continue
-      if [[ -n "$ZONE_ITEMS" ]]; then ZONE_ITEMS+=","; fi
+      [[ -n "$ZONE_ITEMS" ]] && ZONE_ITEMS+=","
       ZONE_ITEMS+="$line"
-    done < <(echo "$ZONES_JSON" | jq -r '.zone[] | [.id, .name, .state] | @csv' | sed 's/"//g' | sed 's/,/|/g')
+    done < <(echo "$CMK_OUT" | jq -r '.zone[] | [.id, .name, .state] | @csv' 2>/dev/null | sed 's/"//g' | sed 's/,/|/g')
+
+    if [[ -z "$ZONE_ITEMS" ]]; then
+      error "Failed to parse zone data. Raw output:"
+      echo "$CMK_OUT" | head -20
+      exit 1
+    fi
 
     if ! show_menu "Available Zones" "ID|Name|State" "$ZONE_ITEMS"; then
       error "Failed to select a zone."
@@ -231,16 +258,17 @@ if [[ -z "$ZONE" ]] || [[ "$INTERACTIVE" == true ]]; then
     log "Selected zone: $ZONE_NAME ($ZONE_ID)"
   fi
 else
-  # Resolve zone ID from name or ID
-  ZONE_ID=$(cmk list zones id="$ZONE" pagesize=1 2>/dev/null | jq -r '.zone[0].id // empty' 2>/dev/null || true)
+  cmk list zones id="$ZONE" pagesize=1
+  ZONE_ID=$(echo "$CMK_OUT" | jq -r '.zone[0].id // empty' 2>/dev/null || true)
   if [[ -z "$ZONE_ID" ]]; then
-    ZONE_ID=$(cmk list zones namepattern="^${ZONE}$" pagesize=1 | jq -r '.zone[0].id // empty')
+    cmk list zones namepattern="^${ZONE}$" pagesize=1
+    ZONE_ID=$(echo "$CMK_OUT" | jq -r '.zone[0].id // empty' 2>/dev/null || true)
   fi
   if [[ -z "$ZONE_ID" ]]; then
     error "Zone not found: $ZONE"
     exit 1
   fi
-  ZONE_NAME=$(cmk list zones id="$ZONE_ID" | jq -r '.zone[0].name')
+  ZONE_NAME=$(echo "$CMK_OUT" | jq -r '.zone[0].name // empty')
   log "Zone: $ZONE_NAME ($ZONE_ID)"
 fi
 
@@ -248,8 +276,12 @@ fi
 log "Detecting isolated networks in zone..."
 
 if [[ -z "$NETWORK" ]] || [[ "$INTERACTIVE" == true ]]; then
-  NETWORKS_JSON=$(cmk list networks zoneid="$ZONE_ID" ispublic=false pagesize=50 2>/dev/null || echo '{}')
-  NET_COUNT=$(echo "$NETWORKS_JSON" | jq '.network | length // 0')
+  cmk list networks zoneid="$ZONE_ID" ispublic=false pagesize=50
+  if ! cmk_ok; then
+    error "Failed to list networks: $(cmk_err)"
+    exit 1
+  fi
+  NET_COUNT=$(echo "$CMK_OUT" | jq '.network | length // 0' 2>/dev/null || echo 0)
 
   if [[ $NET_COUNT -eq 0 ]]; then
     error "No isolated networks found in zone $ZONE_NAME. Create one first."
@@ -257,16 +289,21 @@ if [[ -z "$NETWORK" ]] || [[ "$INTERACTIVE" == true ]]; then
   fi
 
   if [[ $NET_COUNT -eq 1 ]] && [[ -z "$NETWORK" ]]; then
-    NETWORK_ID=$(echo "$NETWORKS_JSON" | jq -r '.network[0].id')
-    NETWORK_NAME=$(echo "$NETWORKS_JSON" | jq -r '.network[0].name')
+    NETWORK_ID=$(echo "$CMK_OUT" | jq -r '.network[0].id // empty')
+    NETWORK_NAME=$(echo "$CMK_OUT" | jq -r '.network[0].name // empty')
     log "Auto-selected network: $NETWORK_NAME ($NETWORK_ID)"
   else
     NET_ITEMS=""
     while IFS= read -r line; do
       [[ -z "$line" ]] && continue
-      if [[ -n "$NET_ITEMS" ]]; then NET_ITEMS+=","; fi
+      [[ -n "$NET_ITEMS" ]] && NET_ITEMS+=","
       NET_ITEMS+="$line"
-    done < <(echo "$NETWORKS_JSON" | jq -r '.network[] | [.id, .name, .state, .traffictype] | @csv' | sed 's/"//g' | sed 's/,/|/g')
+    done < <(echo "$CMK_OUT" | jq -r '.network[] | [.id, .name, .state, .traffictype] | @csv' 2>/dev/null | sed 's/"//g' | sed 's/,/|/g')
+
+    if [[ -z "$NET_ITEMS" ]]; then
+      error "Failed to parse network data."
+      exit 1
+    fi
 
     if ! show_menu "Available Networks" "ID|Name|State|Traffic" "$NET_ITEMS"; then
       error "Failed to select a network."
@@ -277,15 +314,17 @@ if [[ -z "$NETWORK" ]] || [[ "$INTERACTIVE" == true ]]; then
     log "Selected network: $NETWORK_NAME ($NETWORK_ID)"
   fi
 else
-  NETWORK_ID=$(cmk list networks id="$NETWORK" pagesize=1 2>/dev/null | jq -r '.network[0].id // empty' || true)
+  cmk list networks id="$NETWORK" pagesize=1
+  NETWORK_ID=$(echo "$CMK_OUT" | jq -r '.network[0].id // empty' 2>/dev/null || true)
   if [[ -z "$NETWORK_ID" ]]; then
-    NETWORK_ID=$(cmk list networks namepattern="^${NETWORK}$" zoneid="$ZONE_ID" pagesize=1 | jq -r '.network[0].id // empty')
+    cmk list networks namepattern="^${NETWORK}$" zoneid="$ZONE_ID" pagesize=1
+    NETWORK_ID=$(echo "$CMK_OUT" | jq -r '.network[0].id // empty' 2>/dev/null || true)
   fi
   if [[ -z "$NETWORK_ID" ]]; then
     error "Network not found: $NETWORK"
     exit 1
   fi
-  NETWORK_NAME=$(cmk list networks id="$NETWORK_ID" | jq -r '.network[0].name')
+  NETWORK_NAME=$(echo "$CMK_OUT" | jq -r '.network[0].name // empty')
   log "Network: $NETWORK_NAME ($NETWORK_ID)"
 fi
 
@@ -293,34 +332,45 @@ fi
 log "Detecting available templates..."
 
 if [[ -z "$TEMPLATE" ]] || [[ "$INTERACTIVE" == true ]]; then
-  # List templates that are ready and suitable for VMs
-  TEMPLATES_JSON=$(cmk list templates zoneid="$ZONE_ID" type=user pagesize=50 2>/dev/null || echo '{}')
-  TPL_COUNT=$(echo "$TEMPLATES_JSON" | jq '.template | length // 0')
-
-  if [[ $TPL_COUNT -eq 0 ]]; then
-    warn "No user templates found. Will use default template from K8s version."
+  cmk list templates zoneid="$ZONE_ID" type=user pagesize=50
+  if ! cmk_ok; then
+    warn "Failed to list templates: $(cmk_err)"
+    warn "Will use default template from K8s version."
     TEMPLATE="default"
     TEMPLATE_NAME="(default from K8s version)"
   else
-    if [[ $TPL_COUNT -eq 1 ]] && [[ -z "$TEMPLATE" ]]; then
-      TEMPLATE=$(echo "$TEMPLATES_JSON" | jq -r '.template[0].id')
-      TEMPLATE_NAME=$(echo "$TEMPLATES_JSON" | jq -r '.template[0].name')
-      log "Auto-selected template: $TEMPLATE_NAME ($TEMPLATE)"
-    else
-      TPL_ITEMS=""
-      while IFS= read -r line; do
-        [[ -z "$line" ]] && continue
-        if [[ -n "$TPL_ITEMS" ]]; then TPL_ITEMS+=","; fi
-        TPL_ITEMS+="$line"
-      done < <(echo "$TEMPLATES_JSON" | jq -r '.template[] | [.id, .name, .ostypename, .hypervisor] | @csv' | sed 's/"//g' | sed 's/,/|/g')
+    TPL_COUNT=$(echo "$CMK_OUT" | jq '.template | length // 0' 2>/dev/null || echo 0)
 
-      if ! show_menu "Available Templates" "ID|Name|OS|Hypervisor" "$TPL_ITEMS"; then
-        error "Failed to select a template."
-        exit 1
+    if [[ $TPL_COUNT -eq 0 ]]; then
+      warn "No user templates found. Will use default template from K8s version."
+      TEMPLATE="default"
+      TEMPLATE_NAME="(default from K8s version)"
+    else
+      if [[ $TPL_COUNT -eq 1 ]] && [[ -z "$TEMPLATE" ]]; then
+        TEMPLATE=$(echo "$CMK_OUT" | jq -r '.template[0].id // empty')
+        TEMPLATE_NAME=$(echo "$CMK_OUT" | jq -r '.template[0].name // empty')
+        log "Auto-selected template: $TEMPLATE_NAME ($TEMPLATE)"
+      else
+        TPL_ITEMS=""
+        while IFS= read -r line; do
+          [[ -z "$line" ]] && continue
+          [[ -n "$TPL_ITEMS" ]] && TPL_ITEMS+=","
+          TPL_ITEMS+="$line"
+        done < <(echo "$CMK_OUT" | jq -r '.template[] | [.id, .name, .ostypename, .hypervisor] | @csv' 2>/dev/null | sed 's/"//g' | sed 's/,/|/g')
+
+        if [[ -z "$TPL_ITEMS" ]]; then
+          error "Failed to parse template data."
+          exit 1
+        fi
+
+        if ! show_menu "Available Templates" "ID|Name|OS|Hypervisor" "$TPL_ITEMS"; then
+          error "Failed to select a template."
+          exit 1
+        fi
+        TEMPLATE="$SELECTED_ID"
+        TEMPLATE_NAME="$SELECTED_NAME"
+        log "Selected template: $TEMPLATE_NAME ($TEMPLATE)"
       fi
-      TEMPLATE="$SELECTED_ID"
-      TEMPLATE_NAME="$SELECTED_NAME"
-      log "Selected template: $TEMPLATE_NAME ($TEMPLATE)"
     fi
   fi
 else
@@ -332,8 +382,12 @@ fi
 log "Detecting service offerings..."
 
 if [[ -z "$SERVICE_OFFERING" ]] || [[ "$INTERACTIVE" == true ]]; then
-  OFFERINGS_JSON=$(cmk list serviceofferings pagesize=50 2>/dev/null || echo '{}')
-  OFF_COUNT=$(echo "$OFFERINGS_JSON" | jq '.serviceoffering | length // 0')
+  cmk list serviceofferings pagesize=50
+  if ! cmk_ok; then
+    error "Failed to list service offerings: $(cmk_err)"
+    exit 1
+  fi
+  OFF_COUNT=$(echo "$CMK_OUT" | jq '.serviceoffering | length // 0' 2>/dev/null || echo 0)
 
   if [[ $OFF_COUNT -eq 0 ]]; then
     error "No service offerings found."
@@ -341,16 +395,21 @@ if [[ -z "$SERVICE_OFFERING" ]] || [[ "$INTERACTIVE" == true ]]; then
   fi
 
   if [[ $OFF_COUNT -eq 1 ]] && [[ -z "$SERVICE_OFFERING" ]]; then
-    SERVICE_OFFERING=$(echo "$OFFERINGS_JSON" | jq -r '.serviceoffering[0].id')
-    OFFERING_NAME=$(echo "$OFFERINGS_JSON" | jq -r '.serviceoffering[0].name')
+    SERVICE_OFFERING=$(echo "$CMK_OUT" | jq -r '.serviceoffering[0].id // empty')
+    OFFERING_NAME=$(echo "$CMK_OUT" | jq -r '.serviceoffering[0].name // empty')
     log "Auto-selected offering: $OFFERING_NAME ($SERVICE_OFFERING)"
   else
     OFF_ITEMS=""
     while IFS= read -r line; do
       [[ -z "$line" ]] && continue
-      if [[ -n "$OFF_ITEMS" ]]; then OFF_ITEMS+=","; fi
+      [[ -n "$OFF_ITEMS" ]] && OFF_ITEMS+=","
       OFF_ITEMS+="$line"
-    done < <(echo "$OFFERINGS_JSON" | jq -r '.serviceoffering[] | [.id, .name, (.cpunumber|tostring), (.memory|tostring), (.servicetype // "") ] | @csv' | sed 's/"//g' | sed 's/,/|/g')
+    done < <(echo "$CMK_OUT" | jq -r '.serviceoffering[] | [.id, .name, (.cpunumber|tostring), (.memory|tostring), (.servicetype // "")] | @csv' 2>/dev/null | sed 's/"//g' | sed 's/,/|/g')
+
+    if [[ -z "$OFF_ITEMS" ]]; then
+      error "Failed to parse service offering data."
+      exit 1
+    fi
 
     if ! show_menu "Available Service Offerings" "ID|Name|CPU|Mem(MB)|Type" "$OFF_ITEMS"; then
       error "Failed to select a service offering."
@@ -369,8 +428,13 @@ fi
 log "Detecting registered K8s versions..."
 
 if [[ -z "$K8S_VERSION" ]] || [[ "$INTERACTIVE" == true ]]; then
-  K8S_JSON=$(cmk listKubernetesSupportedVersions pagesize=50 2>/dev/null || echo '{}')
-  K8S_COUNT=$(echo "$K8S_JSON" | jq '.kubernetessupportedversion | length // 0')
+  cmk listKubernetesSupportedVersions pagesize=50
+  if ! cmk_ok; then
+    error "Failed to list K8s versions: $(cmk_err)"
+    error "Is CKS plugin enabled?"
+    exit 1
+  fi
+  K8S_COUNT=$(echo "$CMK_OUT" | jq '.kubernetessupportedversion | length // 0' 2>/dev/null || echo 0)
 
   if [[ $K8S_COUNT -eq 0 ]]; then
     warn "No K8s versions registered. You'll need to register one first."
@@ -379,16 +443,21 @@ if [[ -z "$K8S_VERSION" ]] || [[ "$INTERACTIVE" == true ]]; then
   fi
 
   if [[ $K8S_COUNT -eq 1 ]] && [[ -z "$K8S_VERSION" ]]; then
-    K8S_VERSION_ID=$(echo "$K8S_JSON" | jq -r '.kubernetessupportedversion[0].id')
-    K8S_VERSION=$(echo "$K8S_JSON" | jq -r '.kubernetessupportedversion[0].name')
+    K8S_VERSION_ID=$(echo "$CMK_OUT" | jq -r '.kubernetessupportedversion[0].id // empty')
+    K8S_VERSION=$(echo "$CMK_OUT" | jq -r '.kubernetessupportedversion[0].name // empty')
     log "Auto-selected K8s version: $K8S_VERSION ($K8S_VERSION_ID)"
   else
     K8S_ITEMS=""
     while IFS= read -r line; do
       [[ -z "$line" ]] && continue
-      if [[ -n "$K8S_ITEMS" ]]; then K8S_ITEMS+=","; fi
+      [[ -n "$K8S_ITEMS" ]] && K8S_ITEMS+=","
       K8S_ITEMS+="$line"
-    done < <(echo "$K8S_JSON" | jq -r '.kubernetessupportedversion[] | [.id, .name, (.semanticversion // ""), (.state // "")] | @csv' | sed 's/"//g' | sed 's/,/|/g')
+    done < <(echo "$CMK_OUT" | jq -r '.kubernetessupportedversion[] | [.id, .name, (.semanticversion // ""), (.state // "")] | @csv' 2>/dev/null | sed 's/"//g' | sed 's/,/|/g')
+
+    if [[ -z "$K8S_ITEMS" ]]; then
+      error "Failed to parse K8s version data."
+      exit 1
+    fi
 
     if ! show_menu "Registered K8s Versions" "ID|Name|Semantic|State" "$K8S_ITEMS"; then
       error "Failed to select a K8s version."
@@ -399,7 +468,8 @@ if [[ -z "$K8S_VERSION" ]] || [[ "$INTERACTIVE" == true ]]; then
     log "Selected K8s version: $K8S_VERSION ($K8S_VERSION_ID)"
   fi
 else
-  K8S_VERSION_ID=$(cmk listKubernetesSupportedVersions keyword="$K8S_VERSION" pagesize=1 | jq -r '.kubernetessupportedversion[0].id // empty')
+  cmk listKubernetesSupportedVersions keyword="$K8S_VERSION" pagesize=1
+  K8S_VERSION_ID=$(echo "$CMK_OUT" | jq -r '.kubernetessupportedversion[0].id // empty' 2>/dev/null || true)
   if [[ -z "$K8S_VERSION_ID" ]]; then
     error "K8s version not found: $K8S_VERSION"
     exit 1
@@ -411,34 +481,45 @@ fi
 log "Detecting SSH keypairs..."
 
 if [[ -z "$KEYPAIR" ]] || [[ "$INTERACTIVE" == true ]]; then
-  # Try list ssh keypairs (may not exist in all CS versions)
-  KEYS_JSON=$(cmk list sshkeypairs pagesize=50 2>/dev/null || echo '{}')
-  KEY_COUNT=$(echo "$KEYS_JSON" | jq '.sshkeypair | length // 0')
-
-  if [[ $KEY_COUNT -eq 0 ]]; then
-    warn "No SSH keypairs found. Cluster will be created without SSH keypair."
+  cmk list sshkeypairs pagesize=50
+  if ! cmk_ok; then
+    warn "Failed to list SSH keypairs (API may not be available). Skipping."
     KEYPAIR=""
     KEYPAIR_NAME="(none)"
   else
-    if [[ $KEY_COUNT -eq 1 ]] && [[ -z "$KEYPAIR" ]]; then
-      KEYPAIR=$(echo "$KEYS_JSON" | jq -r '.sshkeypair[0].name')
-      log "Auto-selected keypair: $KEYPAIR"
-    else
-      KEY_ITEMS=""
-      while IFS= read -r line; do
-        [[ -z "$line" ]] && continue
-        if [[ -n "$KEY_ITEMS" ]]; then KEY_ITEMS+=","; fi
-        KEY_ITEMS+="$line"
-      done < <(echo "$KEYS_JSON" | jq -r '.sshkeypair[] | [.name, .fingerprint, .hypervisor] | @csv' | sed 's/"//g' | sed 's/,/|/g')
+    KEY_COUNT=$(echo "$CMK_OUT" | jq '.sshkeypair | length // 0' 2>/dev/null || echo 0)
 
-      if ! show_menu "SSH Keypairs" "Name|Fingerprint|Hypervisor" "$KEY_ITEMS"; then
-        error "Failed to select a keypair."
-        exit 1
+    if [[ $KEY_COUNT -eq 0 ]]; then
+      warn "No SSH keypairs found. Cluster will be created without SSH keypair."
+      KEYPAIR=""
+      KEYPAIR_NAME="(none)"
+    else
+      if [[ $KEY_COUNT -eq 1 ]] && [[ -z "$KEYPAIR" ]]; then
+        KEYPAIR=$(echo "$CMK_OUT" | jq -r '.sshkeypair[0].name // empty')
+        KEYPAIR_NAME="$KEYPAIR"
+        log "Auto-selected keypair: $KEYPAIR"
+      else
+        KEY_ITEMS=""
+        while IFS= read -r line; do
+          [[ -z "$line" ]] && continue
+          [[ -n "$KEY_ITEMS" ]] && KEY_ITEMS+=","
+          KEY_ITEMS+="$line"
+        done < <(echo "$CMK_OUT" | jq -r '.sshkeypair[] | [.name, .fingerprint, .hypervisor] | @csv' 2>/dev/null | sed 's/"//g' | sed 's/,/|/g')
+
+        if [[ -z "$KEY_ITEMS" ]]; then
+          warn "Failed to parse keypair data. Skipping."
+          KEYPAIR=""
+          KEYPAIR_NAME="(none)"
+        else
+          if ! show_menu "SSH Keypairs" "Name|Fingerprint|Hypervisor" "$KEY_ITEMS"; then
+            error "Failed to select a keypair."
+            exit 1
+          fi
+          KEYPAIR="$SELECTED_ID"
+          KEYPAIR_NAME="$KEYPAIR"
+          log "Selected keypair: $KEYPAIR"
+        fi
       fi
-      # Keypairs are identified by name, not ID
-      KEYPAIR="$SELECTED_ID"
-      KEYPAIR_NAME="$KEYPAIR"
-      log "Selected keypair: $KEYPAIR"
     fi
   fi
 else
@@ -454,9 +535,7 @@ if [[ "$INTERACTIVE" == true ]]; then
   read -p "Worker nodes (default 2): " input
   WORKER_NODES=${input:-2}
   read -p "Enable CSI driver? [y/N]: " input
-  if [[ "$input" == "y" || "$input" == "Y" ]]; then
-    CSI_ENABLED=true
-  fi
+  [[ "$input" == "y" || "$input" == "Y" ]] && CSI_ENABLED=true
 fi
 
 # ─── Summary ────────────────────────────────────────────────────────────────
@@ -487,20 +566,31 @@ fi
 # ─── Step 7: Enable CKS Plugin ──────────────────────────────────────────────
 log "Enabling CKS plugin..."
 
-CKS_ENABLED=$(cmk listConfigurations name="cloud.kubernetes.service.enabled" 2>/dev/null | jq -r '.configuration[0].value // empty')
+cmk listConfigurations name="cloud.kubernetes.service.enabled"
+CKS_ENABLED=$(echo "$CMK_OUT" | jq -r '.configuration[0].value // empty' 2>/dev/null || true)
 if [[ "$CKS_ENABLED" != "true" ]]; then
   log "Enabling cloud.kubernetes.service.enabled=true..."
   cmk updateConfiguration name=cloud.kubernetes.service.enabled value=true
+  if ! cmk_ok; then
+    error "Failed to enable CKS plugin: $(cmk_err)"
+    exit 1
+  fi
 else
   log "CKS plugin already enabled."
 fi
 
-ENDPOINT_URL=$(cmk listConfigurations name="endpoint.url" 2>/dev/null | jq -r '.configuration[0].value // empty')
+cmk listConfigurations name="endpoint.url"
+ENDPOINT_URL=$(echo "$CMK_OUT" | jq -r '.configuration[0].value // empty' 2>/dev/null || true)
 if [[ -z "$ENDPOINT_URL" ]]; then
-  MGMT_SERVER=$(cmk listConfigurations category="Management Server" 2>/dev/null | jq -r '.configuration[] | select(.name == "management.server") | .value' 2>/dev/null || echo "localhost")
+  cmk listConfigurations category="Management Server"
+  MGMT_SERVER=$(echo "$CMK_OUT" | jq -r '.configuration[] | select(.name == "management.server") | .value' 2>/dev/null || echo "localhost")
   ENDPOINT_URL="http://${MGMT_SERVER}:8080/client/api"
   log "Setting endpoint.url=$ENDPOINT_URL..."
   cmk updateConfiguration name=endpoint.url value="$ENDPOINT_URL"
+  if ! cmk_ok; then
+    error "Failed to set endpoint URL: $(cmk_err)"
+    exit 1
+  fi
 else
   log "Endpoint URL already set: $ENDPOINT_URL"
 fi
@@ -521,7 +611,6 @@ log "Creating CKS cluster..."
 CLUSTER_NAME="cks-$(date +%Y%m%d-%H%M%S)"
 log "Cluster name: $CLUSTER_NAME"
 
-# Build createKubernetesCluster command arguments
 CREATE_ARGS=(
   --name "$CLUSTER_NAME"
   --zoneid "$ZONE_ID"
@@ -531,38 +620,36 @@ CREATE_ARGS=(
   --size "$WORKER_NODES"
 )
 
-if [[ -n "$KEYPAIR" ]]; then
-  CREATE_ARGS+=(--keypair "$KEYPAIR")
-fi
-
-if [[ -n "$SERVICE_OFFERING" ]]; then
-  CREATE_ARGS+=(--serviceofferingid "$SERVICE_OFFERING")
-fi
-
-if [[ -n "$TEMPLATE" && "$TEMPLATE" != "default" ]]; then
-  CREATE_ARGS+=(--nodetemplates "$TEMPLATE")
-fi
-
-if $CSI_ENABLED; then
-  CREATE_ARGS+=(--enablecsi true)
-fi
+[[ -n "$KEYPAIR" ]] && CREATE_ARGS+=(--keypair "$KEYPAIR")
+[[ -n "$SERVICE_OFFERING" ]] && CREATE_ARGS+=(--serviceofferingid "$SERVICE_OFFERING")
+[[ -n "$TEMPLATE" && "$TEMPLATE" != "default" ]] && CREATE_ARGS+=(--nodetemplates "$TEMPLATE")
+$CSI_ENABLED && CREATE_ARGS+=(--enablecsi true)
 
 log "Creating cluster with args: ${CREATE_ARGS[*]}"
-cmk createKubernetesCluster "${CREATE_ARGS[@]}" > /tmp/cks-cluster-result.json
+cmk createKubernetesCluster "${CREATE_ARGS[@]}"
+if ! cmk_ok; then
+  error "Failed to create cluster: $(cmk_err)"
+  exit 1
+fi
 
-CLUSTER_ID=$(jq -r '.kubernetescluster.id' /tmp/cks-cluster-result.json)
-CLUSTER_STATE=$(jq -r '.kubernetescluster.state' /tmp/cks-cluster-result.json)
+CLUSTER_ID=$(echo "$CMK_OUT" | jq -r '.kubernetescluster.id // empty')
+CLUSTER_STATE=$(echo "$CMK_OUT" | jq -r '.kubernetescluster.state // empty')
 log "Cluster created: $CLUSTER_NAME (ID: $CLUSTER_ID, State: $CLUSTER_STATE)"
 
 # ─── Step 9: Wait for Cluster Ready ─────────────────────────────────────────
 log "Waiting for cluster to become ready..."
 
-MAX_WAIT=600  # 10 minutes
+MAX_WAIT=600
 INTERVAL=30
 ELAPSED=0
 
 while [[ $ELAPSED -lt $MAX_WAIT ]]; do
-  STATE=$(cmk listKubernetesClusters id="$CLUSTER_ID" 2>/dev/null | jq -r '.kubernetescluster[0].state // empty')
+  cmk listKubernetesClusters id="$CLUSTER_ID"
+  if cmk_ok; then
+    STATE=$(echo "$CMK_OUT" | jq -r '.kubernetescluster[0].state // empty')
+  else
+    STATE="(unknown)"
+  fi
   log "  State: $STATE (${ELAPSED}s elapsed)"
 
   if [[ "$STATE" == "Running" ]]; then
@@ -585,17 +672,17 @@ fi
 log "Retrieving kubeconfig..."
 
 KUBECONFIG_FILE="${CLUSTER_NAME}.kubeconfig"
-cmk getKubernetesClusterConfig id="$CLUSTER_ID" > /tmp/cks-kubeconfig.json
-
-# Extract kubeconfig from JSON response
-jq -r '.kubernetesclusterconfig.kubeconfig' /tmp/cks-kubeconfig.json > "$KUBECONFIG_FILE" 2>/dev/null || \
-jq -r '.kubeconfig' /tmp/cks-kubeconfig.json > "$KUBECONFIG_FILE" 2>/dev/null || true
-
-if [[ ! -s "$KUBECONFIG_FILE" ]]; then
-  warn "Failed to extract kubeconfig. Check cluster state in CloudStack UI."
+cmk getKubernetesClusterConfig id="$CLUSTER_ID"
+if ! cmk_ok; then
+  warn "Failed to get kubeconfig: $(cmk_err)"
 else
-  chmod 600 "$KUBECONFIG_FILE"
-  log "kubeconfig saved to: $KUBECONFIG_FILE"
+  echo "$CMK_OUT" | jq -r '.kubernetesclusterconfig.kubeconfig // .kubeconfig // empty' > "$KUBECONFIG_FILE" 2>/dev/null || true
+  if [[ -s "$KUBECONFIG_FILE" ]]; then
+    chmod 600 "$KUBECONFIG_FILE"
+    log "kubeconfig saved to: $KUBECONFIG_FILE"
+  else
+    warn "kubeconfig is empty. Check cluster state in CloudStack UI."
+  fi
 fi
 
 # ─── Step 11: Verify Cluster ────────────────────────────────────────────────
