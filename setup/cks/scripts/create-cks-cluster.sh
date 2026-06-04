@@ -699,11 +699,11 @@ CREATE_ARGS=(
 
 [[ -n "$NETWORK_ID" ]] && CREATE_ARGS+=("networkid=$NETWORK_ID")
 [[ -n "$KEYPAIR" ]] && CREATE_ARGS+=("keypair=$KEYPAIR")
-# Always include serviceofferingid as base (required by CloudStack)
-[[ -n "$SERVICE_OFFERING" ]] && CREATE_ARGS+=("serviceofferingid=$SERVICE_OFFERING")
-# Override control plane offering if it differs from worker
+# If control offering differs from worker, pass nodeofferings as a JSON map
 if [[ -n "$CONTROL_OFFERING" && "$CONTROL_OFFERING" != "$SERVICE_OFFERING" ]]; then
-  CREATE_ARGS+=("nodeofferings.controlplane=$CONTROL_OFFERING")
+  CREATE_ARGS+=("nodeofferings={\"controlplane\":\"$CONTROL_OFFERING\",\"worker\":\"$SERVICE_OFFERING\"}")
+else
+  [[ -n "$SERVICE_OFFERING" ]] && CREATE_ARGS+=("serviceofferingid=$SERVICE_OFFERING")
 fi
 [[ -n "$TEMPLATE" && "$TEMPLATE" != "default" ]] && CREATE_ARGS+=("nodetemplates=$TEMPLATE")
 $CSI_ENABLED && CREATE_ARGS+=("enablecsi=true")
