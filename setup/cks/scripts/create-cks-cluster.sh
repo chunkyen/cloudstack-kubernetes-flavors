@@ -327,9 +327,12 @@ if [[ -z "$NETWORK" ]]; then
     NET_ITEMS+="$line"
   done < <(echo "$CMK_OUT" | jq -r '.network[] | [.id, .name, .state, .traffictype] | @csv' 2>/dev/null | sed 's/"//g' | sed 's/,/|/g')
 
-  # Add auto-create option at the beginning
-  NET_ITEMS="__auto__|__Auto-create (default CKS network)__|—|CloudStack will create <cluster>-network"
-  [[ -n "$NET_ITEMS" ]] && NET_ITEMS+=","
+  # Prepend auto-create option to existing networks
+  if [[ -n "$NET_ITEMS" ]]; then
+    NET_ITEMS="__auto__|__Auto-create (default CKS network)__|—|CloudStack will create <cluster>-network,$NET_ITEMS"
+  else
+    NET_ITEMS="__auto__|__Auto-create (default CKS network)__|—|CloudStack will create <cluster>-network"
+  fi
 
   if ! show_menu "Available Networks" "ID|Name|State|Traffic" "$NET_ITEMS"; then
     error "Failed to select a network."
