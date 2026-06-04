@@ -701,7 +701,7 @@ CREATE_ARGS=(
 [[ -n "$KEYPAIR" ]] && CREATE_ARGS+=("keypair=$KEYPAIR")
 # If control offering differs from worker, pass nodeofferings as a JSON map
 if [[ -n "$CONTROL_OFFERING" && "$CONTROL_OFFERING" != "$SERVICE_OFFERING" ]]; then
-  CREATE_ARGS+=("nodeofferings={\"controlplane\":\"$CONTROL_OFFERING\",\"worker\":\"$SERVICE_OFFERING\"}")
+  CREATE_ARGS+=("nodeofferings={\"control\":\"$CONTROL_OFFERING\",\"worker\":\"$SERVICE_OFFERING\"}")
 else
   [[ -n "$SERVICE_OFFERING" ]] && CREATE_ARGS+=("serviceofferingid=$SERVICE_OFFERING")
 fi
