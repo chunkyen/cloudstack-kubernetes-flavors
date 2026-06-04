@@ -327,11 +327,9 @@ if [[ -z "$NETWORK" ]]; then
     NET_ITEMS+="$line"
   done < <(echo "$CMK_OUT" | jq -r '.network[] | [.id, .name, .state, .traffictype] | @csv' 2>/dev/null | sed 's/"//g' | sed 's/,/|/g')
 
-  # Add auto-create option at the end
-  if [[ -n "$NET_ITEMS" ]]; then
-    NET_ITEMS+=","
-  fi
-  NET_ITEMS+="__auto__|__Auto-create (default CKS network)__|—|CloudStack will create <cluster>-network"
+  # Add auto-create option at the beginning
+  NET_ITEMS="__auto__|__Auto-create (default CKS network)__|—|CloudStack will create <cluster>-network"
+  [[ -n "$NET_ITEMS" ]] && NET_ITEMS+=","
 
   if ! show_menu "Available Networks" "ID|Name|State|Traffic" "$NET_ITEMS"; then
     error "Failed to select a network."
@@ -456,6 +454,20 @@ if [[ -z "$OFF_ITEMS" ]]; then
   exit 1
 fi
 
+# Control plane offering (prompted first)
+if [[ -z "$CONTROL_OFFERING" ]]; then
+  if ! show_menu "Control Plane Service Offering" "ID|Name|CPU|Mem(MB)|Type" "$OFF_ITEMS"; then
+    error "Failed to select a control plane offering."
+    exit 1
+  fi
+  CONTROL_OFFERING="$SELECTED_ID"
+  CONTROL_OFFERING_NAME="$SELECTED_NAME"
+  log "Selected control offering: $CONTROL_OFFERING_NAME ($CONTROL_OFFERING)"
+else
+  CONTROL_OFFERING_NAME="(by ID)"
+  log "Control offering: ID $CONTROL_OFFERING"
+fi
+
 # Worker node offering
 if [[ -z "$SERVICE_OFFERING" ]]; then
   if ! show_menu "Worker Node Service Offering" "ID|Name|CPU|Mem(MB)|Type" "$OFF_ITEMS"; then
@@ -468,20 +480,6 @@ if [[ -z "$SERVICE_OFFERING" ]]; then
 else
   OFFERING_NAME="(by ID)"
   log "Worker offering: ID $SERVICE_OFFERING"
-fi
-
-# Control plane offering
-if [[ -z "$CONTROL_OFFERING" ]]; then
-  if ! show_menu "Control Plane Service Offering" "ID|Name|CPU|Mem(MB)|Type" "$OFF_ITEMS"; then
-    error "Failed to select a control plane offering."
-    exit 1
-  fi
-  CONTROL_OFFERING="$SELECTED_ID"
-  CONTROL_OFFERING_NAME="$SELECTED_NAME"
-  log "Selected control offering: $CONTROL_OFFERING_NAME ($CONTROL_OFFERING)"
-else
-  CONTROL_OFFERING_NAME="(by ID)"
-  log "Control offering: ID $CONTROL_OFFERING"
 fi
 
 # ─── Step 4: Detect K8s Supported Versions ──────────────────────────────────
@@ -628,8 +626,8 @@ log "  Profile:       $PROFILE"
 log "  Zone:          $ZONE_NAME ($ZONE_ID)"
 log "  Network:       $NETWORK_NAME ($NETWORK_ID)"
 log "  Template:      $TEMPLATE_NAME ($TEMPLATE)"
-log "  Worker Offer:  $OFFERING_NAME ($SERVICE_OFFERING)"
 log "  Control Offer: $CONTROL_OFFERING_NAME ($CONTROL_OFFERING)"
+log "  Worker Offer:  $OFFERING_NAME ($SERVICE_OFFERING)"
 log "  K8s Version:   $K8S_VERSION ($K8S_VERSION_ID)"
 log "  Control Nodes: $CONTROL_NODES"
 log "  Worker Nodes:  $WORKER_NODES"
