@@ -82,6 +82,9 @@ CMK_OUT=""
 CMK_ERR=""
 CMK_RC=0
 
+# Resolve real cmk binary path once (before function shadows it)
+CMK_BIN=$(command -v cmk 2>/dev/null || true)
+
 cmk() {
   if [[ "$DRY_RUN" == true ]]; then
     log "[DRY-RUN] cmk -p $PROFILE $*"
@@ -90,7 +93,7 @@ cmk() {
     CMK_RC=0
     return 0
   fi
-  CMK_OUT=$(cmk -p "$PROFILE" "$@" 2>&1) || CMK_RC=$?
+  CMK_OUT=$($CMK_BIN -p "$PROFILE" "$@" 2>&1) || CMK_RC=$?
   if [[ $CMK_RC -ne 0 ]]; then
     CMK_ERR="$CMK_OUT"
     CMK_OUT='{}'
