@@ -699,9 +699,11 @@ CREATE_ARGS=(
 
 [[ -n "$NETWORK_ID" ]] && CREATE_ARGS+=("networkid=$NETWORK_ID")
 [[ -n "$KEYPAIR" ]] && CREATE_ARGS+=("keypair=$KEYPAIR")
-# If control offering differs from worker, pass nodeofferings as a JSON map
-if [[ -n "$CONTROL_OFFERING" && "$CONTROL_OFFERING" != "$SERVICE_OFFERING" ]]; then
-  CREATE_ARGS+=("nodeofferings={\"control\":\"$CONTROL_OFFERING\",\"worker\":\"$SERVICE_OFFERING\"}")
+# If control offering is specified, use nodeofferings JSON map
+# cmk expects: nodeofferings='{"control":"<id>","worker":"<id>"}'
+if [[ -n "$CONTROL_OFFERING" ]]; then
+  NODEOFFERINGS_JSON=$(jq -cn --arg c "$CONTROL_OFFERING" --arg w "$SERVICE_OFFERING" '{control:$c,worker:$w}')
+  CREATE_ARGS+=("nodeofferings='${NODEOFFERINGS_JSON}'")
 else
   [[ -n "$SERVICE_OFFERING" ]] && CREATE_ARGS+=("serviceofferingid=$SERVICE_OFFERING")
 fi
