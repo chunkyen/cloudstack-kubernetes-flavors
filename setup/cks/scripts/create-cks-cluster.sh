@@ -13,8 +13,7 @@
 #   -c CONTROL_NODES  Control plane node count (default: 3)
 #   -w WORKER_NODES   Worker node count (default: 2)
 #   -k KEYPAIR        SSH keypair name
-#   -s SERVICE_OFFERING  Worker node service offering ID
-#   -S CONTROL_OFFERING  Control plane service offering ID
+#   -s SERVICE_OFFERING  Service offering ID
 #   -t TEMPLATE       Node template ID
 #   --csi             Enable CloudStack CSI driver
 #   --no-csi          Disable CloudStack CSI driver
@@ -49,7 +48,7 @@ CONTROL_NODES=""
 WORKER_NODES=""
 KEYPAIR=""
 SERVICE_OFFERING=""
-CONTROL_OFFERING=""
+
 TEMPLATE=""
 CSI_ENABLED=""  # empty = not yet decided
 DRY_RUN=false
@@ -208,7 +207,7 @@ while [[ $# -gt 0 ]]; do
     -w|--worker-nodes)     WORKER_NODES="$2"; shift 2 ;;
     -k|--keypair)          KEYPAIR="$2"; shift 2 ;;
     -s|--service-offering) SERVICE_OFFERING="$2"; shift 2 ;;
-    -S|--control-offering) CONTROL_OFFERING="$2"; shift 2 ;;
+
     -t|--template)         TEMPLATE="$2"; shift 2 ;;
     --csi)                 CSI_ENABLED=true; shift ;;
     --no-csi)              CSI_ENABLED=false; shift ;;
@@ -471,21 +470,19 @@ if [[ -z "$OFF_ITEMS" ]]; then
   exit 1
 fi
 
-# Control plane offering (prompted first)
-if [[ -z "$CONTROL_OFFERING" ]]; then
-  if ! show_menu "Control Plane Service Offering" "ID|Name|CPU|Mem(MB)|Type" "$OFF_ITEMS"; then
-    error "Failed to select a control plane offering."
+# Service offering (applied to all nodes)
+if [[ -z "$SERVICE_OFFERING" ]]; then
+  if ! show_menu "Service Offering" "ID|Name|CPU|Mem(MB)|Type" "$OFF_ITEMS"; then
+    error "Failed to select a service offering."
     exit 1
   fi
-  CONTROL_OFFERING="$SELECTED_ID"
-  CONTROL_OFFERING_NAME="$SELECTED_NAME"
-  log "Selected control offering: $CONTROL_OFFERING_NAME ($CONTROL_OFFERING)"
+  SERVICE_OFFERING="$SELECTED_ID"
+  OFFERING_NAME="$SELECTED_NAME"
+  log "Selected offering: $OFFERING_NAME ($SERVICE_OFFERING)"
 else
-  CONTROL_OFFERING_NAME="(by ID)"
-  log "Control offering: ID $CONTROL_OFFERING"
+  OFFERING_NAME="(by ID)"
+  log "Offering: ID $SERVICE_OFFERING"
 fi
-
-# Worker node offering
 if [[ -z "$SERVICE_OFFERING" ]]; then
   if ! show_menu "Worker Node Service Offering" "ID|Name|CPU|Mem(MB)|Type" "$OFF_ITEMS"; then
     error "Failed to select a worker node offering."
@@ -643,8 +640,7 @@ log "  Profile:       $PROFILE"
 log "  Zone:          $ZONE_NAME ($ZONE_ID)"
 log "  Network:       $NETWORK_NAME ($NETWORK_ID)"
 log "  Template:      $TEMPLATE_NAME ($TEMPLATE)"
-log "  Control Offer: $CONTROL_OFFERING_NAME ($CONTROL_OFFERING)"
-log "  Worker Offer:  $OFFERING_NAME ($SERVICE_OFFERING)"
+log "  Service Offer: $OFFERING_NAME ($SERVICE_OFFERING)"
 log "  K8s Version:   $K8S_VERSION ($K8S_VERSION_ID)"
 log "  Control Nodes: $CONTROL_NODES"
 log "  Worker Nodes:  $WORKER_NODES"
@@ -699,14 +695,8 @@ CREATE_ARGS=(
 
 [[ -n "$NETWORK_ID" ]] && CREATE_ARGS+=("networkid=$NETWORK_ID")
 [[ -n "$KEYPAIR" ]] && CREATE_ARGS+=("keypair=$KEYPAIR")
-# If control offering is specified, use nodeofferings JSON map
-# cmk expects: nodeofferings='{"control":"<id>","worker":"<id>"}'
-if [[ -n "$CONTROL_OFFERING" ]]; then
-  NODEOFFERINGS_JSON=$(jq -cn --arg c "$CONTROL_OFFERING" --arg w "$SERVICE_OFFERING" '{control:$c,worker:$w}')
-  CREATE_ARGS+=("nodeofferings='${NODEOFFERINGS_JSON}'")
-else
-  [[ -n "$SERVICE_OFFERING" ]] && CREATE_ARGS+=("serviceofferingid=$SERVICE_OFFERING")
-fi
+# Use serviceofferingid for all nodes (control plane + worker)
+[[ -n "$SERVICE_OFFERING" ]] && CREATE_ARGS+=("serviceofferingid=$SERVICE_OFFERING")
 [[ -n "$TEMPLATE" && "$TEMPLATE" != "default" ]] && CREATE_ARGS+=("nodetemplates=$TEMPLATE")
 $CSI_ENABLED && CREATE_ARGS+=("enablecsi=true")
 
