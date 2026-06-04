@@ -762,7 +762,7 @@ else
   if ! cmk_ok; then
     warn "Failed to get kubeconfig: $(cmk_err)"
   else
-    echo "$CMK_OUT" | jq -r '.kubernetesclusterconfig.kubeconfig // .kubeconfig // empty' > "$KUBECONFIG_FILE" 2>/dev/null || true
+    echo "$CMK_OUT" | jq -r '.configdata // empty' > "$KUBECONFIG_FILE" 2>/dev/null || true
     if [[ -s "$KUBECONFIG_FILE" ]]; then
       chmod 600 "$KUBECONFIG_FILE"
       log "kubeconfig saved to: $KUBECONFIG_FILE"
