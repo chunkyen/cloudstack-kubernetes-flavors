@@ -1,0 +1,165 @@
+# Rancher Turtles + CAPC Architecture
+
+## Overview
+
+This architecture combines three layers:
+
+1. **Rancher** — management plane with UI, Fleet GitOps, and cluster lifecycle
+2. **Rancher Turtles** — CAPI operator that manages infrastructure providers declaratively
+3. **CAPC** — CloudStack infrastructure provider for Cluster API
+
+The result: declarative, GitOps-driven Kubernetes cluster provisioning on CloudStack infrastructure, managed through the Rancher UI.
+
+## Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    Bootstrap Cluster                             │
+│              (CKS cluster on CloudStack)                         │
+│                                                                  │
+│  ┌──────────────────────────────────────────────────────────┐   │
+│  │                    Rancher                                │   │
+│  │                                                           │   │
+│  │  ┌──────────────┐  ┌──────────────────────────────────┐  │   │
+│  │  │ Rancher      │  │ Turtles Controller               │  │   │
+│  │  │ Server       │  │                                  │  │   │
+│  │  │              │  │  CAPIProvider: core              │  │   │
+│  │  │  Fleet       │◄─┼─ CAPIProvider: kubeadm-bootstrap │  │   │
+│  │  │  (GitOps)    │  │  CAPIProvider: kubeadm-cp        │  │   │
+│  │  │              │  │  CAPIProvider: cloudstack        │  │   │
+│  │  │  Cluster UI  │  │                                  │  │   │
+│  │  │  + Project   │  └──────────────┬───────────────────┘  │   │
+│  │  │  + RBAC      │                 │                       │   │
+│  │  └──────────────┘                 │                       │   │
+│  └───────────────────────────────────┼───────────────────────┘   │
+│                                      │ clusterctl                │
+│                                      │ generate cluster          │
+│                                      ▼                           │
+│  ┌──────────────────────────────────────────────────────────┐   │
+│  │              Management Cluster (CAPC)                    │   │
+│  │         (CKS cluster on CloudStack via CAPC)              │   │
+│  │                                                           │   │
+│  │  ┌──────────────────────────────────────────────────┐    │   │
+│  │  │ CAPC Controllers                                 │    │   │
+│  │  │                                                  │    │   │
+│  │  │  CloudStackCluster  ──► CloudStack VMs (CP)     │    │   │
+│  │  │  CloudStackMachineSet ──► CKS Worker Nodes      │    │   │
+│  │  │  CloudStackMachine ──► CKS Etcd Nodes           │    │   │
+│  │  └──────────────────────────────────────────────────┘    │   │
+│  └───────────────────────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+## Layer Breakdown
+
+### Layer 1: Bootstrap Cluster
+
+The bootstrap cluster is where Rancher and Turtles run. It can be:
+- A CKS cluster on CloudStack (recommended — same infrastructure)
+- Any existing K8s cluster (kind, EKS, GKE, on-prem)
+- A dedicated management cluster
+
+**Purpose:** Runs the control plane that manages workload cluster creation.
+
+### Layer 2: Rancher + Turtles
+
+**Rancher** provides:
+- Web UI for cluster lifecycle
+- Fleet for GitOps (declarative cluster config in Git)
+- RBAC, project isolation, multi-tenancy
+- Monitoring, logging, and cert management
+
+**Turtles** provides:
+- Declarative CAPI provider management via `CAPIProvider` CRDs
+- Automatic provider manifest generation and lifecycle
+- Integration with Rancher's cluster model
+- Support for ClusterClass (topology-based cluster templates)
+
+**Provider stack installed by Turtles:**
+
+| Provider | Type | Role |
+|----------|------|------|
+| `cluster-api` | core | CAPI core controllers |
+| `kubeadm` | bootstrap | Kubeadm bootstrap data generation |
+| `kubeadm` | controlPlane | Control plane machine lifecycle |
+| `cloudstack` | infrastructure | CloudStack VM provisioning (CAPC) |
+
+### Layer 3: CAPC (Workload Clusters)
+
+CAPC runs inside the management cluster and:
+- Watches `CloudStackCluster`, `CloudStackMachine`, `CloudStackMachineSet` CRDs
+- Translates them into CloudStack API calls
+- Provisions VMs, networking, load balancers, security groups
+- Manages node lifecycle (scale, upgrade, delete)
+
+## Data Flow
+
+```
+1. User declares cluster in Git (Fleet) or Rancher UI
+         │
+         ▼
+2. Fleet/Rancher applies CAPI CRDs to bootstrap cluster
+         │
+         ▼
+3. Turtles ensures CAPC provider is running
+         │
+         ▼
+4. CAPI controller creates CloudStackCluster + KubeadmControlPlane
+         │
+         ▼
+5. CAPC controller provisions CloudStack VMs
+         │
+         ▼
+6. VMs boot with cloud-init → kubeadm init/join
+         │
+         ▼
+7. Cluster becomes Ready — Fleet imports kubeconfig
+         │
+         ▼
+8. Workload manifests deployed via Fleet GitOps
+```
+
+## Key Differences from Standalone CAPC
+
+| Aspect | Standalone CAPC | Rancher Turtles + CAPC |
+|--------|----------------|------------------------|
+| **Management** | `clusterctl` CLI | Rancher UI + Fleet GitOps |
+| **Provider lifecycle** | Manual install | Declarative `CAPIProvider` CRD |
+| **Multi-cluster** | Manual kubeconfig management | Fleet auto-imports clusters |
+| **RBAC** | K8s RBAC only | Rancher RBAC + projects |
+| **GitOps** | Manual (argocd etc.) | Fleet built-in |
+| **Monitoring** | Manual setup | Rancher monitoring built-in |
+| **Cert management** | Manual | Rancher cert-manager integration |
+| **Upgrade path** | Manual provider + cluster | Helm upgrade + CAPI rolling update |
+| **Cluster templates** | Manual YAML | ClusterClass (topology templates) |
+
+## Credential Model
+
+Certified providers (vSphere, AWS, Azure) use Rancher's built-in `rancherCloudCredential` type. CloudStack does not have a native Rancher cloud credential, so CAPC uses a custom `configSecret`:
+
+```yaml
+# CAPC uses configSecret instead of rancherCloudCredential
+apiVersion: turtles-capi.cattle.io/v1alpha1
+kind: CAPIProvider
+metadata:
+  name: cloudstack
+  namespace: capi-providers
+spec:
+  name: cloudstack
+  type: infrastructure
+  configSecret:
+    name: cloudstack-config  # custom secret, not Rancher cloud credential
+```
+
+The secret contains CloudStack API credentials and configuration:
+- `CLOUDSTACK_ENDPOINT` — management server URL
+- `CLOUDSTACK_API_KEY` / `CLOUDSTACK_SECRET_KEY` — API credentials
+- `CLOUDSTACK_DEFAULT_ZONE` — default zone (optional)
+- `CLOUDSTACK_DEFAULT_NETWORK` — default network (optional)
+
+## References
+
+- [CAPC Architecture](./capc.md)
+- [Rancher Turtles Docs](https://turtles.docs.rancher.com)
+- [Fleet Docs](https://fleet.rancher.io)
+- [CAPC Book](https://cluster-api-cloudstack.sigs.k8s.io)
