@@ -8,6 +8,7 @@ This guide walks through deploying Rancher on a CKS cluster to serve as the mana
 - `kubectl` configured with cluster access
 - `helm` v3.12+
 - Sufficient cluster resources (minimum 3 control plane + 2 workers, 4vCPU/8GB each)
+- **FQDN + DNS**: Rancher requires FQDN access. The CloudStack Kubernetes Provider will create a LoadBalancer service — map its VIP to your FQDN via DNS.
 
 ## Step 1: Prepare Storage
 
@@ -42,23 +43,14 @@ helm repo update
 # Create namespace
 kubectl create namespace cattle-system
 
-# Install Rancher
-# For production: use ingress with TLS
+# Install Rancher with your FQDN
 helm install rancher rancher-stable/rancher \
   --namespace cattle-system \
   --set hostname=rancher.<your-domain> \
   --set replicas=3
-
-# For testing: use the built-in TLS
-kubectl apply -f https://releases.rancher.com/install/latest/rancher.yaml
 ```
 
-### Via kubectl (Quick Test)
-
-```bash
-# Creates a Deployment with 1 replica and a Service
-kubectl apply -f https://releases.rancher.com/install/latest/rancher.yaml
-```
+> **Note:** The CloudStack Kubernetes Provider automatically provisions a LoadBalancer service for Rancher. No ingress controller or port-forwarding needed.
 
 ## Step 3: Access Rancher
 
@@ -73,15 +65,22 @@ kubectl -n cattle-system get secret \
 
 ### Access UI
 
-- **Local install**: `kubectl port-forward svc/rancher -n cattle-system 9443:443` → https://localhost:9443
-- **With hostname**: https://rancher.<your-domain>
+```bash
+# Get the LoadBalancer VIP (created by CloudStack Kubernetes Provider)
+kubectl get svc rancher -n cattle-system
+# Look at EXTERNAL-IP column
+```
+
+Navigate to **https://rancher.<your-domain>** (or https://<EXTERNAL-IP> for testing).
+
+> **No port-forwarding needed** — the CloudStack Kubernetes Provider automatically creates a LoadBalancer service that exposes Rancher on a public VIP.
 
 ### First Login
 
-1. Navigate to Rancher URL
+1. Navigate to https://rancher.<your-domain>
 2. Enter the bootstrap password
 3. Set a new admin password
-4. Set the Rancher server URL (hostname or IP)
+4. Set the Rancher server URL to your FQDN (https://rancher.<your-domain>)
 
 ## Step 4: Configure Local Cluster
 
@@ -187,6 +186,20 @@ kubectl get crds | grep cloudstack
 ```
 
 ## Troubleshooting
+
+### Rancher Not Accessible
+
+```bash
+# Verify LoadBalancer service was created by CloudStack Kubernetes Provider
+kubectl get svc rancher -n cattle-system
+# EXTERNAL-IP should show the VIP, not <pending>
+
+# If EXTERNAL-IP is pending, check CloudStack Kubernetes Provider logs
+kubectl logs -n cattle-system -l app=rancher | grep -i loadbalancer
+
+# Verify DNS record points to the correct VIP
+nslookup rancher.<your-domain>
+```
 
 ### Rancher Pods Not Starting
 
