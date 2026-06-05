@@ -71,41 +71,6 @@ This guide covers:
 3. **[Create Clusters](./cluster.md)** — Provision CKS clusters via CAPI CRDs
 4. **[Fleet GitOps](./fleet.md)** — Automate cluster management with Fleet
 
-## Quick Start
-
-```bash
-# 1. Deploy Rancher on CKS cluster
-kubectl --kubeconfig=cks-kubeconfig apply -f https://releases.rancher.com/install/latest/rancher.yaml
-
-# 2. Get Rancher admin password
-kubectl --kubeconfig=cks-kubeconfig -n cattle-system get secret \
-  $(kubectl --kubeconfig=cks-kubeconfig -n cattle-system get secret \
-    -o name | grep 'bootstrap-secret') \
-  -o jsonpath='{.data.bootstrapPassword}' | base64 -d
-
-# 3. Install Turtles
-helm install turtles oci://registry-1.docker.io/rancher/turtles \
-  --version v0.20.0 \
-  --namespace capi-system \
-  --create-namespace
-
-# 4. Deploy CAPC via CAPIProvider
-kubectl --kubeconfig=cks-kubeconfig apply -f - <<EOF
-apiVersion: turtles-capi.cattle.io/v1alpha1
-kind: CAPIProvider
-metadata:
-  name: cloudstack
-  namespace: capi-providers
-spec:
-  name: cloudstack
-  type: infrastructure
-  configSecret:
-    name: cloudstack-config
-EOF
-```
-
-See the detailed guides below for each step.
-
 ## References
 
 - [Architecture](../../architecture/rancher-turtles-capc.md)
