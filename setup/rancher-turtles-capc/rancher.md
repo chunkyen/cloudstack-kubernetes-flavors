@@ -142,33 +142,6 @@ kubectl get pvc -n cattle-system
 kubectl get storageclass
 ```
 
-### Turtles Not Installing Providers
-
-```bash
-# Check Turtles controller logs
-kubectl logs -n capi-system deployment/turtles-controller -f
-
-# Check CAPIProvider status
-kubectl describe CAPIProvider -n capi-providers
-
-# Check for CRD conflicts
-kubectl get crds | grep cluster-api
-```
-
-### CAPC Not Provisioning VMs
-
-```bash
-# Verify CloudStack API access
-kubectl exec -it deploy/capc-controller-manager -n capi-system -- \
-  /bin/sh -c "echo test"
-
-# Check CAPC logs
-kubectl logs -n capi-system -l app=cloudstack -f
-
-# Verify config secret
-kubectl get secret cloudstack-config -n capi-providers -o yaml
-```
-
 ## Next Steps
 
 - [Install Turtles + CAPC](./turtles.md) — Core CAPI providers, CAPC configuration, and management

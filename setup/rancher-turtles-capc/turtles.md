@@ -276,6 +276,19 @@ kubectl logs -n capi-system <pod-name> -f
 
 ## Troubleshooting
 
+### Turtles Not Installing Providers
+
+```bash
+# Check Turtles controller logs
+kubectl logs -n capi-system deployment/turtles-controller -f
+
+# Check CAPIProvider status
+kubectl describe CAPIProvider -n capi-providers
+
+# Check for CRD conflicts
+kubectl get crds | grep cluster-api
+```
+
 ### Provider Stuck in "Installing" State
 
 ```bash
@@ -314,6 +327,20 @@ kubectl logs -n capi-system -l app=cloudstack | tail -50
 
 # Manually verify CRDs exist
 kubectl get crds | grep cloudstack
+```
+
+### CAPC Not Provisioning VMs
+
+```bash
+# Verify CloudStack API access from CAPC pod
+kubectl exec -it -n capi-system deploy/capc-controller-manager -- \
+  /bin/sh -c "echo test"
+
+# Check CAPC logs
+kubectl logs -n capi-system -l app=cloudstack -f
+
+# Verify config secret
+kubectl get secret cloudstack-config -n capi-providers -o yaml
 ```
 
 ## Next Steps
