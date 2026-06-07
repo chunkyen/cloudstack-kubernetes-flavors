@@ -10,7 +10,7 @@ This repository examines four primary approaches to running Kubernetes on CloudS
 
 1. **CKS (CloudStack Kubernetes Service)** - Native CloudStack Kubernetes integration
 2. **CAPC (Cluster API Provider for CloudStack)** - Infrastructure-as-Code approach using Cluster API (with user-defined node OS)
-3. **Rancher + CAPC** - Managed Kubernetes with Rancher as the management plane, CAPC as the CloudStack infrastructure provider (with user-defined or Talos nodes)
+3. **Rancher + CAPC** - Managed Kubernetes with Rancher as the management plane, CAPC as the CloudStack infrastructure provider (with user-defined nodes)
 4. **Talos Linux** - Minimal, immutable Linux designed for Kubernetes (can be used standalone with CAPI, with Rancher, or independently)
 
 ### Cross-Cutting Components
@@ -52,7 +52,7 @@ See the [Architecture](#architecture) section for details on each.
 | Feature | CKS | CAPC | Rancher+CAPC | Talos (standalone) |
 |---------|-----|------|-------------------|-------------------|
 | **Management** | Native CloudStack UI/API | Cluster API controllers | Rancher UI/API | Talos CLI / Tinkerbell |
-| **Node OS** | User-defined | User-defined | User-defined / Talos | Talos Linux (immutable) |
+| **Node OS** | User-defined | User-defined | User-defined | Talos Linux (immutable) |
 | **GitOps** | No | Yes (CAPI native) | Yes (Rancher Fleet) | Yes (Terraform/Talos) |
 | **Multi-cluster** | Limited | Yes (CAPI native) | Yes (Rancher native) | Manual/CAPI |
 | **Upgrade Strategy** | Manual | Automated | Automated | Automated (Talos) |
