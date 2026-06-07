@@ -46,7 +46,7 @@ kubectl create namespace cattle-system
 # Install Rancher with your FQDN
 helm install rancher rancher-stable/rancher \
   --namespace cattle-system \
-  --set hostname=rancher.&lt;your-domain&gt; \
+  --set hostname=rancher.<your-domain> \
   --set replicas=3
 ```
 
@@ -80,29 +80,29 @@ Create a DNS `A` record pointing your FQDN to the VIP:
 
 ```
 # Example: add an A record to your DNS zone
-rancher.&lt;your-domain&gt;   A   &lt;EXTERNAL-IP&gt;
+rancher.<your-domain>   A   <EXTERNAL-IP>
 ```
 
 > **DNS is recommended** for production use. If you don't have a DNS server, you can use `/etc/hosts` on your local machine as a quick alternative:
 >
 > ```bash
-> echo "&lt;EXTERNAL-IP&gt;  rancher.&lt;your-domain&gt;" | sudo tee -a /etc/hosts
+> echo "<EXTERNAL-IP>  rancher.<your-domain>" | sudo tee -a /etc/hosts
 > ```
 >
-> **Note:** Replace `&lt;your-domain&gt;` with your actual domain (e.g., `example.com`). The full FQDN will be `rancher.example.com`.
+> **Note:** Replace `<your-domain>` with your actual domain (e.g., `example.com`). The full FQDN will be `rancher.example.com`.
 
 **Step 3: Open the UI**
 
-Navigate to **`https://rancher.&lt;your-domain&gt;`** — this must match the hostname you passed to `helm install --set hostname=`.
+Navigate to **`https://rancher.<your-domain>`** — this must match the hostname you passed to `helm install --set hostname=`.
 
 > **No port-forwarding needed** — the CloudStack Kubernetes Provider automatically creates a LoadBalancer service that exposes Rancher on a public VIP.
 
 ### First Login
 
-1. Navigate to **`https://rancher.&lt;your-domain&gt;`** (use the FQDN, not the IP)
+1. Navigate to **`https://rancher.<your-domain>`** (use the FQDN, not the IP)
 2. Enter the bootstrap password
 3. Set a new admin password
-4. Set the Rancher server URL to your FQDN (`https://rancher.&lt;your-domain&gt;`)
+4. Set the Rancher server URL to your FQDN (`https://rancher.<your-domain>`)
 
 ## Step 4: Configure Local Cluster
 
@@ -128,7 +128,7 @@ kubectl get svc rancher -n cattle-system
 kubectl logs -n cattle-system -l app=rancher | grep -i loadbalancer
 
 # Verify DNS record points to the correct VIP
-nslookup rancher.&lt;your-domain&gt;
+nslookup rancher.<your-domain>
 ```
 
 ### Rancher Pods Not Starting
