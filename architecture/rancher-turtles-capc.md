@@ -125,7 +125,7 @@ CAPC runs inside the management cluster and:
 |--------|----------------|------------------------|
 | **Management** | `clusterctl` CLI | Rancher UI + Fleet GitOps |
 | **Provider lifecycle** | Manual install | Declarative `CAPIProvider` CRD |
-| **Multi-cluster** | Manual kubeconfig management | Fleet auto-imports clusters |
+| **Multi-cluster** | Manual kubeconfig management | CAPI creates clusters via CAPC, Rancher Turtles imports them into Rancher for management |
 | **RBAC** | K8s RBAC only | Rancher RBAC + projects |
 | **GitOps** | Manual (argocd etc.) | Fleet built-in |
 | **Monitoring** | Manual setup | Rancher monitoring built-in |
