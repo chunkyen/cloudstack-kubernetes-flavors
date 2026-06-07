@@ -65,19 +65,39 @@ kubectl -n cattle-system get secret \
 
 ### Access UI
 
+Rancher **must be accessed via the FQDN** set in the `--set hostname=` helm parameter — it will not function correctly when accessed by IP address.
+
+**Step 1: Get the LoadBalancer VIP**
+
 ```bash
-# Get the LoadBalancer VIP (created by CloudStack Kubernetes Provider)
 kubectl get svc rancher -n cattle-system
-# Look at EXTERNAL-IP column
+# Look at the EXTERNAL-IP column — this is the VIP
 ```
 
-Navigate to **https://rancher.<your-domain>** (or https://<EXTERNAL-IP> for testing).
+**Step 2: Register the VIP in DNS (recommended)**
+
+Create a DNS `A` record pointing your FQDN to the VIP:
+
+```
+# Example: add an A record to your DNS zone
+rancher.<your-domain>   A   <EXTERNAL-IP>
+```
+
+> **DNS is recommended** for production use. If you don't have a DNS server, you can use `/etc/hosts` on your local machine as a quick alternative:
+>
+> ```bash
+> echo "<EXTERNAL-IP>  rancher.<your-domain>" | sudo tee -a /etc/hosts
+> ```
+
+**Step 3: Open the UI**
+
+Navigate to **https://rancher.<your-domain>** — this must match the hostname you passed to `helm install --set hostname=`.
 
 > **No port-forwarding needed** — the CloudStack Kubernetes Provider automatically creates a LoadBalancer service that exposes Rancher on a public VIP.
 
 ### First Login
 
-1. Navigate to https://rancher.<your-domain>
+1. Navigate to **https://rancher.<your-domain>** (use the FQDN, not the IP)
 2. Enter the bootstrap password
 3. Set a new admin password
 4. Set the Rancher server URL to your FQDN (https://rancher.<your-domain>)
