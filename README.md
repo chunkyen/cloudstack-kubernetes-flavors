@@ -54,7 +54,7 @@ See the [Architecture](#architecture) section for details on each.
 | **Management** | Native CloudStack UI/API | Cluster API controllers | Rancher UI/API | Talos CLI / Tinkerbell |
 | **Node OS** | User-defined | User-defined | User-defined | Talos Linux (immutable) |
 | **GitOps** | No | Yes (CAPI native) | Yes (Rancher Fleet) | Yes (Terraform/Talos) |
-| **Multi-cluster** | Limited | Yes (CAPI native) | Yes (Rancher native) | Manual/CAPI |
+| **Multi-cluster** | Limited | Yes (CAPI native) | Yes (CAPI + Rancher Turtles) | Manual/CAPI |
 | **Upgrade Strategy** | Manual | Automated | Automated | Automated (Talos) |
 | **Complexity** | Low | Medium | High | Medium |
 | **Terraform** | No | Yes (CAPI provider) | Yes | Yes |
