@@ -93,98 +93,6 @@ kubectl cluster-info
 # Should show Rancher API server
 ```
 
-## Step 5: Install Turtles
-
-### Via Helm
-
-```bash
-# Add Turtles Helm repo
-helm repo add turtles https://rancher.github.io/turtles-helm-chart/
-helm repo update
-
-# Install Turtles
-helm install turtles turtles/turtles \
-  --namespace capi-system \
-  --create-namespace \
-  --set turtlesVersion=v0.20.0
-```
-
-### Verify Installation
-
-```bash
-kubectl get pods -n capi-system
-# Expect: turtles-controller-xxxx running
-
-kubectl get crds | grep turtles
-# Expect: capiproviders.turtles-capi.cattle.io
-```
-
-## Step 6: Configure CAPC Provider
-
-### Create CloudStack Config Secret
-
-```yaml
-# cloudstack-secret.yaml
-apiVersion: v1
-kind: Secret
-metadata:
-  name: cloudstack-config
-  namespace: capi-providers
-type: Opaque
-stringData:
-  CLOUDSTACK_ENDPOINT: "http://<management-server>:8080/client/api"
-  CLOUDSTACK_API_KEY: "<your-api-key>"
-  CLOUDSTACK_SECRET_KEY: "<your-secret-key>"
-  CLOUDSTACK_DEFAULT_ZONE: "<zone-id>"
-  CLOUDSTACK_DEFAULT_NETWORK: "<network-id>"
-```
-
-```bash
-kubectl create namespace capi-providers
-kubectl apply -f cloudstack-secret.yaml
-```
-
-### Deploy CAPC via Turtles
-
-```yaml
-# cloudstack-provider.yaml
-apiVersion: turtles-capi.cattle.io/v1alpha1
-kind: CAPIProvider
-metadata:
-  name: cloudstack
-  namespace: capi-providers
-spec:
-  name: cloudstack
-  type: infrastructure
-  configSecret:
-    name: cloudstack-config
-  config:
-    manager:
-      args:
-        - "--cloudstack-config-secret-name=cloudstack-config"
-        - "--cloudstack-config-secret-namespace=capi-providers"
-```
-
-```bash
-kubectl apply -f cloudstack-provider.yaml
-```
-
-### Verify CAPC
-
-```bash
-# Check provider status
-kubectl get CAPIProvider -n capi-providers
-
-# Check CAPC pods
-kubectl get pods -n capi-system | grep cloudstack
-
-# Check CRDs
-kubectl get crds | grep cloudstack
-# cloudstackclusters.infrastructure.cluster.x-k8s.io
-# cloudstackmachines.infrastructure.cluster.x-k8s.io
-# cloudstackmachinesets.infrastructure.cluster.x-k8s.io
-```
-
 ## Troubleshooting
 
 ### Rancher Not Accessible
@@ -241,6 +149,6 @@ kubectl get secret cloudstack-config -n capi-providers -o yaml
 
 ## Next Steps
 
-- [Install Turtles + CAPC](./turtles.md) — Detailed provider configuration
+- [Install Turtles + CAPC](./turtles.md) — Core CAPI providers, CAPC configuration, and management
 - [Create Clusters](./cluster.md) — Provision CKS clusters via CAPI
 - [Fleet GitOps](./fleet.md) — Automate with Fleet
