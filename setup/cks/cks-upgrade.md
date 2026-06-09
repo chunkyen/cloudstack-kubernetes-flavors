@@ -328,19 +328,23 @@ If the upgrade process reports **failed** and gets stuck (e.g., control plane no
 >
 >    Look up the available versions to find the one you want to update to:
 >    ```bash
->    cmk list kubernetessupportedversions filter=name,semanticversion
+>    cmk set output table
+>    cmk list kubernetessupportedversions filter=id,name,semanticversion
 >    ```
 >    Example output:
 >    ```
->    id = 39fa481b-0b6d-46be-8009-11ff1d2970bb
->    name = kube 1.35.0 calico
->    semanticversion = 1.35.0
->    ================================================================================
->    id = a2491974-7420-478e-b1b4-7d229f061cd0
->    name = kube cilium 1.36
->    semanticversion = 1.36.0
+>    +--------------------------------------+--------------------+-----------------+
+>    | ID                                   | NAME               | SEMANTICVERSION |
+>    +--------------------------------------+--------------------+-----------------+
+>    | 8db73535-2608-4dbc-8a92-83d56a269794 | Kube 1.33.1 calico | 1.33.1          |
+>    | 0b76a439-4ce0-4b5b-a33d-ba4d5a72c83a | Kube 1.32.5 calico | 1.32.5          |
+>    | af72f314-862d-4d45-9bdd-ba1d15230834 | kube-cilium-1.34.2 | 1.34.2          |
+>    | 31074064-17fe-49f2-a840-2e80165e749d | kube cilium 1.35   | 1.35.0          |
+>    +--------------------------------------+--------------------+-----------------+
 >    ```
->    Note the `semanticversion` of the correct version (e.g., `1.35.0`).
+>    Note the `name` and `semanticversion` of the correct version (e.g., `kube cilium 1.35` and `1.35.0`).
+>
+>    > **Important:** The `ID` shown in cmk is a UUID and is **not** the same as the MySQL table `id`. You need the `name` and `semanticversion` to find the correct `id` in the database.
 >
 > 2. **Stop the CloudStack management server:**
 >    ```bash
@@ -357,18 +361,34 @@ If the upgrade process reports **failed** and gets stuck (e.g., control plane no
 >    mysql -u root -p cloud
 >    ```
 >
-> 5. **Update the cluster to reference the correct version:**
->    ```sql
->    UPDATE kubernetes_cluster SET kubernetes_version_id = <version-id> WHERE name = '<cluster-name>';
->    ```
->    Replace `<version-id>` with the ID from step 1 (e.g., `4`) and `<cluster-name>` with your cluster name (e.g., `kubetest`).
+> 5. **Find the MySQL `id` for the version you want:**
 >
-> 6. **Verify the change:**
+>    Query the `kubernetes_supported_version` table to find the row matching the `name` and `semantic_version` from step 1:
+>    ```sql
+>    SELECT id, name, semantic_version FROM kubernetes_supported_version WHERE name = 'kube cilium 1.35' AND semantic_version = '1.35.0';
+>    ```
+>    Example output:
+>    ```
+>    +--------------------------------------+------------------------+------------------+
+>    | id                                 | name                   | semantic_version |
+>    +--------------------------------------+------------------------+------------------+
+>    | 31074064-17fe-49f2-a840-2e80165e749d | kube cilium 1.35       | 1.35.0           |
+>    +--------------------------------------+------------------------+------------------+
+>    ```
+>    Note the MySQL `id` (e.g., `31074064-17fe-49f2-a840-2e80165e749d`).
+>
+> 6. **Update the cluster to reference the correct version:**
+>    ```sql
+>    UPDATE kubernetes_cluster SET kubernetes_version_id = '<mysql-id>' WHERE name = '<cluster-name>';
+>    ```
+>    Replace `<mysql-id>` with the MySQL `id` from step 5 (e.g., `31074064-17fe-49f2-a840-2e80165e749d`) and `<cluster-name>` with your cluster name (e.g., `kubetest`).
+>
+> 7. **Verify the change:**
 >    ```sql
 >    SELECT id, name, kubernetes_version_id FROM kubernetes_cluster WHERE name = '<cluster-name>';
 >    ```
 >
-> 7. **Restart CloudStack management server:**
+> 8. **Restart CloudStack management server:**
 >    ```bash
 >    service cloudstack-management start
 >    ```
