@@ -252,6 +252,8 @@ runcmd:
 7. **Enable CloudStack CSI Driver** if persistent storage is needed (disabled by default)
 8. Click **Create**
 
+> **Script:** A helper script is available in this repo to automate cluster creation: [create-cks-cluster.sh](https://github.com/chunkyen/cloudstack-kubernetes-flavors/blob/main/setup/cks/scripts/create-cks-cluster.sh). It wraps the UI flow into a parameterized shell script for repeatable deployments.
+
 ## Step 6: Access Your Cluster
 
 ### Get kubeconfig
