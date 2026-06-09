@@ -271,7 +271,7 @@ If the upgrade process reports **failed** and gets stuck (e.g., control plane no
    mkdir -p /mnt/iso && mount /dev/sr0 /mnt/iso
    ```
 
-4. **Replace binaries and upgrade the node:**
+5. **Replace binaries and upgrade the node:**
    ```bash
    # Stop kubelet, replace binaries from ISO, make executable
    systemctl stop kubelet
@@ -310,6 +310,18 @@ If the upgrade process reports **failed** and gets stuck (e.g., control plane no
 > This stale state is a **blocker for future upgrades**. Kubernetes enforces a 2-version skew policy — if CloudStack thinks your cluster is at v1.34 but nodes are at v1.35, the next upgrade to v1.36 will be blocked.
 >
 > **Resolution:** After manual recovery completes successfully, trigger another upgrade via CloudStack to the **current** version (the one the nodes are already at). CloudStack should detect that nodes are already at the target version and either skip the upgrade or complete it instantly, which will sync CloudStack's internal state to the correct version. After this sync, you'll be able to upgrade to the next version normally.
+
+#### Why the Health Check Job Fails
+
+The upgrade health check job is created by kubeadm during the upgrade process to verify cluster health. It runs on the control plane and checks if **all nodes are Ready** and at the correct version.
+
+When the control plane upgrade succeeds but worker nodes fail to upgrade, the health check job will keep failing because:
+
+1. The health check job was created when worker nodes were still at the old version
+2. Kubernetes enforces version skew policies — the API server (new version) and kubelet (old version) are incompatible
+3. The health check job will never pass until all worker nodes are upgraded to match the control plane
+
+This is why manual recovery on worker nodes is necessary — you're bringing the worker nodes to the same version as the control plane, which allows the health check job to eventually pass (or be recreated by the next upgrade attempt).
 
 ## How CKS Upgrades Work
 
