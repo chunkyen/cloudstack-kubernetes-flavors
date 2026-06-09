@@ -320,23 +320,35 @@ The CKS ISO bundles all core Kubernetes components. When you upgrade the K8s ver
 
 ## CNI Management
 
-The only component you may need to manage separately from the ISO is **CNI**. Use the guidance below to decide the right approach.
+CNI is bundled into the CKS ISO and upgrades automatically with the K8s version. You only need to manage CNI separately when you want to **upgrade CNI independently** of the CKS upgrade (e.g., testing a newer CNI version before the next CKS release).
 
-### When to Re-apply Manifests
+### Re-apply Manifests
 
-For minor version bumps or switching CNI versions, re-applying manifests is sufficient:
+For minor version bumps or switching CNI versions without rebuilding the ISO:
 
 1. Upgrade K8s version via CloudStack (upgrades everything else automatically)
 2. Re-apply CNI manifests to get the desired CNI version
 
-### When to Rebuild the ISO
+### Rebuild the ISO
 
 | Scenario | Approach |
 |----------|----------|
 | CNI minor version bump (e.g., Calico 3.28 → 3.29) | Re-apply manifests |
-| CNI major version bump (e.g., Calico 3.x → 4.x) | Consider rebuilding ISO |
-| Switching CNI (e.g., Calico → Cilium) | Re-apply manifests or rebuild ISO |
+| CNI major version bump (e.g., Calico 3.x → 4.x) | Rebuild ISO |
+| Switching CNI (e.g., Calico → Cilium) | Rebuild ISO |
 | Custom CNI parameters | Use CNI configuration (ACS 4.21+) or rebuild ISO |
+
+## OS Upgrades
+
+OS-level upgrades are **separate** from CKS cluster upgrades. The CKS ISO upgrade only updates Kubernetes components (kubelet, kubeadm, containerd, CNI, CSI, CCM). It does **not** update the underlying operating system.
+
+To upgrade the OS on CKS nodes:
+
+1. **Create new instances** from an updated base OS template
+2. **Replace nodes** in the cluster (remove old nodes, add new ones)
+3. Or **manually upgrade** the OS on each node (requires downtime and careful coordination)
+
+> **Note:** OS upgrades should be planned separately from CKS upgrades. Upgrading the OS without updating the CKS ISO may cause version mismatches between the OS and Kubernetes components.
 
 ## Related
 
