@@ -365,7 +365,7 @@ Since CKS manages nodes in-place, OS upgrades are also performed **in-place** on
    kubectl get nodes
    ```
 
-> **Note:** OS security updates can generally be applied independently of CKS upgrades. The Kubernetes [version skew policy](https://kubernetes.io/releases/version-skew-policy/) governs K8s component compatibility (kubelet ↔ API server), not OS versions. The main operational concern is that kernel updates require a reboot, which briefly impacts the node. Always create snapshots before performing OS upgrades.
+> **Note:** OS security updates can generally be applied independently of CKS upgrades. The Kubernetes [version skew policy](https://kubernetes.io/releases/version-skew-policy/) governs K8s component compatibility (kubelet ↔ API server), not OS versions. The main operational concern is that kernel updates require a reboot, which briefly impacts the node. Creating snapshots before OS upgrades is recommended as a safety measure.
 
 ## Related
 
