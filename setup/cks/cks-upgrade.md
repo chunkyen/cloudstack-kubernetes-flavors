@@ -65,7 +65,7 @@ cmk add kubernetessupportedversion name=v1.33.1 semanticversion=1.33.1 iso=<iso-
 
 ### Step 2: Create Instance Snapshots (Rollback Safety)
 
-> **Critical:** Before triggering any upgrade, create instance snapshots of all K8s nodes. This is your rollback mechanism.
+> **Note:** This step is optional but recommended. Creating instance snapshots of all K8s nodes before an upgrade provides a rollback mechanism if something goes wrong.
 
 **Via UI:**
 1. Navigate to **Compute** → **Instances**
