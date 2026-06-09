@@ -311,6 +311,54 @@ If the upgrade process reports **failed** and gets stuck (e.g., control plane no
 >
 > **Resolution:** After manual recovery completes successfully, trigger another upgrade via CloudStack to the **current** version (the one the nodes are already at). CloudStack should detect that nodes are already at the target version and either skip the upgrade or complete it instantly, which will sync CloudStack's internal state to the correct version. After this sync, you'll be able to upgrade to the next version normally.
 
+> **⚠️ Last Resort — Manual Database Update:**
+>
+> If triggering another upgrade to the current version also fails to sync CloudStack's internal state (this can happen if CloudStack refuses to "upgrade" to the same version), the **only remaining option** is to manually update the cluster version in the CloudStack database.
+>
+> **WARNING: This is a nuclear option. Incorrect database changes can corrupt your CloudStack deployment. Always take a full database backup first.**
+>
+> **Steps:**
+>
+> 1. **Stop the CloudStack management server:**
+>    ```bash
+>    service cloudstack-management stop
+>    ```
+>
+> 2. **Backup the database:**
+>    ```bash
+>    mysqldump -u root -p cloud > cloudstack_backup_$(date +%Y%m%d_%H%M%S).sql
+>    ```
+>
+> 3. **Connect to the CloudStack database:**
+>    ```bash
+>    mysql -u root -p cloud
+>    ```
+>
+> 4. **Find your cluster and current version:**
+>    ```sql
+>    SELECT id, name, version FROM kubernetes_clusters WHERE name = 'your-cluster-name';
+>    ```
+>
+> 5. **Update the version to match the actual node version:**
+>    ```sql
+>    UPDATE kubernetes_clusters SET version = 'v1.35.0' WHERE id = '<cluster-id>';
+>    ```
+>    Replace `v1.35.0` with the actual Kubernetes version your nodes are running (check with `kubectl version --short`).
+>
+> 6. **Verify the change:**
+>    ```sql
+>    SELECT id, name, version FROM kubernetes_clusters WHERE id = '<cluster-id>';
+>    ```
+>
+> 7. **Restart CloudStack management server:**
+>    ```bash
+>    service cloudstack-management start
+>    ```
+>
+> 8. **Verify the UI shows the correct version** and you can now upgrade to the next version.
+>
+> > **Note:** This approach bypasses all of CloudStack's safety checks. Use only when all other methods have failed and you have a verified database backup.
+
 #### Why the Health Check Job Fails
 
 The upgrade health check job is created by kubeadm during the upgrade process to verify cluster health. It runs on the control plane and checks if **all nodes are Ready** and at the correct version.
