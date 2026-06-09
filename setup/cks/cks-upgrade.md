@@ -4,47 +4,48 @@ This guide covers upgrading a CKS-managed Kubernetes cluster **end-to-end**: the
 
 ## The Upgrade Model
 
-CKS clusters are managed by CloudStack's management server. The Kubernetes version upgrade is an **in-place ISO-based upgrade** — CloudStack applies the new ISO to existing nodes and upgrades them in place, without replacing the VMs.
+CKS clusters are managed by CloudStack's management server. The Kubernetes version upgrade is performed by **replacing nodes with new instances from an updated ISO/template**.
 
-This is fundamentally different from CAPC, which uses node replacement (new VMs from new images). CKS upgrades the existing nodes in place.
+This is fundamentally different from CAPC, which uses node replacement from new images. CKS also replaces nodes, but the new instances are provisioned from a new ISO that contains the upgraded components.
 
-Meanwhile, CNI and CSI are **workload deployments** — they run as pods inside the cluster. CNI and CSI are baked into the ISO at build time and upgrade together with the K8s version during the in-place upgrade.
+Meanwhile, CNI and CSI are **workload deployments** — they run as pods inside the cluster. CNI and CSI are baked into the ISO at build time and upgrade together with the K8s version during node replacement.
 
 ### What Gets Upgraded Where
 
 | Component | Where | How Upgraded | Managed by CKS? |
 |-----------|-------|-------------|------------------|
-| **kubelet** | Workload nodes | In-place ISO upgrade via `upgradeKubernetesCluster` | ✅ Yes |
-| **kubeadm** | Workload nodes | In-place ISO upgrade via `upgradeKubernetesCluster` | ✅ Yes |
-| **containerd** | Workload nodes | In-place ISO upgrade via `upgradeKubernetesCluster` | ✅ Yes |
-| **K8s API version** | Workload cluster | In-place ISO upgrade via `upgradeKubernetesCluster` | ✅ Yes |
+| **kubelet** | Workload nodes | Replaced with new instance from updated ISO | ✅ Yes |
+| **kubeadm** | Workload nodes | Replaced with new instance from updated ISO | ✅ Yes |
+| **containerd** | Workload nodes | Replaced with new instance from updated ISO | ✅ Yes |
+| **K8s API version** | Workload cluster | Replaced with new instance from updated ISO | ✅ Yes |
 | **CNI** (Calico/Cilium) | Workload nodes | Baked into ISO — upgrades with K8s version | ✅ Yes |
 | **CSI driver** | Workload nodes | Baked into ISO — upgrades with K8s version | ✅ Yes |
 | **CCM** (CloudStack K8s Provider) | Workload nodes | Baked into ISO — upgrades with K8s version | ✅ Yes |
 
-> **Key point:** CKS performs an **in-place ISO upgrade** — CloudStack applies the new ISO to existing nodes and upgrades them in place, without replacing the VMs. The ISO contains kubelet, kubeadm, containerd, CNI, CSI driver, and CCM. Upgrading the K8s version upgrades **all of these together** in a single operation. No separate CNI, CSI, or CCM upgrade steps are needed.
+> **Key point:** CKS performs **node replacement** — CloudStack provisions new instances from the updated ISO and joins them to the cluster, then removes old nodes. The ISO contains kubelet, kubeadm, containerd, CNI, CSI driver, and CCM. Upgrading the K8s version upgrades **all of these together** in a single operation. No separate CNI, CSI, or CCM upgrade steps are needed.
 
 ## Upgrade Sequence
 
-For CKS, the upgrade is a single step:
+For CKS, the upgrade follows this sequence:
 
-1. **K8s version** — CloudStack performs an in-place ISO upgrade (this upgrades K8s, CNI, CSI, and CCM together)
+1. **Create instance snapshots** of all K8s nodes (preferably at shutdown state) — for rollback safety
+2. **K8s version** — CloudStack replaces nodes with new instances from the updated ISO (this upgrades K8s, CNI, CSI, and CCM together)
+3. **Verify** all components are at the expected versions
 
-That's it. No separate CNI, CSI, or CCM upgrade steps are needed.
+### Why Snapshot First?
 
-### Why It's Simple
-
-- **In-place upgrade**: CloudStack applies the new ISO to existing nodes — no VM replacement, no new infrastructure.
-- **All components together**: The ISO contains kubelet, kubeadm, containerd, CNI, CSI driver, and CCM. They all upgrade together.
-- **No manual orchestration**: Just trigger the upgrade via UI, API, or CLI and CloudStack handles the rest.
+- **Rollback safety**: If the upgrade fails, you can revert to the snapshots
+- **Shutdown state preferred**: Snapshots taken at shutdown are consistent and faster to restore
+- **Minimal downtime**: New nodes join the cluster while old nodes are being replaced
 
 ## Step-by-Step Upgrade
 
 ### Prerequisites
 
-- Access to the CloudStack management UI or API
+- Access to the CloudStack management UI or cmk CLI
 - Target K8s version registered in CloudStack
 - Access to the workload cluster kubeconfig
+- Sufficient compute resources to provision new nodes alongside existing ones
 
 ### Step 1: Register New K8s Version (If Not Already Done)
 
@@ -54,23 +55,47 @@ Before you can upgrade, the target K8s version must be registered in CloudStack.
 1. **Infrastructure** → **Kubernetes** → **Supported Versions** → **Add Kubernetes Supported Version**
 2. Fill in version details and upload the ISO
 
-**Via API:**
+**Via cmk:**
 ```bash
-addKubernetesSupportedVersion \
-  name=v1.33.1 \
-  semanticversion=1.33.1 \
-  url=http://<server>/setup-v1.33.1.iso \
-  zoneid=<zone-id> \
-  mincpunumber=2 \
-  minmemory=2048 \
-  checksum=<iso-checksum>
+cmk registeriso name=v1.33.1 url=http://<server>/setup-v1.33.1.iso zoneid=<zone-id> checksum=<iso-checksum> isextractable=true ispublic=true bootable=true
+cmk add kubernetessupportedversion name=v1.33.1 semanticversion=1.33.1 iso=<iso-name-or-id> zoneid=<zone-id> mincpunumber=2 minmemory=2048
 ```
 
 **ISO sources:**
 - [`download.cloudstack.org/cks/`](http://download.cloudstack.org/cks/)
 - [`packages.shapeblue.com/cks/`](http://packages.shapeblue.com/cks/)
 
-### Step 2: Upgrade K8s Version (CloudStack-Native)
+### Step 2: Create Instance Snapshots (Rollback Safety)
+
+> **Critical:** Before triggering any upgrade, create instance snapshots of all K8s nodes. This is your rollback mechanism.
+
+**Via UI:**
+1. Navigate to **Compute** → **Instances**
+2. For each K8s node:
+   - Select the instance
+   - Click **Snapshot** → **Create Snapshot**
+   - Optionally **Stop the instance first** (shutdown state snapshots are more consistent and restore faster)
+   - Name the snapshot clearly (e.g., `cks-cluster-pre-upgrade-node-1`)
+3. Verify all snapshots are created
+
+**Via cmk:**
+```bash
+# List all K8s nodes (filter by name or tag)
+cmk list instances filter=id,name,state,templatename
+
+# Stop each node (optional but recommended for consistent snapshots)
+cmk stop instance id=<node-id>
+
+# Create snapshot for each node
+cmk createsnapshot name=cks-pre-upgrade-node-1 instanceid=<node-id>
+cmk createsnapshot name=cks-pre-upgrade-node-2 instanceid=<node-id>
+# ... repeat for all nodes
+
+# Start nodes again (if stopped)
+cmk start instance id=<node-id>
+```
+
+### Step 3: Upgrade K8s Version (CloudStack-Native)
 
 #### Via UI
 
@@ -84,34 +109,25 @@ addKubernetesSupportedVersion \
 > - The cluster is in a **running** state
 > - An eligible upgrade version is registered in CloudStack
 
-#### Via API
-
-```bash
-upgradeKubernetesCluster \
-  id=<cluster-id> \
-  kubernetesversionid=<new-version-id>
-```
-
 #### Via cmk CLI
 
 ```bash
-upgradekubernetescluster \
-  id=<cluster-id> \
-  kubernetesversionid=<new-version-id>
+cmk upgrade kubernetescluster id=<cluster-id> kubernetesversionid=<new-version-id>
 ```
 
-### Step 3: Wait for In-Place Upgrade to Complete
+### Step 4: Wait for Node Replacement to Complete
 
-CloudStack performs an in-place upgrade on existing nodes. Monitor progress:
+CloudStack replaces nodes with new instances from the updated ISO. Monitor progress:
 
 **Via UI:**
 - Watch the cluster status indicator in the Kubernetes tab
 - Status transitions: `Running` → `Upgrading` → `Running`
+- Old nodes are removed as new nodes join
 
-**Via API:**
+**Via cmk:**
 ```bash
 # Check cluster state
-listkubernetesclusters id=<cluster-id>
+cmk list kubernetescluster id=<cluster-id>
 # Look for state: running (upgrade complete) or upgrading (in progress)
 ```
 
@@ -124,11 +140,11 @@ kubectl version --short
 # Expected: server version matches target
 ```
 
-> **Estimated time:** In-place upgrade typically takes 10-30 minutes depending on cluster size and node count. Control plane nodes are upgraded first, then workers. The ISO is streamed to each node and applied in place.
+> **Estimated time:** Node replacement typically takes 10-30 minutes depending on cluster size and node count. Control plane nodes are replaced first, then workers. The ISO is streamed to each new instance and applied.
 
-### Step 4: Verify the Upgrade
+### Step 5: Verify the Upgrade
 
-After the in-place ISO upgrade completes, verify all components are at the expected versions:
+After the node replacement completes, verify all components are at the expected versions:
 
 ```bash
 kubeconfig="<path-to-kubeconfig>"
@@ -151,74 +167,42 @@ kubectl --kubeconfig=${kubeconfig} get pods -n kube-system -l k8s-app=cloudstack
 
 > **Note:** CNI, CSI, and CCM are all baked into the ISO and upgrade together with the K8s version. No separate upgrade steps are needed.
 
-## Full Upgrade Script
-
-Here's a complete script that performs the CKS in-place upgrade:
-
-```bash
-#!/bin/bash
-set -euo pipefail
-
-# === Configuration ===
-cluster_id="<cluster-id>"
-kubeconfig="<path-to-kubeconfig>"
-k8s_version="v1.33"
-cloudstack_url="https://<mgmt-server>/client/api"
-api_key="<api-key>"
-secret_key="<secret-key>"
-
-# === Step 1: Upgrade K8s Version (In-Place ISO Upgrade) ===
-echo "=== Step 1: Upgrading K8s version to ${k8s_version} ==="
-
-# Trigger CKS upgrade via CloudStack API
-# Note: Replace with actual signed API call using your CloudStack API client
-echo "Triggering CKS in-place upgrade via CloudStack API..."
-# Example:
-# curl -s "${cloudstack_url}/?command=upgradeKubernetesCluster&id=${cluster_id}&kubernetesversionid=<new-version-id>&apiKey=${api_key}&signature=<signature>"
-
-echo "Waiting for in-place upgrade to complete..."
-
-# Poll until upgrade completes
-while true; do
-  state=$(curl -s "${cloudstack_url}/?command=listKubernetesClusters&id=${cluster_id}&apiKey=${api_key}&signature=<signature>" | jq -r '.kubernetesclusters[0].state')
-  echo "Cluster state: ${state}"
-  if [[ "${state}" == "Running" ]]; then
-    echo "Upgrade complete."
-    break
-  fi
-  sleep 30
-done
-
-# === Step 2: Verify the Upgrade ===
-echo "=== Step 2: Verifying upgrade ==="
-kubectl --kubeconfig=${kubeconfig} get nodes
-kubectl --kubeconfig=${kubeconfig} version --short
-kubectl --kubeconfig=${kubeconfig} get pods -n kube-system -l k8s-app=calico-node
-kubectl --kubeconfig=${kubeconfig} get pods -n kube-system -l app.kubernetes.io/name=csi-smb-controller
-kubectl --kubeconfig=${kubeconfig} get pods -n kube-system -l k8s-app=cloudstack-ccm
-
-echo "=== Upgrade complete ==="
-echo "All components (K8s, CNI, CSI, CCM) upgraded together via ISO in-place upgrade."
-```
-
 ## Rollback
 
-If something goes wrong during the upgrade, you can rollback:
+If something goes wrong during the upgrade, you can rollback using the snapshots created in Step 2.
 
-### Rollback K8s Version
+### Rollback via Snapshot Revert
 
-CKS does **not** have a built-in rollback mechanism. To rollback:
+1. **Stop the failing cluster** (if still running):
+   ```bash
+   cmk stop kubernetescluster id=<cluster-id>
+   ```
 
-1. **Register the previous K8s version ISO** (if not already registered)
-2. **Trigger another upgrade** to the previous version:
+2. **Revert each node to its snapshot:**
+   ```bash
+   # List snapshots to find the pre-upgrade ones
+   cmk list snapshot name=cks-pre-upgrade-*
+   
+   # For each node, stop the current instance and revert to snapshot
+   cmk stop instance id=<current-node-id>
+   cmk revert snapshot id=<snapshot-id>
+   
+   # Start the reverted instance
+   cmk start instance id=<reverted-node-id>
+   ```
 
-```bash
-upgradeKubernetesCluster \
-  id=<cluster-id> \
-  kubernetesversionid=<previous-version-id>
-```
+3. **Restart the cluster:**
+   ```bash
+   cmk start kubernetescluster id=<cluster-id>
+   ```
 
-> **Warning:** Rolling back the K8s version will perform another in-place upgrade. Applications may experience downtime during the upgrade.
+4. **Verify rollback:**
+   ```bash
+   kubectl --kubeconfig=${kubeconfig} get nodes
+   kubectl --kubeconfig=${kubeconfig} version --short
+   ```
+
+> **Warning:** Rolling back via snapshot revert restores the exact state of each node at the time of the snapshot. Applications may experience downtime during the revert process.
 
 ### Rollback CNI
 
@@ -228,7 +212,7 @@ If you separately re-applied CNI manifests after the ISO upgrade, you can rollba
 kubectl apply --kubeconfig=${kubeconfig} -f calico-v3.28.yaml
 ```
 
-CSI and CCM rollback is handled by rolling back the K8s version (re-apply the previous ISO).
+CSI and CCM rollback is handled by reverting the nodes to their pre-upgrade snapshots.
 
 ## Upgrade Checklist
 
@@ -237,8 +221,9 @@ Use this checklist to ensure a smooth upgrade:
 - [ ] Document current versions (K8s, CNI, CSI, CCM)
 - [ ] Test upgrade on a non-production cluster first
 - [ ] Ensure target K8s ISO is registered in CloudStack
-- [ ] Schedule maintenance window (in-place upgrade takes time)
-- [ ] Have rollback plan ready
+- [ ] **Create instance snapshots of all K8s nodes (shutdown state preferred)**
+- [ ] Schedule maintenance window (node replacement takes time)
+- [ ] Have rollback plan ready (snapshots are your rollback mechanism)
 - [ ] Verify cluster health after each step
 - [ ] Run application health checks after full upgrade
 - [ ] Verify CNI connectivity between nodes
@@ -256,6 +241,7 @@ Use this checklist to ensure a smooth upgrade:
 | CSI pods not ready after upgrade | Check `kubectl get pods -n kube-system -l app.kubernetes.io/name=csi-smb-controller` |
 | CCM pods not ready after upgrade | Check `kubectl get pods -n kube-system -l k8s-app=cloudstack-ccm` |
 | Port forwarding broken after upgrade | Re-configure firewall rules and port forwarding in CloudStack |
+| Upgrade failed — need to rollback | Revert nodes to pre-upgrade snapshots (see Rollback section) |
 
 ## ISO-Baked Components
 
@@ -294,5 +280,3 @@ The only component you might need to upgrade separately is **CNI** — if you ne
 - [CKS Custom ISO Build Guide](./cks-custom-iso.md) — building CKS-compatible ISOs
 - [CAPC Upgrade Guide](../capc/capc-upgrade.md) — CAPC cluster upgrade procedures
 - [CNI Automation Options](../capc/cni-automation-options.md) — automating CNI installation
-
-
