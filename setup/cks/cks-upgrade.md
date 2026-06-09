@@ -342,13 +342,30 @@ For minor version bumps or switching CNI versions without rebuilding the ISO:
 
 OS-level upgrades are **separate** from CKS cluster upgrades. The CKS ISO upgrade only updates Kubernetes components (kubelet, kubeadm, containerd, CNI, CSI, CCM). It does **not** update the underlying operating system.
 
-To upgrade the OS on CKS nodes:
+Since CKS manages nodes in-place (not via node replacement), OS upgrades must also be performed **in-place** on existing nodes:
 
-1. **Create new instances** from an updated base OS template
-2. **Replace nodes** in the cluster (remove old nodes, add new ones)
-3. Or **manually upgrade** the OS on each node (requires downtime and careful coordination)
+1. **Stop the kubelet** on the node:
+   ```bash
+   ssh -i <key> -p <port> cloud@<node-ip>
+   sudo -i
+   systemctl stop kubelet
+   ```
 
-> **Note:** OS upgrades should be planned separately from CKS upgrades. Upgrading the OS without updating the CKS ISO may cause version mismatches between the OS and Kubernetes components.
+2. **Perform the OS upgrade** (e.g., `yum update` or `apt upgrade`)
+
+3. **Reboot the node** if the kernel or core libraries were updated
+
+4. **Start the kubelet** after reboot:
+   ```bash
+   systemctl start kubelet
+   ```
+
+5. **Verify the node** is back online and healthy:
+   ```bash
+   kubectl get nodes
+   ```
+
+> **Note:** OS upgrades should be planned separately from CKS upgrades. Upgrading the OS without updating the CKS ISO may cause version mismatches between the OS and Kubernetes components. Always create snapshots before performing OS upgrades.
 
 ## Related
 
