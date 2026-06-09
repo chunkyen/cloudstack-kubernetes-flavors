@@ -72,7 +72,7 @@ cmk add kubernetessupportedversion name=v1.33.1 semanticversion=1.33.1 iso=<iso-
 2. For each K8s node:
    - Select the instance
    - Click **Snapshot** → **Create Snapshot**
-   - Optionally **Stop the instance first** (shutdown state snapshots are more consistent and restore faster)
+   - **Stop the instance first** (highly recommended — shutdown state snapshots are more consistent and restore faster)
    - Name the snapshot clearly (e.g., `cks-cluster-pre-upgrade-node-1`)
 3. Verify all snapshots are created
 
@@ -81,7 +81,7 @@ cmk add kubernetessupportedversion name=v1.33.1 semanticversion=1.33.1 iso=<iso-
 # List all K8s nodes (filter by name or tag)
 cmk list instances filter=id,name,state,templatename
 
-# Stop each node (optional but recommended for consistent snapshots)
+# Stop each node (highly recommended for consistent snapshots)
 cmk stop instance id=<node-id>
 
 # Create snapshot for each node
