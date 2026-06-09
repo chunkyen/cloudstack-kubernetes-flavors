@@ -278,7 +278,7 @@ See the [official API docs](http://docs.cloudstack.apache.org/en/latest/plugins/
 **Via UI:**
 1. Navigate to **Compute** → **Kubernetes**
 2. Click on your cluster name
-3. Click the **Download kubeconfig** button (⬇️)
+3. Click the **Access** tab — the **Download Kubernetes Cluster Config** button (⬇️) appears here
 4. Save the file and apply locally:
 ```bash
 kubectl --kubeconfig=<kubeconfig-file> get nodes
@@ -300,12 +300,16 @@ kubectl --kubeconfig=kubeconfig.yaml get pods -n kube-system
 ```
 
 ### SSH to Nodes
-```bash
-# Control node (port 2222 + node_index)
-ssh -i <key> -p 2222 cloud@<VR_PUBLIC_IP>
 
-# Worker node
-ssh -i <key> -p 2223 cloud@<VR_PUBLIC_IP>
+> **Note:** SSH access is only needed for troubleshooting — it's not required for normal cluster operations.
+
+SSH ports are redirected via port forwarding rules on the public IP assigned to the API server. The port numbers increment from **2222** for each node and can be found in the **Port Forwarding** section of the public IP address details.
+
+```bash
+# Port increments from 2222 for each node
+ssh -i <key> -p 2222 cloud@<VR_PUBLIC_IP>   # node 1
+ssh -i <key> -p 2223 cloud@<VR_PUBLIC_IP>   # node 2
+ssh -i <key> -p 2224 cloud@<VR_PUBLIC_IP>   # node 3
 ```
 
 ## Step 7: Cluster Management
