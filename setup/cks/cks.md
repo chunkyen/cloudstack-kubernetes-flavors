@@ -399,20 +399,55 @@ cmk delete kubernetescluster id=<cluster-id>
 
 > **Note:** Even when the CloudStack CSI Driver is deployed automatically during cluster creation (via the **Enable CloudStack CSI Driver** toggle in Advanced Settings), you still need to create a StorageClass manually — the driver does not provision one by default.
 
+### Prerequisite: Create a Disk Offering
+
+Before creating the StorageClass, you need a **Disk Offering** that the CSI driver will use to provision volumes. For flexibility, use a **Custom Disk Offering** so PVs can be sized to any requirement.
+
 **Via UI:**
-1. Navigate to **Compute** → **Kubernetes** → select your cluster
-2. Go to the **Storage** tab
-3. Click **Add StorageClass**
-4. Configure:
-   - **Name:** e.g. `cloudstack-sc`
-   - **Provisioner:** `cloudstack.csi.io`
-   - **Reclaim policy:** `Delete` (or `Retain` for production)
-   - **Volume binding mode:** `WaitForFirstConsumer`
-5. Click **Create**
+1. Go to **Infrastructure** → **Disk Offerings**
+2. Click **Add Disk Offering**
+3. Configure:
+   - **Name:** e.g. `custom-disk-offering`
+   - **Display Text:** `Custom Disk Offering`
+   - **Disk Size (MB):** Enter your desired size (e.g., `10240` for 10 GB) — this is the minimum size; volumes can be expanded beyond this
+   - **IOPS Max / IOPS Min:** Leave default or set as needed
+   - **For System VM:** Uncheck (unless for system use)
+4. Click **Create**
+5. Note the **ID** of the disk offering — you'll need it for the StorageClass
 
 **Via cmk:**
 ```bash
-cmk create storageclass name=cloudstack-sc provisioner=cloudstack.csi.io reclaimpolicy=Delete volumebindingmode=WaitForFirstConsumer
+cmk create diskoffering name=custom-disk-offering displaytext="Custom Disk Offering" disksize=10240 issystem=false
+cmk list diskoffering filter=name,id,displaytext
+```
+
+### Create the StorageClass
+
+StorageClass is created via `kubectl` only — there is no UI or cmk equivalent.
+
+1. **Get your kubeconfig** (see [Step 6](#get-kubeconfig))
+2. **Find the Disk Offering ID:**
+```bash
+# From cmk output, or list via API
+list diskoffering name=custom-disk-offering filter=id
+```
+3. **Apply the StorageClass manifest:**
+```yaml
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: cloudstack-custom
+provisioner: csi.cloudstack.apache.org
+reclaimPolicy: Delete
+volumeBindingMode: WaitForFirstConsumer
+allowVolumeExpansion: true
+parameters:
+  csi.cloudstack.apache.org/disk-offering-id: <disk-offering-id>
+```
+
+Replace `<disk-offering-id>` with the actual ID from your Disk Offering. Apply it:
+```bash
+kubectl apply -f storageclass.yaml
 ```
 
 **Verify:**
