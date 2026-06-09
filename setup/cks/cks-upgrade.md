@@ -305,7 +305,11 @@ If the upgrade process reports **failed** and gets stuck (e.g., control plane no
    kubectl get pods -n kube-system
    ```
 
-> **Note:** After manual recovery, CloudStack may still show the old K8s version in the UI. This is because CloudStack's internal state tracking only updates when it performs the upgrade itself — it has no way to detect that you manually upgraded the nodes. The actual node versions (confirmed via `kubectl`) are the source of truth. The CloudStack UI version display will remain stale until you trigger another upgrade attempt or the management server re-syncs.
+> **⚠️ Critical:** After manual recovery, CloudStack will still show the old K8s version in the UI. This is because CloudStack's internal state tracking only updates when it performs the upgrade itself — it has no way to detect that you manually upgraded the nodes. The actual node versions (confirmed via `kubectl`) are the source of truth.
+>
+> This stale state is a **blocker for future upgrades**. Kubernetes enforces a 2-version skew policy — if CloudStack thinks your cluster is at v1.34 but nodes are at v1.35, the next upgrade to v1.36 will be blocked.
+>
+> **Resolution:** After manual recovery completes successfully, trigger another upgrade via CloudStack to the **current** version (the one the nodes are already at). CloudStack should detect that nodes are already at the target version and either skip the upgrade or complete it instantly, which will sync CloudStack's internal state to the correct version. After this sync, you'll be able to upgrade to the next version normally.
 
 ## How CKS Upgrades Work
 
