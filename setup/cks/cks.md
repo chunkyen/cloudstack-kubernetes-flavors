@@ -274,14 +274,28 @@ See the [official API docs](http://docs.cloudstack.apache.org/en/latest/plugins/
 ## Step 6: Access Your Cluster
 
 ### Get kubeconfig
-```bash
-# Via API
-# The createKubernetesCluster response includes kubeconfig data
-# Or use the UI to download the kubeconfig file
 
-# Apply locally
+**Via UI:**
+1. Navigate to **Compute** → **Kubernetes**
+2. Click on your cluster name
+3. Click the **Download kubeconfig** button (⬇️)
+4. Save the file and apply locally:
+```bash
 kubectl --kubeconfig=<kubeconfig-file> get nodes
 kubectl --kubeconfig=<kubeconfig-file> get pods -n kube-system
+```
+
+**Via cmk (CloudMonkey):**
+```bash
+# List clusters and find your cluster ID
+list kubernetescluster name=my-cks-cluster
+
+# Download kubeconfig (returns base64-encoded content)
+downloadKubernetesClusterKubeconfig id=<cluster-id>
+
+# Decode and save
+base64 -d < kubeconfig.b64 > kubeconfig.yaml
+kubectl --kubeconfig=kubeconfig.yaml get nodes
 ```
 
 ### SSH to Nodes
