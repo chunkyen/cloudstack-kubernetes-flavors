@@ -363,25 +363,25 @@ If the upgrade process reports **failed** and gets stuck (e.g., control plane no
 >
 > 5. **Find the MySQL `id` for the version you want:**
 >
->    Query the `kubernetes_supported_version` table to find the row matching the `name` and `semantic_version` from step 1:
+>    Query the `kubernetes_supported_version` table to find the row matching the `name` and `semantic_version` from step 1. The `id` column is an auto-increment integer (e.g., `1`, `2`, `3`, `4`), **not** a UUID:
 >    ```sql
 >    SELECT id, name, semantic_version FROM kubernetes_supported_version WHERE name = 'kube cilium 1.35' AND semantic_version = '1.35.0';
 >    ```
 >    Example output:
 >    ```
->    +--------------------------------------+------------------------+------------------+
->    | id                                 | name                   | semantic_version |
->    +--------------------------------------+------------------------+------------------+
->    | 31074064-17fe-49f2-a840-2e80165e749d | kube cilium 1.35       | 1.35.0           |
->    +--------------------------------------+------------------------+------------------+
+>    +----+------------------------+------------------+
+>    | id | name                   | semantic_version |
+>    +----+------------------------+------------------+
+>    |  4 | kube cilium 1.35       | 1.35.0           |
+>    +----+------------------------+------------------+
 >    ```
->    Note the MySQL `id` (e.g., `31074064-17fe-49f2-a840-2e80165e749d`).
+>    Note the MySQL `id` (e.g., `4`).
 >
 > 6. **Update the cluster to reference the correct version:**
 >    ```sql
->    UPDATE kubernetes_cluster SET kubernetes_version_id = '<mysql-id>' WHERE name = '<cluster-name>';
+>    UPDATE kubernetes_cluster SET kubernetes_version_id = <mysql-id> WHERE name = '<cluster-name>';
 >    ```
->    Replace `<mysql-id>` with the MySQL `id` from step 5 (e.g., `31074064-17fe-49f2-a840-2e80165e749d`) and `<cluster-name>` with your cluster name (e.g., `kubetest`).
+>    Replace `<mysql-id>` with the MySQL `id` from step 5 (e.g., `4`) and `<cluster-name>` with your cluster name (e.g., `kubetest`).
 >
 > 7. **Verify the change:**
 >    ```sql
