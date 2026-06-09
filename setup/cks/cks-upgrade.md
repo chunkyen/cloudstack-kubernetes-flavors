@@ -332,14 +332,13 @@ If the upgrade process reports **failed** and gets stuck (e.g., control plane no
 >    ```
 >    Example output:
 >    ```
->    +------------------------+------------------+
->    | name                   | semanticversion  |
->    +------------------------+------------------+
->    | Kube 1.33.1 calico     | 1.33.1           |
->    | Kube 1.32.5 calico     | 1.32.5           |
->    | kube-cilium-1.34.2     | 1.34.2           |
->    | kube cilium 1.35       | 1.35.0           |
->    +------------------------+------------------+
+>    id = 39fa481b-0b6d-46be-8009-11ff1d2970bb
+>    name = kube 1.35.0 calico
+>    semanticversion = 1.35.0
+>    ================================================================================
+>    id = a2491974-7420-478e-b1b4-7d229f061cd0
+>    name = kube cilium 1.36
+>    semanticversion = 1.36.0
 >    ```
 >    Note the `semanticversion` of the correct version (e.g., `1.35.0`).
 >
