@@ -84,8 +84,8 @@ From ACS 4.21+, you can register custom templates for CKS.
 
 **Prerequisites for CKS templates:**
 - Minimum: 8GB root disk, 2 CPU, 2GB RAM
-- SSH public key of `cloud` user at `~/.ssh/authorized_keys`
-- Pre-installed packages (see [official docs](http://docs.cloudstack.apache.org/en/latest/plugins/cloudstack-kubernetes-service.html))
+- SSH public key of `cloud` user — injected via cloud-init during deployment, **not** pre-registered in the template
+- Required packages — see [official docs](https://docs.cloudstack.apache.org/en/latest/plugins/cloudstack-kubernetes-service.html#build-a-custom-template-to-use-for-kubernetes-clusters-nodes)
 
 ## Step 5: Create a Kubernetes Cluster
 
