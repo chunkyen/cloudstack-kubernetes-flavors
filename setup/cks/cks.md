@@ -287,15 +287,13 @@ kubectl --kubeconfig=<kubeconfig-file> get pods -n kube-system
 
 **Via cmk (CloudMonkey):**
 ```bash
-# List clusters and find your cluster ID
-list kubernetescluster name=my-cks-cluster
-
-# Download kubeconfig (returns base64-encoded content)
-downloadKubernetesClusterKubeconfig id=<cluster-id>
-
-# Decode and save
-base64 -d < kubeconfig.b64 > kubeconfig.yaml
+cmk> list kubernetescluster name=my-cks-cluster
+cmk> get kubernetesclusterconfig id=<cluster-id>
+```
+The command outputs the kubeconfig directly. Save it and apply locally:
+```bash
 kubectl --kubeconfig=kubeconfig.yaml get nodes
+kubectl --kubeconfig=kubeconfig.yaml get pods -n kube-system
 ```
 
 ### SSH to Nodes
