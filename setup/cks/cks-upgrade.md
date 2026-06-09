@@ -305,11 +305,9 @@ If the upgrade process reports **failed** and gets stuck (e.g., control plane no
    kubectl get pods -n kube-system
    ```
 
-## ISO-Baked Components
+## How CKS Upgrades Work
 
-### What's Baked Into the CKS ISO
-
-The CKS ISO contains all the following components, which upgrade together when you upgrade the K8s version:
+The CKS ISO bundles all core Kubernetes components. When you upgrade the K8s version, CloudStack applies the new ISO to existing nodes and upgrades them in place — kubelet, kubeadm, containerd, CNI, CSI driver, and CCM all upgrade together automatically.
 
 | Component | Upgraded with ISO? |
 |-----------|-------------------|
@@ -320,14 +318,18 @@ The CKS ISO contains all the following components, which upgrade together when y
 | CSI driver | ✅ Yes |
 | CCM (CloudStack K8s Provider) | ✅ Yes |
 
-### When You Need to Re-apply Manifests
+## CNI Management
 
-The only component you might need to upgrade separately is **CNI** — if you need a CNI version different from what's baked into the ISO. In that case:
+The only component you may need to manage separately from the ISO is **CNI**. Use the guidance below to decide the right approach.
+
+### When to Re-apply Manifests
+
+For minor version bumps or switching CNI versions, re-applying manifests is sufficient:
 
 1. Upgrade K8s version via CloudStack (upgrades everything else automatically)
 2. Re-apply CNI manifests to get the desired CNI version
 
-### When to Rebuild the ISO for CNI
+### When to Rebuild the ISO
 
 | Scenario | Approach |
 |----------|----------|
