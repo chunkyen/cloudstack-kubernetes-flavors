@@ -100,7 +100,7 @@ Via UI:
    - **Network:** Select network (or use default)
    - **Kubernetes Version:** Select from registered versions
    - **Control Nodes:** `1` (or `3` for HA)
-   - **Worker Nodes:** `2` (or more)
+   - **Worker Nodes:** `1` or more
    - **Etcd Nodes:** `0` (or ≥1 for dedicated etcd)
 3. Click **Create**
 
@@ -117,7 +117,7 @@ createKubernetesCluster \
   etcdnodes=0
 ```
 
-## Step 6: Advanced Settings (ACS 4.21+)
+### Advanced Settings (ACS 4.21+)
 
 From CloudStack 4.21+, the cluster creation form includes an **Advanced Settings** toggle that unlocks granular control over each node type. This enables heterogeneous clusters where control, worker, and etcd nodes can use different templates, service offerings, and even hypervisor types.
 
@@ -271,7 +271,7 @@ The `createKubernetesCluster` API accepts additional parameters when advanced se
 
 See the [official API docs](http://docs.cloudstack.apache.org/en/latest/plugins/cloudstack-kubernetes-service.html) for the complete parameter list.
 
-## Step 7: Access Your Cluster
+## Step 6: Access Your Cluster
 
 ### Get kubeconfig
 ```bash
@@ -293,7 +293,7 @@ ssh -i <key> -p 2222 cloud@<VR_PUBLIC_IP>
 ssh -i <key> -p 2223 cloud@<VR_PUBLIC_IP>
 ```
 
-## Step 8: Cluster Management
+## Step 7: Cluster Management
 
 ### Scale Cluster
 
