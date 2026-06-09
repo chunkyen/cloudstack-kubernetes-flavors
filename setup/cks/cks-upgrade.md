@@ -328,20 +328,20 @@ If the upgrade process reports **failed** and gets stuck (e.g., control plane no
 >
 >    Look up the available versions to find the one you want to update to:
 >    ```bash
->    cmk list kubernetessupportedversions filter=id,name,semanticversion
+>    cmk list kubernetessupportedversions filter=name,semanticversion
 >    ```
 >    Example output:
 >    ```
->    +----+--------------------------------------+------------------------+------------------+
->    | id | uuid                                 | name                   | semanticversion  |
->    +----+--------------------------------------+------------------------+------------------+
->    |  1 | 8db73535-2608-4dbc-8a92-83d56a269794 | Kube 1.33.1 calico     | 1.33.1           |
->    |  2 | 0b76a439-4ce0-4b5b-a33d-ba4d5a72c83a | Kube 1.32.5 calico     | 1.32.5           |
->    |  3 | af72f314-862d-4d45-9bdd-ba1d15230834 | kube-cilium-1.34.2     | 1.34.2           |
->    |  4 | 31074064-17fe-49f2-a840-2e80165e749d | kube cilium 1.35       | 1.35.0           |
->    +----+--------------------------------------+------------------------+------------------+
+>    +------------------------+------------------+
+>    | name                   | semanticversion  |
+>    +------------------------+------------------+
+>    | Kube 1.33.1 calico     | 1.33.1           |
+>    | Kube 1.32.5 calico     | 1.32.5           |
+>    | kube-cilium-1.34.2     | 1.34.2           |
+>    | kube cilium 1.35       | 1.35.0           |
+>    +------------------------+------------------+
 >    ```
->    Note the `id` of the correct version (e.g., `4` for `1.35.0`).
+>    Note the `semanticversion` of the correct version (e.g., `1.35.0`).
 >
 > 2. **Stop the CloudStack management server:**
 >    ```bash
