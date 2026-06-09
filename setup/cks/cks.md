@@ -287,8 +287,11 @@ kubectl --kubeconfig=<kubeconfig-file> get pods -n kube-system
 
 **Via cmk (CloudMonkey):**
 ```bash
-cmk> list kubernetescluster name=my-cks-cluster
-cmk> get kubernetesclusterconfig id=<cluster-id>
+cmk list kubernetescluster filter=name,id
+```
+Take note of the cluster `id`, then:
+```bash
+cmk get kubernetesclusterconfig id=<cluster-id>
 ```
 The command outputs the kubeconfig directly. Save it and apply locally:
 ```bash
