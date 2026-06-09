@@ -305,6 +305,8 @@ If the upgrade process reports **failed** and gets stuck (e.g., control plane no
    kubectl get pods -n kube-system
    ```
 
+> **Note:** After manual recovery, CloudStack may still show the old K8s version in the UI. This is because CloudStack's internal state tracking only updates when it performs the upgrade itself — it has no way to detect that you manually upgraded the nodes. The actual node versions (confirmed via `kubectl`) are the source of truth. The CloudStack UI version display will remain stale until you trigger another upgrade attempt or the management server re-syncs.
+
 ## How CKS Upgrades Work
 
 The CKS ISO bundles all core Kubernetes components. When you upgrade the K8s version, CloudStack applies the new ISO to existing nodes and upgrades them in place — kubelet, kubeadm, containerd, CNI, CSI driver, and CCM all upgrade together automatically.
