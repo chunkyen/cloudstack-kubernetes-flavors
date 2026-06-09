@@ -20,12 +20,6 @@
    service cloudstack-management restart
    ```
 
-### Via API
-```bash
-updateGlobalConfiguration name=cloud.kubernetes.service.enabled value=true
-updateGlobalConfiguration name=endpoint.url value=http://<mgmt-server>:8080/client/api
-```
-
 After restart, the **Kubernetes** tab appears under **Compute** in the UI.
 
 ## Step 2: Register Network Offering
@@ -59,18 +53,6 @@ After building or downloading an ISO, register it:
 
 **Via UI:** **Infrastructure** → **Kubernetes** → **Supported Versions** → **Add Kubernetes Supported Version**
 
-**Via API:**
-```bash
-addKubernetesSupportedVersion \
-  name=v1.33.1 \
-  semanticversion=1.33.1 \
-  url=http://<server>/setup-v1.33.1.iso \
-  zoneid=<zone-id> \
-  mincpunumber=2 \
-  minmemory=2048 \
-  checksum=<iso-checksum>
-```
-
 ## Step 4: (Optional) Register CKS-Compatible Templates
 
 From ACS 4.21+, you can register custom templates for CKS.
@@ -103,19 +85,6 @@ Via UI:
    - **Worker Nodes:** `1` or more
    - **Etcd Nodes:** `0` (or ≥1 for dedicated etcd)
 3. Click **Create**
-
-Via API:
-```bash
-createKubernetesCluster \
-  name=my-cks-cluster \
-  domainid=<domain-id> \
-  zoneid=<zone-id> \
-  networkid=<network-id> \
-  kubernetesversionid=<version-id> \
-  controlnodes=3 \
-  workernodes=2 \
-  etcdnodes=0
-```
 
 ### Advanced Settings (ACS 4.21+)
 
@@ -256,20 +225,6 @@ runcmd:
 6. Select CNI configuration if needed
 7. **Enable CloudStack CSI Driver** if persistent storage is needed (disabled by default)
 8. Click **Create**
-
-#### API Equivalent
-The `createKubernetesCluster` API accepts additional parameters when advanced settings are used:
-- `controltemplateid` — Template ID for control nodes
-- `controlserviceofferingid` — Service offering for control nodes
-- `workertemplateid` — Template ID for worker nodes
-- `workerserviceofferingid` — Service offering for worker nodes
-- `etcdtemplateid` — Template ID for etcd nodes (if etcdnodes ≥ 1)
-- `etcdserviceofferingid` — Service offering for etcd nodes
-- `hypervisortype` — Hypervisor type filter
-- `cniconfigurationid` — CNI configuration ID
-- `enablecloudstackcsidriver` — Enable CloudStack CSI Driver deployment (disabled by default)
-
-See the [official API docs](http://docs.cloudstack.apache.org/en/latest/plugins/cloudstack-kubernetes-service.html) for the complete parameter list.
 
 ## Step 6: Access Your Cluster
 
@@ -428,8 +383,7 @@ StorageClass is created via `kubectl` only — there is no UI or cmk equivalent.
 1. **Get your kubeconfig** (see [Step 6](#get-kubeconfig))
 2. **Find the Disk Offering ID:**
 ```bash
-# From cmk output, or list via API
-list diskoffering name=custom-disk-offering filter=id
+cmk list diskoffering name=custom-disk-offering filter=id
 ```
 3. **Apply the StorageClass manifest:**
 ```yaml
