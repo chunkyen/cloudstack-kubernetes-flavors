@@ -335,13 +335,20 @@ If the upgrade process reports **failed** and gets stuck (e.g., control plane no
 >    ```
 >
 > 4. **Find the correct `kubernetes_version_id`:**
->    ```sql
->    SELECT id, name, semantic_version FROM kubernetes_supported_version;
+>
+>    First, find the version ID that CloudStack currently thinks the cluster is at:
+>    ```bash
+>    cmk list kubernetescluster name=<cluster-name> filter=id,name,kubernetesversionid
 >    ```
->    Look for the version that matches your actual node version (check with `kubectl version --short`), e.g.:
+>
+>    Then, look up the available versions to find the one you want to update to:
+>    ```bash
+>    cmk list kubernetessupportedversions filter=id,name,semanticversion
+>    ```
+>    Example output:
 >    ```
 >    +----+--------------------------------------+------------------------+------------------+
->    | id | uuid                                 | name                   | semantic_version |
+>    | id | uuid                                 | name                   | semanticversion  |
 >    +----+--------------------------------------+------------------------+------------------+
 >    |  1 | 8db73535-2608-4dbc-8a92-83d56a269794 | Kube 1.33.1 calico     | 1.33.1           |
 >    |  2 | 0b76a439-4ce0-4b5b-a33d-ba4d5a72c83a | Kube 1.32.5 calico     | 1.32.5           |
@@ -349,7 +356,7 @@ If the upgrade process reports **failed** and gets stuck (e.g., control plane no
 >    |  4 | 31074064-17fe-49f2-a840-2e80165e749d | kube cilium 1.35       | 1.35.0           |
 >    +----+--------------------------------------+------------------------+------------------+
 >    ```
->    Note the `id` of the matching version (e.g., `4` for `1.35.0`).
+>    Note the `id` of the correct version (e.g., `4` for `1.35.0`).
 >
 > 5. **Update the cluster to reference the correct version:**
 >    ```sql
