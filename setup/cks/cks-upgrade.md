@@ -319,17 +319,7 @@ If the upgrade process reports **failed** and gets stuck (e.g., control plane no
 >
 > **Steps:**
 >
-> 1. **Stop the CloudStack management server:**
->    ```bash
->    service cloudstack-management stop
->    ```
->
-> 2. **Backup the database:**
->    ```bash
->    mysqldump -u root -p cloud > cloudstack_backup_$(date +%Y%m%d_%H%M%S).sql
->    ```
->
-> 3. **Gather information using cmk (before connecting to MySQL):**
+> 1. **Gather information using cmk (management server must still be running):**
 >
 >    Find the version ID that CloudStack currently thinks the cluster is at:
 >    ```bash
@@ -353,6 +343,16 @@ If the upgrade process reports **failed** and gets stuck (e.g., control plane no
 >    ```
 >    Note the `id` of the correct version (e.g., `4` for `1.35.0`).
 >
+> 2. **Stop the CloudStack management server:**
+>    ```bash
+>    service cloudstack-management stop
+>    ```
+>
+> 3. **Backup the database:**
+>    ```bash
+>    mysqldump -u root -p cloud > cloudstack_backup_$(date +%Y%m%d_%H%M%S).sql
+>    ```
+>
 > 4. **Connect to the CloudStack database:**
 >    ```bash
 >    mysql -u root -p cloud
@@ -362,7 +362,7 @@ If the upgrade process reports **failed** and gets stuck (e.g., control plane no
 >    ```sql
 >    UPDATE kubernetes_cluster SET kubernetes_version_id = <version-id> WHERE name = '<cluster-name>';
 >    ```
->    Replace `<version-id>` with the ID from the previous step (e.g., `4`) and `<cluster-name>` with your cluster name (e.g., `kubetest`).
+>    Replace `<version-id>` with the ID from step 1 (e.g., `4`) and `<cluster-name>` with your cluster name (e.g., `kubetest`).
 >
 > 6. **Verify the change:**
 >    ```sql
