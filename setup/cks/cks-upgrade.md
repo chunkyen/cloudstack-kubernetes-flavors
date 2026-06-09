@@ -334,20 +334,32 @@ If the upgrade process reports **failed** and gets stuck (e.g., control plane no
 >    mysql -u root -p cloud
 >    ```
 >
-> 4. **Find your cluster and current version:**
+> 4. **Find the correct `kubernetes_version_id`:**
 >    ```sql
->    SELECT id, name, version FROM kubernetes_clusters WHERE name = 'your-cluster-name';
+>    SELECT id, name, semantic_version FROM kubernetes_supported_version;
 >    ```
+>    Look for the version that matches your actual node version (check with `kubectl version --short`), e.g.:
+>    ```
+>    +----+--------------------------------------+------------------------+------------------+
+>    | id | uuid                                 | name                   | semantic_version |
+>    +----+--------------------------------------+------------------------+------------------+
+>    |  1 | 8db73535-2608-4dbc-8a92-83d56a269794 | Kube 1.33.1 calico     | 1.33.1           |
+>    |  2 | 0b76a439-4ce0-4b5b-a33d-ba4d5a72c83a | Kube 1.32.5 calico     | 1.32.5           |
+>    |  3 | af72f314-862d-4d45-9bdd-ba1d15230834 | kube-cilium-1.34.2     | 1.34.2           |
+>    |  4 | 31074064-17fe-49f2-a840-2e80165e749d | kube cilium 1.35       | 1.35.0           |
+>    +----+--------------------------------------+------------------------+------------------+
+>    ```
+>    Note the `id` of the matching version (e.g., `4` for `1.35.0`).
 >
-> 5. **Update the version to match the actual node version:**
+> 5. **Update the cluster to reference the correct version:**
 >    ```sql
->    UPDATE kubernetes_clusters SET version = 'v1.35.0' WHERE id = '<cluster-id>';
+>    UPDATE kubernetes_cluster SET kubernetes_version_id = <version-id> WHERE name = '<cluster-name>';
 >    ```
->    Replace `v1.35.0` with the actual Kubernetes version your nodes are running (check with `kubectl version --short`).
+>    Replace `<version-id>` with the ID from the previous step (e.g., `4`) and `<cluster-name>` with your cluster name (e.g., `kubetest`).
 >
 > 6. **Verify the change:**
 >    ```sql
->    SELECT id, name, version FROM kubernetes_clusters WHERE id = '<cluster-id>';
+>    SELECT id, name, kubernetes_version_id FROM kubernetes_cluster WHERE name = '<cluster-name>';
 >    ```
 >
 > 7. **Restart CloudStack management server:**
