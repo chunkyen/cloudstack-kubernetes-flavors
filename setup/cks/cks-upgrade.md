@@ -250,7 +250,20 @@ If the upgrade process reports **failed** and gets stuck (e.g., control plane no
    kubectl cordon <worker-node-name>
    ```
 
-3. **SSH to the worker node and mount the ISO** (the ISO is already attached by CKS from the failed upgrade):
+3. **Re-attach the upgrade ISO to the worker node** (the ISO is detached after a failed upgrade):
+
+   **Via UI:**
+   1. Go to **Compute** → **Instances**
+   2. Select the worker node
+   3. Click **ISO** → **Attach ISO**
+   4. Select the upgrade ISO and click **Attach**
+
+   **Via cmk:**
+   ```bash
+   cmk attachiso instanceid=<worker-node-id> iso=<iso-name-or-id>
+   ```
+
+4. **SSH to the worker node and mount the ISO:**
    ```bash
    ssh -i <key> -p <port> cloud@<worker-node-ip>
    sudo -i
@@ -270,7 +283,7 @@ If the upgrade process reports **failed** and gets stuck (e.g., control plane no
    systemctl start kubelet
    ```
 
-5. **Verify and clean up:**
+6. **Verify and clean up:**
    ```bash
    # Verify the node is upgraded
    kubectl get nodes
@@ -280,19 +293,17 @@ If the upgrade process reports **failed** and gets stuck (e.g., control plane no
    exit
    ```
 
-6. **Repeat steps 2–5** for each remaining worker node, then uncordon them:
+7. **Repeat steps 3–6** for each remaining worker node, then uncordon them:
    ```bash
    kubectl uncordon <worker-node-name>
    ```
 
-7. **Verify the full cluster:**
+8. **Verify the full cluster:**
    ```bash
    kubectl get nodes
    kubectl version --short
    kubectl get pods -n kube-system
    ```
-
-> **Tip:** The ISO is automatically attached to nodes during the CKS upgrade process. If the ISO is not mounted, check the CloudStack UI — it may still be attached from the failed upgrade attempt.
 
 ## ISO-Baked Components
 
