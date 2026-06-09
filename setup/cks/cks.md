@@ -409,15 +409,15 @@ Before creating the StorageClass, you need a **Disk Offering** that the CSI driv
 3. Configure:
    - **Name:** e.g. `custom-disk-offering`
    - **Display Text:** `Custom Disk Offering`
-   - **Disk Size (MB):** Enter your desired size (e.g., `10240` for 10 GB) — this is the minimum size; volumes can be expanded beyond this
+   - **Disk Size (MB):** Leave blank (do **not** enter a fixed size)
+   - **Check "Custom Disk Size"** — this is essential; without it, PVs are locked to the disk offering's fixed size and cannot be resized
    - **IOPS Max / IOPS Min:** Leave default or set as needed
-   - **For System VM:** Uncheck (unless for system use)
 4. Click **Create**
 5. Note the **ID** of the disk offering — you'll need it for the StorageClass
 
 **Via cmk:**
 ```bash
-cmk create diskoffering name=custom-disk-offering displaytext="Custom Disk Offering" disksize=10240 issystem=false
+cmk create diskoffering name=custom-disk-offering displaytext="Custom Disk Offering" disksize=0 issystem=false
 cmk list diskoffering filter=name,id,displaytext
 ```
 
