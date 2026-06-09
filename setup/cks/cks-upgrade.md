@@ -202,16 +202,6 @@ If something goes wrong during the upgrade, you can rollback using the snapshots
 
 > **Warning:** Rolling back via snapshot revert restores the exact state of each node at the time of the snapshot. Applications may experience downtime during the revert process.
 
-### Rollback CNI
-
-If you separately re-applied CNI manifests after the ISO upgrade, you can rollback by re-applying the old CNI manifests:
-
-```bash
-kubectl apply --kubeconfig=${kubeconfig} -f calico-v3.28.yaml
-```
-
-CSI and CCM rollback is handled by reverting the nodes to their pre-upgrade snapshots.
-
 ## Upgrade Checklist
 
 Use this checklist to ensure a smooth upgrade:
