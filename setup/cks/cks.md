@@ -324,13 +324,10 @@ ssh -i <key> -p 2224 cloud@<VR_PUBLIC_IP>   # node 3
 3. Adjust worker or control node count, or select a new service offering (compute spec)
 4. Click **OK**
 
-**API:**
+**cmk:**
 ```bash
-# Scale workers (change node count)
-scaleKubernetesCluster id=<cluster-id> workernodes=5
-
-# Scale control nodes (requires HA setup)
-scaleKubernetesCluster id=<cluster-id> controlnodes=5
+cmk scale kubernetescluster id=<cluster-id> workernodes=5
+cmk scale kubernetescluster id=<cluster-id> controlnodes=5
 ```
 
 ### Upgrade Cluster
@@ -347,9 +344,9 @@ scaleKubernetesCluster id=<cluster-id> controlnodes=5
 3. Select the target Kubernetes version
 4. Click **OK**
 
-**API:**
+**cmk:**
 ```bash
-upgradeKubernetesCluster id=<cluster-id> kubernetesversionid=<new-version-id>
+cmk upgrade kubernetescluster id=<cluster-id> kubernetesversionid=<new-version-id>
 ```
 
 ### Add Pre-created Worker Nodes
@@ -362,16 +359,14 @@ upgradeKubernetesCluster id=<cluster-id> kubernetesversionid=<new-version-id>
 3. Select VMs from the same network as the cluster
 4. Click **OK**
 
-**API:**
+**cmk:**
 ```bash
-addKubernetesClusterNode \
-  id=<cluster-id> \
-  instanceids=<vm-id-1>,<vm-id-2>
+cmk add kubernetesclusternode id=<cluster-id> instanceids=<vm-id-1>,<vm-id-2>
 ```
 
 ### Remove Worker Nodes
 ```bash
-removeKubernetesClusterNode id=<cluster-id> instanceids=<vm-id-1>
+cmk remove kubernetesclusternode id=<cluster-id> instanceids=<vm-id-1>
 ```
 
 ### Stop/Start Cluster
@@ -382,10 +377,10 @@ removeKubernetesClusterNode id=<cluster-id> instanceids=<vm-id-1>
    - **Stop** appears when the cluster is running
    - **Start** appears when the cluster is stopped
 
-**API:**
+**cmk:**
 ```bash
-stopKubernetesCluster id=<cluster-id>
-startKubernetesCluster id=<cluster-id>
+cmk stop kubernetescluster id=<cluster-id>
+cmk start kubernetescluster id=<cluster-id>
 ```
 
 ### Delete Cluster
@@ -395,12 +390,12 @@ startKubernetesCluster id=<cluster-id>
 2. Click the **Delete** icon (🗑)
 3. Confirm deletion
 
-**API:**
+**cmk:**
 ```bash
-deleteKubernetesCluster id=<cluster-id>
+cmk delete kubernetescluster id=<cluster-id>
 ```
 
-## Step 9: Monitoring & Verification
+## Step 8: Monitoring & Verification
 
 ```bash
 # Check node status
