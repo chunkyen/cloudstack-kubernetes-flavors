@@ -20,6 +20,16 @@
    service cloudstack-management restart
    ```
 
+### Via cmk
+```bash
+cmk update globalconfiguration name=cloud.kubernetes.service.enabled value=true
+cmk update globalconfiguration name=endpoint.url value=http://<mgmt-server>:8080/client/api
+```
+Then restart the management server:
+```bash
+service cloudstack-management restart
+```
+
 After restart, the **Kubernetes** tab appears under **Compute** in the UI.
 
 ## Step 2: Register Network Offering
@@ -30,6 +40,11 @@ Ensure a default network offering is configured:
 3. Set it as default:
    - Global setting: `cloud.kubernetes.cluster.network.offering`
    - Value: `DefaultNetworkOfferingforKubernetesService`
+
+**Via cmk:**
+```bash
+cmk update globalconfiguration name=cloud.kubernetes.cluster.network.offering value=DefaultNetworkOfferingforKubernetesService
+```
 
 ## Step 3: Register Kubernetes Binaries ISO
 
@@ -53,6 +68,12 @@ After building or downloading an ISO, register it:
 
 **Via UI:** **Infrastructure** → **Kubernetes** → **Supported Versions** → **Add Kubernetes Supported Version**
 
+**Via cmk:**
+```bash
+cmk registeriso name=v1.33.1 url=http://<server>/setup-v1.33.1.iso zoneid=<zone-id> checksum=<iso-checksum> isextractable=true ispublic=true bootable=true
+cmk add kubernetessupportedversion name=v1.33.1 semanticversion=1.33.1 iso=<iso-name-or-id> zoneid=<zone-id> mincpunumber=2 minmemory=2048
+```
+
 ## Step 4: (Optional) Register CKS-Compatible Templates
 
 From ACS 4.21+, you can register custom templates for CKS.
@@ -63,6 +84,11 @@ From ACS 4.21+, you can register custom templates for CKS.
 2. Fill in template details
 3. **Check the "For CKS" option**
 4. Register (base image should have prerequisites installed)
+
+**Via cmk:**
+```bash
+cmk register template name=cks-custom-template url=http://<server>/cks-template.qcow2 zoneid=<zone-id> ostypeid=<os-type-id> isextractable=true ispublic=true isfeatured=true forcks=true
+```
 
 **Prerequisites for CKS templates:**
 - Minimum: 8GB root disk, 2 CPU, 2GB RAM
