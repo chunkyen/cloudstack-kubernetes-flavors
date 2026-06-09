@@ -395,7 +395,45 @@ cmk start kubernetescluster id=<cluster-id>
 cmk delete kubernetescluster id=<cluster-id>
 ```
 
-## Step 8: Monitoring & Verification
+## Step 8: Create Storage Class
+
+> **Note:** Even when the CloudStack CSI Driver is deployed automatically during cluster creation (via the **Enable CloudStack CSI Driver** toggle in Advanced Settings), you still need to create a StorageClass manually — the driver does not provision one by default.
+
+**Via UI:**
+1. Navigate to **Compute** → **Kubernetes** → select your cluster
+2. Go to the **Storage** tab
+3. Click **Add StorageClass**
+4. Configure:
+   - **Name:** e.g. `cloudstack-sc`
+   - **Provisioner:** `cloudstack.csi.io`
+   - **Reclaim policy:** `Delete` (or `Retain` for production)
+   - **Volume binding mode:** `WaitForFirstConsumer`
+5. Click **Create**
+
+**Via cmk:**
+```bash
+cmk create storageclass name=cloudstack-sc provisioner=cloudstack.csi.io reclaimpolicy=Delete volumebindingmode=WaitForFirstConsumer
+```
+
+**Verify:**
+```bash
+kubectl get storageclass
+cat <<EOF | kubectl apply -f -
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: test-pvc
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+EOF
+kubectl get pvc
+```
+
+## Step 9: Monitoring & Verification
 
 ```bash
 # Check node status
