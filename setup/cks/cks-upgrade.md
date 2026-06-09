@@ -230,6 +230,87 @@ Use this checklist to ensure a smooth upgrade:
 | CCM pods not ready after upgrade | Check `kubectl get pods -n kube-system -l k8s-app=cloudstack-ccm` |
 | Port forwarding broken after upgrade | Re-configure firewall rules and port forwarding in CloudStack |
 | Upgrade failed — need to rollback | Revert nodes to pre-upgrade snapshots (see Rollback section) |
+| Upgrade stuck on first node (control plane upgraded, workers never transition) | See manual recovery below |
+
+### Upgrade Stuck — Manual Recovery
+
+If the upgrade process reports **failed** and gets stuck (e.g., control plane node completed successfully but worker nodes never transition), it's suspected that the upgrade health check job never completed. The control plane node may be at the new version but **cordoned**. You can manually complete the upgrade on each remaining node.
+
+> **Note:** If the upgrade is truly broken and manual recovery doesn't work, revert to your pre-upgrade snapshots (see [Rollback](#rollback-via-snapshot-revert)).
+
+#### Manual Recovery Steps
+
+1. **Uncordon the control plane node** (if it's still cordoned):
+   ```bash
+   kubectl uncordon <control-plane-node-name>
+   ```
+
+2. **Cordon the worker node** to be upgraded (to prevent scheduling during upgrade):
+   ```bash
+   kubectl cordon <worker-node-name>
+   ```
+
+3. **Mount the Kubernetes upgrade ISO** to the worker node:
+   ```bash
+   ssh -i <key> -p <port> cloud@<worker-node-ip>
+   sudo -i
+   lsblk          # find the ISO device (e.g., sr0)
+   mkdir -p /mnt/iso
+   mount /dev/sr0 /mnt/iso
+   ```
+
+4. **Replace binaries from the ISO:**
+   ```bash
+   # Stop kubelet first
+   systemctl stop kubelet
+
+   # Replace kubeadm, kubectl, kubelet from ISO
+   cp /mnt/iso/k8s/kubeadm /opt/bin/kubeadm
+   cp /mnt/iso/k8s/kubectl /opt/bin/kubectl
+   cp /mnt/iso/k8s/kubelet /opt/bin/kubelet
+
+   # Make them executable
+   chmod +x /opt/bin/kubeadm /opt/bin/kubectl /opt/bin/kubelet
+   ```
+
+5. **Complete the node upgrade:**
+   ```bash
+   # Reload systemd to pick up the new kubelet binary
+   systemctl daemon-reload
+
+   # Upgrade the node
+   kubeadm upgrade node
+
+   # Start kubelet
+   systemctl start kubelet
+   ```
+
+6. **Verify the node is upgraded:**
+   ```bash
+   kubectl get nodes
+   # Expected: node at new version, status Ready (or NotReady until kubelet starts)
+   ```
+
+7. **Unmount the ISO:**
+   ```bash
+   umount /mnt/iso
+   ```
+
+8. **Repeat steps 2–7** for each remaining worker node.
+
+9. **Uncordon the worker nodes** once verified:
+   ```bash
+   kubectl uncordon <worker-node-name>
+   ```
+
+10. **Verify the full cluster:**
+    ```bash
+    kubectl get nodes
+    kubectl version --short
+    kubectl get pods -n kube-system
+    ```
+
+> **Tip:** The ISO is automatically attached to nodes during the CKS upgrade process. If the ISO is not mounted, check the CloudStack UI — it may still be attached from the failed upgrade attempt.
 
 ## ISO-Baked Components
 
