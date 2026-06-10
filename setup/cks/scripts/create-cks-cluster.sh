@@ -108,9 +108,13 @@ cmk() {
   fi
   # Force JSON output so jq parsing works regardless of user's cmk config.
   # This only affects this invocation — never touches user's global setting.
-  CMK_OUT=$($CMK_BIN -p "$PROFILE" -o json "$api_verb" "${args[@]}" 2>&1) || CMK_RC=$?
+  # Only capture stdout (not stderr) — error messages are not JSON and would
+  # break jq parsing. Stderr goes directly to the user so they see the real
+  # error (e.g., "no route to host") instead of a silent "no zones found."
+  CMK_OUT=$($CMK_BIN -p "$PROFILE" -o json "$api_verb" "${args[@]}" 2>/tmp/.cmk_err_$$) || CMK_RC=$?
   if [[ $CMK_RC -ne 0 ]]; then
-    CMK_ERR="$CMK_OUT"
+    CMK_ERR=$(cat /tmp/.cmk_err_$$ 2>/dev/null || echo "cmk command failed (exit code $CMK_RC)")
+    rm -f /tmp/.cmk_err_$$
     CMK_OUT='{}'
   fi
   return 0
