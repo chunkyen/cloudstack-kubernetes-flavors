@@ -472,7 +472,7 @@ fi
 
 # Service offering (applied to all nodes)
 if [[ -z "$SERVICE_OFFERING" ]]; then
-  if ! show_menu "Service Offering" "ID|Name|CPU|Mem(MB)|Type" "$OFF_ITEMS"; then
+  if ! show_menu "Service Offering (used for all nodes)" "ID|Name|CPU|Mem(MB)|Type" "$OFF_ITEMS"; then
     error "Failed to select a service offering."
     exit 1
   fi
@@ -482,18 +482,6 @@ if [[ -z "$SERVICE_OFFERING" ]]; then
 else
   OFFERING_NAME="(by ID)"
   log "Offering: ID $SERVICE_OFFERING"
-fi
-if [[ -z "$SERVICE_OFFERING" ]]; then
-  if ! show_menu "Worker Node Service Offering" "ID|Name|CPU|Mem(MB)|Type" "$OFF_ITEMS"; then
-    error "Failed to select a worker node offering."
-    exit 1
-  fi
-  SERVICE_OFFERING="$SELECTED_ID"
-  OFFERING_NAME="$SELECTED_NAME"
-  log "Selected worker offering: $OFFERING_NAME ($SERVICE_OFFERING)"
-else
-  OFFERING_NAME="(by ID)"
-  log "Worker offering: ID $SERVICE_OFFERING"
 fi
 
 # ─── Step 5: Detect K8s Supported Versions ──────────────────────────────────
