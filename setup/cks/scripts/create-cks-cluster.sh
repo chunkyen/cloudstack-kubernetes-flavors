@@ -100,13 +100,15 @@ cmk() {
   local args=("$@")
 
   if [[ "$DRY_RUN" == true ]] && _is_write_op "$api_verb"; then
-    log "[DRY-RUN] cmk -p $PROFILE $api_verb ${args[*]}"
+    log "[DRY-RUN] cmk -p $PROFILE -o json $api_verb ${args[*]}"
     CMK_OUT='{}'
     CMK_ERR=""
     CMK_RC=0
     return 0
   fi
-  CMK_OUT=$($CMK_BIN -p "$PROFILE" "$api_verb" "${args[@]}" 2>&1) || CMK_RC=$?
+  # Force JSON output so jq parsing works regardless of user's cmk config.
+  # This only affects this invocation — never touches user's global setting.
+  CMK_OUT=$($CMK_BIN -p "$PROFILE" -o json "$api_verb" "${args[@]}" 2>&1) || CMK_RC=$?
   if [[ $CMK_RC -ne 0 ]]; then
     CMK_ERR="$CMK_OUT"
     CMK_OUT='{}'
