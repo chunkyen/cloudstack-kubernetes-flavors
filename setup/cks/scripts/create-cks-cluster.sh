@@ -377,24 +377,28 @@ if [[ -n "$TEMPLATE" ]]; then
 else
   log "Detecting available templates..."
 
-  # Use forcks=true to get only CKS-compatible templates (registered via
-  # registerKubernetesSupportedVersion). templatefilter is still required by
-  # the API but 'executable' combined with forcks=true narrows to deployable
-  # CKS templates only.
+  # Try forcks=true first to get only CKS-tagged templates. If that returns
+  # nothing (common — templates registered via registerKubernetesSupportedVersion
+  # may not have the forcks flag set), fall back to executable templates.
   cmk list templates zoneid="$ZONE_ID" templatefilter=executable forcks=true pagesize=50 page=1
+  TPL_COUNT=$(echo "$CMK_OUT" | jq '.template | length // 0' 2>/dev/null || echo 0)
+
+  if [[ $TPL_COUNT -eq 0 ]] && cmk_ok; then
+    log "No forcks=true templates found, falling back to all executable templates..."
+    cmk list templates zoneid="$ZONE_ID" templatefilter=executable pagesize=50 page=1
+    TPL_COUNT=$(echo "$CMK_OUT" | jq '.template | length // 0' 2>/dev/null || echo 0)
+  fi
+
   if ! cmk_ok; then
     warn "Failed to list templates: $(cmk_err)"
     warn "Will use default template from K8s version."
     TEMPLATE="default"
     TEMPLATE_NAME="(default from K8s version)"
+  elif [[ $TPL_COUNT -eq 0 ]]; then
+    warn "No templates found in zone $ZONE_NAME. Will use default template from K8s version."
+    TEMPLATE="default"
+    TEMPLATE_NAME="(default from K8s version)"
   else
-    TPL_COUNT=$(echo "$CMK_OUT" | jq '.template | length // 0' 2>/dev/null || echo 0)
-
-    if [[ $TPL_COUNT -eq 0 ]]; then
-      warn "No templates found in zone $ZONE_NAME. Will use default template from K8s version."
-      TEMPLATE="default"
-      TEMPLATE_NAME="(default from K8s version)"
-    else
       TPL_ITEMS=""
       while IFS= read -r line; do
         [[ -z "$line" ]] && continue
@@ -424,7 +428,6 @@ else
         TEMPLATE_NAME="$SELECTED_NAME"
         log "Selected template: $TEMPLATE_NAME ($TEMPLATE)"
       fi
-    fi
   fi
 fi
 
