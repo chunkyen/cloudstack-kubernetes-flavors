@@ -459,34 +459,10 @@ if [[ -z "$OFF_ITEMS" ]]; then
   exit 1
 fi
 
-# Prompt for service offerings
-# 1. Global default (optional)
-# 2. Control plane override (optional)
-# 3. Worker override (optional)
-
-if [[ -z "$SERVICE_OFFERING" ]]; then
-  log "Optional: select a global service offering (used for all nodes if not overridden)"
-  log "Press Enter or select 'skip' to skip and configure per-node-type only"
-  menu_items="__skip__|__Skip (configure per-node-type only)__|—|Skip,$OFF_ITEMS"
-  if ! show_menu "Service Offering (optional global default)" "ID|Name|CPU|Mem(MB)|Type" "$menu_items"; then
-    error "Failed to select a service offering."
-    exit 1
-  fi
-  if [[ "$SELECTED_ID" != "__skip__" ]]; then
-    SERVICE_OFFERING="$SELECTED_ID"
-    OFFERING_NAME="$SELECTED_NAME"
-    log "Selected global offering: $OFFERING_NAME ($SERVICE_OFFERING)"
-  fi
-else
-  OFFERING_NAME=$(echo "$CMK_OUT" | jq -r --arg id "$SERVICE_OFFERING" '.serviceoffering[] | select(.id == $id) | .name // empty' 2>/dev/null || echo "")
-  [[ -z "$OFFERING_NAME" ]] && OFFERING_NAME="(by ID)"
-  log "Global offering: $OFFERING_NAME ($SERVICE_OFFERING)"
-fi
-
 # Prompt for control plane offering (optional)
-log "Optional: select a service offering for control plane nodes (overrides global)"
-log "Press Enter or select 'skip' to use global/default"
-menu_items="__skip__|__Skip (use global/default)__|—|Skip,$OFF_ITEMS"
+log "Optional: select a service offering for control plane nodes"
+log "Press Enter or select 'skip' to use CloudStack default"
+menu_items="__skip__|__Skip (use default)__|—|Skip,$OFF_ITEMS"
 if ! show_menu "Control Plane Service Offering" "ID|Name|CPU|Mem(MB)|Type" "$menu_items"; then
   error "Failed to select a service offering."
   exit 1
@@ -498,9 +474,9 @@ if [[ "$SELECTED_ID" != "__skip__" ]]; then
 fi
 
 # Prompt for worker offering (optional)
-log "Optional: select a service offering for worker nodes (overrides global)"
-log "Press Enter or select 'skip' to use global/default"
-menu_items="__skip__|__Skip (use global/default)__|—|Skip,$OFF_ITEMS"
+log "Optional: select a service offering for worker nodes"
+log "Press Enter or select 'skip' to use CloudStack default"
+menu_items="__skip__|__Skip (use default)__|—|Skip,$OFF_ITEMS"
 if ! show_menu "Worker Service Offering" "ID|Name|CPU|Mem(MB)|Type" "$menu_items"; then
   error "Failed to select a service offering."
   exit 1
@@ -658,7 +634,7 @@ log "  Profile:       $PROFILE"
 log "  Zone:          $ZONE_NAME ($ZONE_ID)"
 log "  Network:       $NETWORK_NAME ($NETWORK_ID)"
 log "  Template:      $TEMPLATE_NAME ($TEMPLATE)"
-log "  Service Offer: $OFFERING_NAME ($SERVICE_OFFERING)"
+log "  Service Offer: (per-node-type)"
 log "  K8s Version:   $K8S_VERSION ($K8S_VERSION_ID)"
 log "  Control Nodes: $CONTROL_NODES"
 log "  Worker Nodes:  $WORKER_NODES"
