@@ -361,10 +361,11 @@ else
 fi
 
 # ─── Step 3: Detect Templates ───────────────────────────────────────────────
-# The createKubernetesCluster API expects nodetemplates as a key=value mapping:
-#   nodetemplates=controlplane=<id>,worker=<id>
+# The createKubernetesCluster API expects nodetemplates/nodeofferings using
+# CloudStack bracket notation:
+#   nodetemplates[0].key=controlplane&nodetemplates[0].value=<id>
+#   nodetemplates[1].key=worker&nodetemplates[1].value=<id>
 # If not provided, it defaults to the System VM template which won't work.
-# We also support nodeofferings for per-node-type service offerings.
 
 # Template mapping variables
 NODE_TEMPLATE_CONTROLPLANE=""
@@ -489,10 +490,6 @@ else
       exit 1
     fi
 
-    # Prompt for controlplane template
-    select_template_for_node "controlplane" "Control Plane" || true
-    # Prompt for worker template
-    select_template_for_node "worker" "Worker" || true
   fi
 fi
 
@@ -540,15 +537,11 @@ else
   log "Offering: $OFFERING_NAME ($SERVICE_OFFERING)"
 fi
 
-# Prompt for per-node-type template/offerings if templates are available
+# Prompt for per-node-type offerings if templates are available
 if [[ -n "$TPL_ITEMS" ]]; then
-  log "You can now select different templates/offerings per node type."
-  log "Press Enter or select 'default' to use the same for all node types."
+  log "You can now select different offerings per node type."
+  log "Press Enter or select 'default' to use the global offering for all node types."
 
-  # Prompt for controlplane template
-  select_template_for_node "controlplane" "Control Plane" || true
-  # Prompt for worker template
-  select_template_for_node "worker" "Worker" || true
   # Prompt for controlplane offering
   select_offering_for_node "controlplane" "Control Plane" || true
   # Prompt for worker offering
@@ -728,30 +721,31 @@ CREATE_ARGS=(
 [[ -n "$NETWORK_ID" ]] && CREATE_ARGS+=("networkid=$NETWORK_ID")
 [[ -n "$KEYPAIR" ]] && CREATE_ARGS+=("keypair=$KEYPAIR")
 
-# Build nodetemplates mapping: controlplane=<id>,worker=<id>
-NODE_TEMPLATE_MAP=""
+# Build nodetemplates using CloudStack bracket notation:
+# nodetemplates[0].key=controlplane&nodetemplates[0].value=<id>
+TPL_IDX=0
 if [[ -n "$NODE_TEMPLATE_CONTROLPLANE" ]]; then
-  NODE_TEMPLATE_MAP="controlplane=$NODE_TEMPLATE_CONTROLPLANE"
+  CREATE_ARGS+=("nodetemplates[$TPL_IDX].key=controlplane" "nodetemplates[$TPL_IDX].value=$NODE_TEMPLATE_CONTROLPLANE")
+  ((TPL_IDX++)) || true
 fi
 if [[ -n "$NODE_TEMPLATE_WORKER" ]]; then
-  [[ -n "$NODE_TEMPLATE_MAP" ]] && NODE_TEMPLATE_MAP+=","
-  NODE_TEMPLATE_MAP+="worker=$NODE_TEMPLATE_WORKER"
+  CREATE_ARGS+=("nodetemplates[$TPL_IDX].key=worker" "nodetemplates[$TPL_IDX].value=$NODE_TEMPLATE_WORKER")
+  ((TPL_IDX++)) || true
 fi
-[[ -n "$NODE_TEMPLATE_MAP" ]] && CREATE_ARGS+=("nodetemplates=$NODE_TEMPLATE_MAP")
 
-# Build nodeofferings mapping: controlplane=<id>,worker=<id>
-NODE_OFFERING_MAP=""
+# Build nodeofferings using same bracket notation
+OFF_IDX=0
 if [[ -n "$NODE_OFFERING_CONTROLPLANE" ]]; then
-  NODE_OFFERING_MAP="controlplane=$NODE_OFFERING_CONTROLPLANE"
+  CREATE_ARGS+=("nodeofferings[$OFF_IDX].key=controlplane" "nodeofferings[$OFF_IDX].value=$NODE_OFFERING_CONTROLPLANE")
+  ((OFF_IDX++)) || true
 fi
 if [[ -n "$NODE_OFFERING_WORKER" ]]; then
-  [[ -n "$NODE_OFFERING_MAP" ]] && NODE_OFFERING_MAP+=","
-  NODE_OFFERING_MAP+="worker=$NODE_OFFERING_WORKER"
+  CREATE_ARGS+=("nodeofferings[$OFF_IDX].key=worker" "nodeofferings[$OFF_IDX].value=$NODE_OFFERING_WORKER")
+  ((OFF_IDX++)) || true
 fi
-[[ -n "$NODE_OFFERING_MAP" ]] && CREATE_ARGS+=("nodeofferings=$NODE_OFFERING_MAP")
 
 # If no per-node-type offerings were set, use the global serviceofferingid
-if [[ -z "$NODE_OFFERING_MAP" && -n "$SERVICE_OFFERING" ]]; then
+if [[ $OFF_IDX -eq 0 && -n "$SERVICE_OFFERING" ]]; then
   CREATE_ARGS+=("serviceofferingid=$SERVICE_OFFERING")
 fi
 
