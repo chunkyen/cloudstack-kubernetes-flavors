@@ -714,8 +714,14 @@ if [[ -n "$NODE_OFFERING_WORKER" ]]; then
   ((OFF_IDX++)) || true
 fi
 
-# No global serviceofferingid — per-node-type offerings are the only mechanism.
-# If neither is set, CloudStack uses its own default.
+# Set a valid serviceofferingid as a placeholder — required by CloudStack for
+# cluster upgrades (will complain if invalid). The actual per-node-type
+# offerings are applied via nodeofferings and override this.
+# Just pick the first available offering automatically.
+if [[ -n "$OFF_ITEMS" ]]; then
+  FIRST_OFFERING=$(echo "$OFF_ITEMS" | cut -d'|' -f1)
+  CREATE_ARGS+=("serviceofferingid=$FIRST_OFFERING")
+fi
 
 $CSI_ENABLED && CREATE_ARGS+=("enablecsi=true")
 
