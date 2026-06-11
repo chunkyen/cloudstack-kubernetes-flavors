@@ -361,10 +361,88 @@ else
 fi
 
 # ─── Step 3: Detect Templates ───────────────────────────────────────────────
-# If -t was explicitly passed, skip detection entirely and just resolve the name.
+# The createKubernetesCluster API expects nodetemplates as a key=value mapping:
+#   nodetemplates=controlplane=<id>,worker=<id>
+# If not provided, it defaults to the System VM template which won't work.
+# We also support nodeofferings for per-node-type service offerings.
+
+# Template mapping variables
+NODE_TEMPLATE_CONTROLPLANE=""
+NODE_TEMPLATE_CONTROLPLANE_NAME=""
+NODE_TEMPLATE_WORKER=""
+NODE_TEMPLATE_WORKER_NAME=""
+NODE_OFFERING_CONTROLPLANE=""
+NODE_OFFERING_CONTROLPLANE_NAME=""
+NODE_OFFERING_WORKER=""
+NODE_OFFERING_WORKER_NAME=""
+
+# Helper: prompt for a template selection for a given node type
+select_template_for_node() {
+  local node_type="$1"  # controlplane or worker
+  local label="$2"      # human-readable label
+
+  if [[ -z "$TPL_ITEMS" ]]; then
+    warn "No templates available for $label nodes."
+    return 1
+  fi
+
+  # Prepend auto-default option
+  local menu_items="__default__|__Use default from K8s version__|—|Uses the template bundled with the K8s version,$TPL_ITEMS"
+
+  if ! show_menu "$label Template" "ID|Name|OS|Hypervisor" "$menu_items"; then
+    error "Failed to select a template for $label."
+    exit 1
+  fi
+
+  if [[ "$SELECTED_ID" == "__default__" ]]; then
+    return 0
+  fi
+
+  if [[ "$node_type" == "controlplane" ]]; then
+    NODE_TEMPLATE_CONTROLPLANE="$SELECTED_ID"
+    NODE_TEMPLATE_CONTROLPLANE_NAME="$SELECTED_NAME"
+  else
+    NODE_TEMPLATE_WORKER="$SELECTED_ID"
+    NODE_TEMPLATE_WORKER_NAME="$SELECTED_NAME"
+  fi
+  return 0
+}
+
+# Helper: prompt for a service offering selection for a given node type
+select_offering_for_node() {
+  local node_type="$1"  # controlplane or worker
+  local label="$2"      # human-readable label
+
+  if [[ -z "$OFF_ITEMS" ]]; then
+    warn "No service offerings available for $label nodes."
+    return 1
+  fi
+
+  # Prepend auto-default option (use global offering)
+  local menu_items="__default__|__Use global offering (from -s or prompt)__|—|Uses the global service offering,$OFF_ITEMS"
+
+  if ! show_menu "$label Service Offering" "ID|Name|CPU|Mem(MB)|Type" "$menu_items"; then
+    error "Failed to select a service offering for $label."
+    exit 1
+  fi
+
+  if [[ "$SELECTED_ID" == "__default__" ]]; then
+    return 0
+  fi
+
+  if [[ "$node_type" == "controlplane" ]]; then
+    NODE_OFFERING_CONTROLPLANE="$SELECTED_ID"
+    NODE_OFFERING_CONTROLPLANE_NAME="$SELECTED_NAME"
+  else
+    NODE_OFFERING_WORKER="$SELECTED_ID"
+    NODE_OFFERING_WORKER_NAME="$SELECTED_NAME"
+  fi
+  return 0
+}
+
 if [[ -n "$TEMPLATE" ]]; then
+  # -t passed: apply same template to both node types
   log "Template specified via -t: $TEMPLATE"
-  # Try to resolve the name from the ID
   cmk list templates id="$TEMPLATE" pagesize=50 page=1
   if cmk_ok; then
     TPL_COUNT=$(echo "$CMK_OUT" | jq '.template | length // 0' 2>/dev/null || echo 0)
@@ -373,7 +451,11 @@ if [[ -n "$TEMPLATE" ]]; then
     fi
   fi
   [[ -z "$TEMPLATE_NAME" ]] && TEMPLATE_NAME="(by ID)"
-  log "Using template: $TEMPLATE_NAME ($TEMPLATE)"
+  NODE_TEMPLATE_CONTROLPLANE="$TEMPLATE"
+  NODE_TEMPLATE_CONTROLPLANE_NAME="$TEMPLATE_NAME"
+  NODE_TEMPLATE_WORKER="$TEMPLATE"
+  NODE_TEMPLATE_WORKER_NAME="$TEMPLATE_NAME"
+  log "Using template for all nodes: $TEMPLATE_NAME ($TEMPLATE)"
 else
   log "Detecting available templates..."
 
@@ -392,42 +474,25 @@ else
   if ! cmk_ok; then
     warn "Failed to list templates: $(cmk_err)"
     warn "Will use default template from K8s version."
-    TEMPLATE="default"
-    TEMPLATE_NAME="(default from K8s version)"
   elif [[ $TPL_COUNT -eq 0 ]]; then
-    warn "No templates found in zone $ZONE_NAME. Will use default template from K8s version."
-    TEMPLATE="default"
-    TEMPLATE_NAME="(default from K8s version)"
+    warn "No templates found in zone $ZONE_NAME. Will use default from K8s version."
   else
-      TPL_ITEMS=""
-      while IFS= read -r line; do
-        [[ -z "$line" ]] && continue
-        [[ -n "$TPL_ITEMS" ]] && TPL_ITEMS+=","
-        TPL_ITEMS+="$line"
-      done < <(echo "$CMK_OUT" | jq -r '.template[] | [.id, .name, (.ostypename // "unknown"), (.hypervisor // "unknown")] | @csv' 2>/dev/null | sed 's/"//g' | sed 's/,/|/g')
+    TPL_ITEMS=""
+    while IFS= read -r line; do
+      [[ -z "$line" ]] && continue
+      [[ -n "$TPL_ITEMS" ]] && TPL_ITEMS+=","
+      TPL_ITEMS+="$line"
+    done < <(echo "$CMK_OUT" | jq -r '.template[] | [.id, .name, (.ostypename // "unknown"), (.hypervisor // "unknown")] | @csv' 2>/dev/null | sed 's/"//g' | sed 's/,/|/g')
 
-      if [[ -z "$TPL_ITEMS" ]]; then
-        error "Failed to parse template data."
-        exit 1
-      fi
+    if [[ -z "$TPL_ITEMS" ]]; then
+      error "Failed to parse template data."
+      exit 1
+    fi
 
-      # Prepend auto-default option
-      TPL_ITEMS="__default__|__Use default from K8s version__|—|Uses the template bundled with the K8s version,$TPL_ITEMS"
-
-      if ! show_menu "Available Templates" "ID|Name|OS|Hypervisor" "$TPL_ITEMS"; then
-        error "Failed to select a template."
-        exit 1
-      fi
-
-      if [[ "$SELECTED_ID" == "__default__" ]]; then
-        TEMPLATE="default"
-        TEMPLATE_NAME="(default from K8s version)"
-        log "Using default template from K8s version."
-      else
-        TEMPLATE="$SELECTED_ID"
-        TEMPLATE_NAME="$SELECTED_NAME"
-        log "Selected template: $TEMPLATE_NAME ($TEMPLATE)"
-      fi
+    # Prompt for controlplane template
+    select_template_for_node "controlplane" "Control Plane" || true
+    # Prompt for worker template
+    select_template_for_node "worker" "Worker" || true
   fi
 fi
 
@@ -459,9 +524,9 @@ if [[ -z "$OFF_ITEMS" ]]; then
   exit 1
 fi
 
-# Service offering (applied to all nodes)
+# Service offerings (global default, can be overridden per node type)
 if [[ -z "$SERVICE_OFFERING" ]]; then
-  if ! show_menu "Service Offering (used for all nodes)" "ID|Name|CPU|Mem(MB)|Type" "$OFF_ITEMS"; then
+  if ! show_menu "Service Offering (default for all nodes)" "ID|Name|CPU|Mem(MB)|Type" "$OFF_ITEMS"; then
     error "Failed to select a service offering."
     exit 1
   fi
@@ -473,6 +538,21 @@ else
   OFFERING_NAME=$(echo "$CMK_OUT" | jq -r --arg id "$SERVICE_OFFERING" '.serviceoffering[] | select(.id == $id) | .name // empty' 2>/dev/null || echo "")
   [[ -z "$OFFERING_NAME" ]] && OFFERING_NAME="(by ID)"
   log "Offering: $OFFERING_NAME ($SERVICE_OFFERING)"
+fi
+
+# Prompt for per-node-type template/offerings if templates are available
+if [[ -n "$TPL_ITEMS" ]]; then
+  log "You can now select different templates/offerings per node type."
+  log "Press Enter or select 'default' to use the same for all node types."
+
+  # Prompt for controlplane template
+  select_template_for_node "controlplane" "Control Plane" || true
+  # Prompt for worker template
+  select_template_for_node "worker" "Worker" || true
+  # Prompt for controlplane offering
+  select_offering_for_node "controlplane" "Control Plane" || true
+  # Prompt for worker offering
+  select_offering_for_node "worker" "Worker" || true
 fi
 
 # ─── Step 5: Detect K8s Supported Versions ──────────────────────────────────
@@ -647,9 +727,34 @@ CREATE_ARGS=(
 
 [[ -n "$NETWORK_ID" ]] && CREATE_ARGS+=("networkid=$NETWORK_ID")
 [[ -n "$KEYPAIR" ]] && CREATE_ARGS+=("keypair=$KEYPAIR")
-# Use serviceofferingid for all nodes (control plane + worker)
-[[ -n "$SERVICE_OFFERING" ]] && CREATE_ARGS+=("serviceofferingid=$SERVICE_OFFERING")
-[[ -n "$TEMPLATE" && "$TEMPLATE" != "default" ]] && CREATE_ARGS+=("nodetemplates=$TEMPLATE")
+
+# Build nodetemplates mapping: controlplane=<id>,worker=<id>
+NODE_TEMPLATE_MAP=""
+if [[ -n "$NODE_TEMPLATE_CONTROLPLANE" ]]; then
+  NODE_TEMPLATE_MAP="controlplane=$NODE_TEMPLATE_CONTROLPLANE"
+fi
+if [[ -n "$NODE_TEMPLATE_WORKER" ]]; then
+  [[ -n "$NODE_TEMPLATE_MAP" ]] && NODE_TEMPLATE_MAP+=","
+  NODE_TEMPLATE_MAP+="worker=$NODE_TEMPLATE_WORKER"
+fi
+[[ -n "$NODE_TEMPLATE_MAP" ]] && CREATE_ARGS+=("nodetemplates=$NODE_TEMPLATE_MAP")
+
+# Build nodeofferings mapping: controlplane=<id>,worker=<id>
+NODE_OFFERING_MAP=""
+if [[ -n "$NODE_OFFERING_CONTROLPLANE" ]]; then
+  NODE_OFFERING_MAP="controlplane=$NODE_OFFERING_CONTROLPLANE"
+fi
+if [[ -n "$NODE_OFFERING_WORKER" ]]; then
+  [[ -n "$NODE_OFFERING_MAP" ]] && NODE_OFFERING_MAP+=","
+  NODE_OFFERING_MAP+="worker=$NODE_OFFERING_WORKER"
+fi
+[[ -n "$NODE_OFFERING_MAP" ]] && CREATE_ARGS+=("nodeofferings=$NODE_OFFERING_MAP")
+
+# If no per-node-type offerings were set, use the global serviceofferingid
+if [[ -z "$NODE_OFFERING_MAP" && -n "$SERVICE_OFFERING" ]]; then
+  CREATE_ARGS+=("serviceofferingid=$SERVICE_OFFERING")
+fi
+
 $CSI_ENABLED && CREATE_ARGS+=("enablecsi=true")
 
 log "Creating cluster with args: ${CREATE_ARGS[*]}"
