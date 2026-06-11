@@ -691,25 +691,26 @@ CREATE_ARGS=(
 [[ -n "$KEYPAIR" ]] && CREATE_ARGS+=("keypair=$KEYPAIR")
 
 # Build nodetemplates using CloudStack bracket notation:
-# nodetemplates[0].key=controlplane&nodetemplates[0].value=<id>
+# nodetemplates[0].node=control&nodetemplates[0].template=<uuid>
 TPL_IDX=0
 if [[ -n "$NODE_TEMPLATE_CONTROLPLANE" ]]; then
-  CREATE_ARGS+=("nodetemplates[$TPL_IDX].key=controlplane" "nodetemplates[$TPL_IDX].value=$NODE_TEMPLATE_CONTROLPLANE")
+  CREATE_ARGS+=("nodetemplates[$TPL_IDX].node=control" "nodetemplates[$TPL_IDX].template=$NODE_TEMPLATE_CONTROLPLANE")
   ((TPL_IDX++)) || true
 fi
 if [[ -n "$NODE_TEMPLATE_WORKER" ]]; then
-  CREATE_ARGS+=("nodetemplates[$TPL_IDX].key=worker" "nodetemplates[$TPL_IDX].value=$NODE_TEMPLATE_WORKER")
+  CREATE_ARGS+=("nodetemplates[$TPL_IDX].node=worker" "nodetemplates[$TPL_IDX].template=$NODE_TEMPLATE_WORKER")
   ((TPL_IDX++)) || true
 fi
 
-# Build nodeofferings using same bracket notation
+# Build nodeofferings using same bracket notation:
+# nodeofferings[0].node=control&nodeofferings[0].offering=<uuid>
 OFF_IDX=0
 if [[ -n "$NODE_OFFERING_CONTROLPLANE" ]]; then
-  CREATE_ARGS+=("nodeofferings[$OFF_IDX].key=controlplane" "nodeofferings[$OFF_IDX].value=$NODE_OFFERING_CONTROLPLANE")
+  CREATE_ARGS+=("nodeofferings[$OFF_IDX].node=control" "nodeofferings[$OFF_IDX].offering=$NODE_OFFERING_CONTROLPLANE")
   ((OFF_IDX++)) || true
 fi
 if [[ -n "$NODE_OFFERING_WORKER" ]]; then
-  CREATE_ARGS+=("nodeofferings[$OFF_IDX].key=worker" "nodeofferings[$OFF_IDX].value=$NODE_OFFERING_WORKER")
+  CREATE_ARGS+=("nodeofferings[$OFF_IDX].node=worker" "nodeofferings[$OFF_IDX].offering=$NODE_OFFERING_WORKER")
   ((OFF_IDX++)) || true
 fi
 
