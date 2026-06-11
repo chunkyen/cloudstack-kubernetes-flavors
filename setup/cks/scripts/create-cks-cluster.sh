@@ -770,17 +770,30 @@ else
   # ─── Step 10: Get kubeconfig ────────────────────────────────────────────
   log "Retrieving kubeconfig..."
 
-  cmk getKubernetesClusterConfig id="$CLUSTER_ID"
-  if ! cmk_ok; then
-    warn "Failed to get kubeconfig: $(cmk_err)"
+  # Use -o txt (not json) for getKubernetesClusterConfig — the response is
+  # text format with header lines we need to strip:
+  #   clusterconfig:
+  #   id = <uuid>
+  #   name = <name>
+  #   configdata = apiVersion: v1
+  #   kind: Cluster
+  #   ...
+  KUBECONFIG_RAW=$($CMK_BIN -p "$PROFILE" -o txt getKubernetesClusterConfig id="$CLUSTER_ID" 2>/tmp/.cmk_err_$$) || {
+    warn "Failed to get kubeconfig: $(cat /tmp/.cmk_err_$$ 2>/dev/null || echo 'unknown error')"
+    rm -f /tmp/.cmk_err_$$
+  }
+  rm -f /tmp/.cmk_err_$$
+
+  # Extract only the configdata portion (skip header lines)
+  if [[ -n "$KUBECONFIG_RAW" ]]; then
+    echo "$KUBECONFIG_RAW" | sed -n '/^configdata = /{s/^configdata = //;p}; /^kind:/,$p' > "$KUBECONFIG_FILE"
+  fi
+
+  if [[ -s "$KUBECONFIG_FILE" ]]; then
+    chmod 600 "$KUBECONFIG_FILE"
+    log "kubeconfig saved to: $KUBECONFIG_FILE"
   else
-    echo "$CMK_OUT" | jq -r '.configdata // empty' > "$KUBECONFIG_FILE" 2>/dev/null || true
-    if [[ -s "$KUBECONFIG_FILE" ]]; then
-      chmod 600 "$KUBECONFIG_FILE"
-      log "kubeconfig saved to: $KUBECONFIG_FILE"
-    else
-      warn "kubeconfig is empty. Check cluster state in CloudStack UI."
-    fi
+    warn "kubeconfig is empty. Check cluster state in CloudStack UI."
   fi
 
   # ─── Step 11: Verify Cluster ────────────────────────────────────────────
