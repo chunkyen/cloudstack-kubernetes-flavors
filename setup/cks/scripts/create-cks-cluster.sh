@@ -367,7 +367,7 @@ fi
 #   nodetemplates[1].key=worker&nodetemplates[1].value=<id>
 # If not provided, it defaults to the System VM template which won't work.
 
-# Template mapping variables
+# Mapping variables
 NODE_TEMPLATE_CONTROLPLANE=""
 NODE_TEMPLATE_CONTROLPLANE_NAME=""
 NODE_TEMPLATE_WORKER=""
@@ -376,70 +376,8 @@ NODE_OFFERING_CONTROLPLANE=""
 NODE_OFFERING_CONTROLPLANE_NAME=""
 NODE_OFFERING_WORKER=""
 NODE_OFFERING_WORKER_NAME=""
-
-# Helper: prompt for a template selection for a given node type
-select_template_for_node() {
-  local node_type="$1"  # controlplane or worker
-  local label="$2"      # human-readable label
-
-  if [[ -z "$TPL_ITEMS" ]]; then
-    warn "No templates available for $label nodes."
-    return 1
-  fi
-
-  # Prepend auto-default option
-  local menu_items="__default__|__Use default from K8s version__|—|Uses the template bundled with the K8s version,$TPL_ITEMS"
-
-  if ! show_menu "$label Template" "ID|Name|OS|Hypervisor" "$menu_items"; then
-    error "Failed to select a template for $label."
-    exit 1
-  fi
-
-  if [[ "$SELECTED_ID" == "__default__" ]]; then
-    return 0
-  fi
-
-  if [[ "$node_type" == "controlplane" ]]; then
-    NODE_TEMPLATE_CONTROLPLANE="$SELECTED_ID"
-    NODE_TEMPLATE_CONTROLPLANE_NAME="$SELECTED_NAME"
-  else
-    NODE_TEMPLATE_WORKER="$SELECTED_ID"
-    NODE_TEMPLATE_WORKER_NAME="$SELECTED_NAME"
-  fi
-  return 0
-}
-
-# Helper: prompt for a service offering selection for a given node type
-select_offering_for_node() {
-  local node_type="$1"  # controlplane or worker
-  local label="$2"      # human-readable label
-
-  if [[ -z "$OFF_ITEMS" ]]; then
-    warn "No service offerings available for $label nodes."
-    return 1
-  fi
-
-  # Prepend auto-default option (use global offering)
-  local menu_items="__default__|__Use global offering (from -s or prompt)__|—|Uses the global service offering,$OFF_ITEMS"
-
-  if ! show_menu "$label Service Offering" "ID|Name|CPU|Mem(MB)|Type" "$menu_items"; then
-    error "Failed to select a service offering for $label."
-    exit 1
-  fi
-
-  if [[ "$SELECTED_ID" == "__default__" ]]; then
-    return 0
-  fi
-
-  if [[ "$node_type" == "controlplane" ]]; then
-    NODE_OFFERING_CONTROLPLANE="$SELECTED_ID"
-    NODE_OFFERING_CONTROLPLANE_NAME="$SELECTED_NAME"
-  else
-    NODE_OFFERING_WORKER="$SELECTED_ID"
-    NODE_OFFERING_WORKER_NAME="$SELECTED_NAME"
-  fi
-  return 0
-}
+TPL_ITEMS=""
+TPL_COUNT=0
 
 if [[ -n "$TEMPLATE" ]]; then
   # -t passed: apply same template to both node types
@@ -460,24 +398,25 @@ if [[ -n "$TEMPLATE" ]]; then
 else
   log "Detecting available templates..."
 
-  # Try forcks=true first to get only CKS-tagged templates. If that returns
-  # nothing (common — templates registered via registerKubernetesSupportedVersion
-  # may not have the forcks flag set), fall back to executable templates.
-  cmk list templates zoneid="$ZONE_ID" templatefilter=executable forcks=true pagesize=50 page=1
-  TPL_COUNT=$(echo "$CMK_OUT" | jq '.template | length // 0' 2>/dev/null || echo 0)
-
-  if [[ $TPL_COUNT -eq 0 ]] && cmk_ok; then
-    log "No forcks=true templates found, falling back to all executable templates..."
-    cmk list templates zoneid="$ZONE_ID" templatefilter=executable pagesize=50 page=1
+  # Try multiple templatefilters until we find results.
+  # templatefilter is required by the API.
+  found=false
+  for tpl_filter in executable self selfexecutable sharedexecutable featured all; do
+    log "Trying templatefilter=$tpl_filter..."
+    cmk list templates zoneid="$ZONE_ID" templatefilter="$tpl_filter" pagesize=50 page=1
     TPL_COUNT=$(echo "$CMK_OUT" | jq '.template | length // 0' 2>/dev/null || echo 0)
-  fi
+    if [[ $TPL_COUNT -gt 0 ]]; then
+      log "Found $TPL_COUNT templates with templatefilter=$tpl_filter"
+      found=true
+      break
+    fi
+  done
 
-  if ! cmk_ok; then
-    warn "Failed to list templates: $(cmk_err)"
+  if [[ "$found" != true ]]; then
+    warn "No templates found in zone $ZONE_NAME with any filter."
     warn "Will use default template from K8s version."
-  elif [[ $TPL_COUNT -eq 0 ]]; then
-    warn "No templates found in zone $ZONE_NAME. Will use default from K8s version."
   else
+    # Build template menu items
     TPL_ITEMS=""
     while IFS= read -r line; do
       [[ -z "$line" ]] && continue
@@ -489,7 +428,6 @@ else
       error "Failed to parse template data."
       exit 1
     fi
-
   fi
 fi
 
@@ -521,31 +459,86 @@ if [[ -z "$OFF_ITEMS" ]]; then
   exit 1
 fi
 
-# Service offerings (global default, can be overridden per node type)
+# Prompt for service offerings
+# 1. Global default (optional)
+# 2. Control plane override (optional)
+# 3. Worker override (optional)
+
 if [[ -z "$SERVICE_OFFERING" ]]; then
-  if ! show_menu "Service Offering (default for all nodes)" "ID|Name|CPU|Mem(MB)|Type" "$OFF_ITEMS"; then
+  log "Optional: select a global service offering (used for all nodes if not overridden)"
+  log "Press Enter or select 'skip' to skip and configure per-node-type only"
+  menu_items="__skip__|__Skip (configure per-node-type only)__|—|Skip,$OFF_ITEMS"
+  if ! show_menu "Service Offering (optional global default)" "ID|Name|CPU|Mem(MB)|Type" "$menu_items"; then
     error "Failed to select a service offering."
     exit 1
   fi
-  SERVICE_OFFERING="$SELECTED_ID"
-  OFFERING_NAME="$SELECTED_NAME"
-  log "Selected offering: $OFFERING_NAME ($SERVICE_OFFERING)"
+  if [[ "$SELECTED_ID" != "__skip__" ]]; then
+    SERVICE_OFFERING="$SELECTED_ID"
+    OFFERING_NAME="$SELECTED_NAME"
+    log "Selected global offering: $OFFERING_NAME ($SERVICE_OFFERING)"
+  fi
 else
-  # -s was passed — resolve name from the already-fetched list
   OFFERING_NAME=$(echo "$CMK_OUT" | jq -r --arg id "$SERVICE_OFFERING" '.serviceoffering[] | select(.id == $id) | .name // empty' 2>/dev/null || echo "")
   [[ -z "$OFFERING_NAME" ]] && OFFERING_NAME="(by ID)"
-  log "Offering: $OFFERING_NAME ($SERVICE_OFFERING)"
+  log "Global offering: $OFFERING_NAME ($SERVICE_OFFERING)"
 fi
 
-# Prompt for per-node-type offerings if templates are available
-if [[ -n "$TPL_ITEMS" ]]; then
-  log "You can now select different offerings per node type."
-  log "Press Enter or select 'default' to use the global offering for all node types."
+# Prompt for control plane offering (optional)
+log "Optional: select a service offering for control plane nodes (overrides global)"
+log "Press Enter or select 'skip' to use global/default"
+menu_items="__skip__|__Skip (use global/default)__|—|Skip,$OFF_ITEMS"
+if ! show_menu "Control Plane Service Offering" "ID|Name|CPU|Mem(MB)|Type" "$menu_items"; then
+  error "Failed to select a service offering."
+  exit 1
+fi
+if [[ "$SELECTED_ID" != "__skip__" ]]; then
+  NODE_OFFERING_CONTROLPLANE="$SELECTED_ID"
+  NODE_OFFERING_CONTROLPLANE_NAME="$SELECTED_NAME"
+  log "Selected control plane offering: $NODE_OFFERING_CONTROLPLANE_NAME ($NODE_OFFERING_CONTROLPLANE)"
+fi
 
-  # Prompt for controlplane offering
-  select_offering_for_node "controlplane" "Control Plane" || true
-  # Prompt for worker offering
-  select_offering_for_node "worker" "Worker" || true
+# Prompt for worker offering (optional)
+log "Optional: select a service offering for worker nodes (overrides global)"
+log "Press Enter or select 'skip' to use global/default"
+menu_items="__skip__|__Skip (use global/default)__|—|Skip,$OFF_ITEMS"
+if ! show_menu "Worker Service Offering" "ID|Name|CPU|Mem(MB)|Type" "$menu_items"; then
+  error "Failed to select a service offering."
+  exit 1
+fi
+if [[ "$SELECTED_ID" != "__skip__" ]]; then
+  NODE_OFFERING_WORKER="$SELECTED_ID"
+  NODE_OFFERING_WORKER_NAME="$SELECTED_NAME"
+  log "Selected worker offering: $NODE_OFFERING_WORKER_NAME ($NODE_OFFERING_WORKER)"
+fi
+
+# Prompt for control plane template (optional)
+if [[ -n "$TPL_ITEMS" ]]; then
+  log "Optional: select a template for control plane nodes"
+  log "Press Enter or select 'skip' to use default"
+  menu_items="__skip__|__Skip (use default)__|—|Skip,$TPL_ITEMS"
+  if ! show_menu "Control Plane Template" "ID|Name|OS|Hypervisor" "$menu_items"; then
+    error "Failed to select a template."
+    exit 1
+  fi
+  if [[ "$SELECTED_ID" != "__skip__" ]]; then
+    NODE_TEMPLATE_CONTROLPLANE="$SELECTED_ID"
+    NODE_TEMPLATE_CONTROLPLANE_NAME="$SELECTED_NAME"
+    log "Selected control plane template: $NODE_TEMPLATE_CONTROLPLANE_NAME ($NODE_TEMPLATE_CONTROLPLANE)"
+  fi
+
+  # Prompt for worker template (optional)
+  log "Optional: select a template for worker nodes"
+  log "Press Enter or select 'skip' to use default"
+  menu_items="__skip__|__Skip (use default)__|—|Skip,$TPL_ITEMS"
+  if ! show_menu "Worker Template" "ID|Name|OS|Hypervisor" "$menu_items"; then
+    error "Failed to select a template."
+    exit 1
+  fi
+  if [[ "$SELECTED_ID" != "__skip__" ]]; then
+    NODE_TEMPLATE_WORKER="$SELECTED_ID"
+    NODE_TEMPLATE_WORKER_NAME="$SELECTED_NAME"
+    log "Selected worker template: $NODE_TEMPLATE_WORKER_NAME ($NODE_TEMPLATE_WORKER)"
+  fi
 fi
 
 # ─── Step 5: Detect K8s Supported Versions ──────────────────────────────────
