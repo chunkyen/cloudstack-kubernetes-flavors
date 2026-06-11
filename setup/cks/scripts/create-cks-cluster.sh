@@ -286,7 +286,6 @@ if [[ $ZONE_COUNT -eq 0 ]]; then
 fi
 
 if [[ -z "$ZONE" ]]; then
-  # Always prompt when no flag given
   ZONE_ITEMS=""
   while IFS= read -r line; do
     [[ -z "$line" ]] && continue
@@ -307,25 +306,11 @@ if [[ -z "$ZONE" ]]; then
   ZONE_NAME="$SELECTED_NAME"
   log "Selected zone: $ZONE_NAME ($ZONE_ID)"
 else
-  ZONE_ITEMS=""
-  while IFS= read -r line; do
-    [[ -z "$line" ]] && continue
-    [[ -n "$ZONE_ITEMS" ]] && ZONE_ITEMS+=","
-    ZONE_ITEMS+="$line"
-  done < <(echo "$CMK_OUT" | jq -r '.zone[] | [.id, .name, .state] | @csv' 2>/dev/null | sed 's/"//g' | sed 's/,/|/g')
-
-  if [[ -z "$ZONE_ITEMS" ]]; then
-    error "Failed to parse zone data."
-    exit 1
-  fi
-
-  if ! show_menu "Available Zones" "ID|Name|State" "$ZONE_ITEMS"; then
-    error "Failed to select a zone."
-    exit 1
-  fi
-  ZONE_ID="$SELECTED_ID"
-  ZONE_NAME="$SELECTED_NAME"
-  log "Selected zone: $ZONE_NAME ($ZONE_ID)"
+  # -z was passed — resolve from the already-fetched zone list
+  ZONE_ID="$ZONE"
+  ZONE_NAME=$(echo "$CMK_OUT" | jq -r --arg id "$ZONE" '.zone[] | select(.id == $id) | .name // empty' 2>/dev/null || echo "")
+  [[ -z "$ZONE_NAME" ]] && ZONE_NAME="(by ID)"
+  log "Zone: $ZONE_NAME ($ZONE_ID)"
 fi
 
 # ─── Step 2: Detect Isolated Networks ───────────────────────────────────────
@@ -368,83 +353,76 @@ if [[ -z "$NETWORK" ]]; then
     log "Selected network: $NETWORK_NAME ($NETWORK_ID)"
   fi
 else
-  NET_ITEMS=""
-  while IFS= read -r line; do
-    [[ -z "$line" ]] && continue
-    [[ -n "$NET_ITEMS" ]] && NET_ITEMS+=","
-    NET_ITEMS+="$line"
-  done < <(echo "$CMK_OUT" | jq -r '.network[] | [.id, .name, .state, .traffictype] | @csv' 2>/dev/null | sed 's/"//g' | sed 's/,/|/g')
-
-  if [[ -z "$NET_ITEMS" ]]; then
-    error "Failed to parse network data."
-    exit 1
-  fi
-
-  if ! show_menu "Available Networks" "ID|Name|State|Traffic" "$NET_ITEMS"; then
-    error "Failed to select a network."
-    exit 1
-  fi
-  NETWORK_ID="$SELECTED_ID"
-  NETWORK_NAME="$SELECTED_NAME"
-  log "Selected network: $NETWORK_NAME ($NETWORK_ID)"
+  # -n was passed — resolve from the already-fetched network list
+  NETWORK_ID="$NETWORK"
+  NETWORK_NAME=$(echo "$CMK_OUT" | jq -r --arg id "$NETWORK" '.network[] | select(.id == $id) | .name // empty' 2>/dev/null || echo "")
+  [[ -z "$NETWORK_NAME" ]] && NETWORK_NAME="(by ID)"
+  log "Network: $NETWORK_NAME ($NETWORK_ID)"
 fi
 
 # ─── Step 3: Detect Templates ───────────────────────────────────────────────
-log "Detecting available templates..."
-
-cmk list templates zoneid="$ZONE_ID" type=user pagesize=50 page=1
-if ! cmk_ok; then
-  warn "Failed to list templates: $(cmk_err)"
-  warn "Will use default template from K8s version."
-  TEMPLATE="default"
-  TEMPLATE_NAME="(default from K8s version)"
+# If -t was explicitly passed, skip detection entirely and just resolve the name.
+if [[ -n "$TEMPLATE" ]]; then
+  log "Template specified via -t: $TEMPLATE"
+  # Try to resolve the name from the ID
+  cmk list templates id="$TEMPLATE" pagesize=50 page=1
+  if cmk_ok; then
+    TPL_COUNT=$(echo "$CMK_OUT" | jq '.template | length // 0' 2>/dev/null || echo 0)
+    if [[ $TPL_COUNT -gt 0 ]]; then
+      TEMPLATE_NAME=$(echo "$CMK_OUT" | jq -r '.template[0].name // empty' 2>/dev/null || echo "(by ID)")
+    fi
+  fi
+  [[ -z "$TEMPLATE_NAME" ]] && TEMPLATE_NAME="(by ID)"
+  log "Using template: $TEMPLATE_NAME ($TEMPLATE)"
 else
-  TPL_COUNT=$(echo "$CMK_OUT" | jq '.template | length // 0' 2>/dev/null || echo 0)
+  log "Detecting available templates..."
 
-  if [[ $TPL_COUNT -eq 0 ]]; then
-    warn "No user templates found. Will use default template from K8s version."
+  # Query broadly: don't restrict to type=user — CKS templates registered via
+  # registerKubernetesSupportedVersion may have a different type classification.
+  cmk list templates zoneid="$ZONE_ID" pagesize=50 page=1
+  if ! cmk_ok; then
+    warn "Failed to list templates: $(cmk_err)"
+    warn "Will use default template from K8s version."
     TEMPLATE="default"
     TEMPLATE_NAME="(default from K8s version)"
-  elif [[ -z "$TEMPLATE" ]]; then
-    TPL_ITEMS=""
-    while IFS= read -r line; do
-      [[ -z "$line" ]] && continue
-      [[ -n "$TPL_ITEMS" ]] && TPL_ITEMS+=","
-      TPL_ITEMS+="$line"
-    done < <(echo "$CMK_OUT" | jq -r '.template[] | [.id, .name, .ostypename, .hypervisor] | @csv' 2>/dev/null | sed 's/"//g' | sed 's/,/|/g')
-
-    if [[ -z "$TPL_ITEMS" ]]; then
-      error "Failed to parse template data."
-      exit 1
-    fi
-
-    if ! show_menu "Available Templates" "ID|Name|OS|Hypervisor" "$TPL_ITEMS"; then
-      error "Failed to select a template."
-      exit 1
-    fi
-    TEMPLATE="$SELECTED_ID"
-    TEMPLATE_NAME="$SELECTED_NAME"
-    log "Selected template: $TEMPLATE_NAME ($TEMPLATE)"
   else
-    TPL_ITEMS=""
-    while IFS= read -r line; do
-      [[ -z "$line" ]] && continue
-      [[ -n "$TPL_ITEMS" ]] && TPL_ITEMS+=","
-      TPL_ITEMS+="$line"
-    done < <(echo "$CMK_OUT" | jq -r '.template[] | [.id, .name, .ostypename, .hypervisor] | @csv' 2>/dev/null | sed 's/"//g' | sed 's/,/|/g')
+    TPL_COUNT=$(echo "$CMK_OUT" | jq '.template | length // 0' 2>/dev/null || echo 0)
 
-    if [[ -z "$TPL_ITEMS" ]]; then
-      error "Failed to parse template data."
-      exit 1
-    fi
+    if [[ $TPL_COUNT -eq 0 ]]; then
+      warn "No templates found in zone $ZONE_NAME. Will use default template from K8s version."
+      TEMPLATE="default"
+      TEMPLATE_NAME="(default from K8s version)"
+    else
+      TPL_ITEMS=""
+      while IFS= read -r line; do
+        [[ -z "$line" ]] && continue
+        [[ -n "$TPL_ITEMS" ]] && TPL_ITEMS+=","
+        TPL_ITEMS+="$line"
+      done < <(echo "$CMK_OUT" | jq -r '.template[] | [.id, .name, (.ostypename // "unknown"), (.hypervisor // "unknown")] | @csv' 2>/dev/null | sed 's/"//g' | sed 's/,/|/g')
 
-    if ! show_menu "Available Templates" "ID|Name|OS|Hypervisor" "$TPL_ITEMS"; then
-      error "Failed to select a template."
-      exit 1
+      if [[ -z "$TPL_ITEMS" ]]; then
+        error "Failed to parse template data."
+        exit 1
+      fi
+
+      # Prepend auto-default option
+      TPL_ITEMS="__default__|__Use default from K8s version__|—|Uses the template bundled with the K8s version,$TPL_ITEMS"
+
+      if ! show_menu "Available Templates" "ID|Name|OS|Hypervisor" "$TPL_ITEMS"; then
+        error "Failed to select a template."
+        exit 1
+      fi
+
+      if [[ "$SELECTED_ID" == "__default__" ]]; then
+        TEMPLATE="default"
+        TEMPLATE_NAME="(default from K8s version)"
+        log "Using default template from K8s version."
+      else
+        TEMPLATE="$SELECTED_ID"
+        TEMPLATE_NAME="$SELECTED_NAME"
+        log "Selected template: $TEMPLATE_NAME ($TEMPLATE)"
+      fi
     fi
-    TEMPLATE="$SELECTED_ID"
-    TEMPLATE_NAME="$SELECTED_NAME"
-    log "Selected template: $TEMPLATE_NAME ($TEMPLATE)"
   fi
 fi
 
@@ -486,8 +464,10 @@ if [[ -z "$SERVICE_OFFERING" ]]; then
   OFFERING_NAME="$SELECTED_NAME"
   log "Selected offering: $OFFERING_NAME ($SERVICE_OFFERING)"
 else
-  OFFERING_NAME="(by ID)"
-  log "Offering: ID $SERVICE_OFFERING"
+  # -s was passed — resolve name from the already-fetched list
+  OFFERING_NAME=$(echo "$CMK_OUT" | jq -r --arg id "$SERVICE_OFFERING" '.serviceoffering[] | select(.id == $id) | .name // empty' 2>/dev/null || echo "")
+  [[ -z "$OFFERING_NAME" ]] && OFFERING_NAME="(by ID)"
+  log "Offering: $OFFERING_NAME ($SERVICE_OFFERING)"
 fi
 
 # ─── Step 5: Detect K8s Supported Versions ──────────────────────────────────
@@ -528,25 +508,15 @@ if [[ -z "$K8S_VERSION" ]]; then
   K8S_VERSION="$SELECTED_NAME"
   log "Selected K8s version: $K8S_VERSION ($K8S_VERSION_ID)"
 else
-  K8S_ITEMS=""
-  while IFS= read -r line; do
-    [[ -z "$line" ]] && continue
-    [[ -n "$K8S_ITEMS" ]] && K8S_ITEMS+=","
-    K8S_ITEMS+="$line"
-  done < <(echo "$CMK_OUT" | jq -r '.kubernetessupportedversion[] | [.id, .name, (.semanticversion // ""), (.state // "")] | @csv' 2>/dev/null | sed 's/"//g' | sed 's/,/|/g')
-
-  if [[ -z "$K8S_ITEMS" ]]; then
-    error "Failed to parse K8s version data."
-    exit 1
+  # -v was passed — resolve from the already-fetched list
+  K8S_VERSION_ID=$(echo "$CMK_OUT" | jq -r --arg name "$K8S_VERSION" '.kubernetessupportedversion[] | select(.name == $name or .semanticversion == $name) | .id // empty' 2>/dev/null || echo "")
+  if [[ -z "$K8S_VERSION_ID" ]]; then
+    # Maybe the user passed an ID directly
+    K8S_VERSION_ID="$K8S_VERSION"
+    K8S_VERSION=$(echo "$CMK_OUT" | jq -r --arg id "$K8S_VERSION_ID" '.kubernetessupportedversion[] | select(.id == $id) | .name // empty' 2>/dev/null || echo "(by ID)")
+    [[ -z "$K8S_VERSION" ]] && K8S_VERSION="(by ID)"
   fi
-
-  if ! show_menu "Registered K8s Versions" "ID|Name|Semantic|State" "$K8S_ITEMS"; then
-    error "Failed to select a K8s version."
-    exit 1
-  fi
-  K8S_VERSION_ID="$SELECTED_ID"
-  K8S_VERSION="$SELECTED_NAME"
-  log "Selected K8s version: $K8S_VERSION ($K8S_VERSION_ID)"
+  log "K8s version: $K8S_VERSION ($K8S_VERSION_ID)"
 fi
 
 # ─── Step 6: Detect Keypairs ────────────────────────────────────────────────
@@ -586,26 +556,9 @@ else
       log "Selected keypair: $KEYPAIR"
     fi
   else
-    KEY_ITEMS=""
-    while IFS= read -r line; do
-      [[ -z "$line" ]] && continue
-      [[ -n "$KEY_ITEMS" ]] && KEY_ITEMS+=","
-      KEY_ITEMS+="$line"
-    done < <(echo "$CMK_OUT" | jq -r '.sshkeypair[] | [.name, .fingerprint, .hypervisor] | @csv' 2>/dev/null | sed 's/"//g' | sed 's/,/|/g')
-
-    if [[ -z "$KEY_ITEMS" ]]; then
-      warn "Failed to parse keypair data. Skipping."
-      KEYPAIR=""
-      KEYPAIR_NAME="(none)"
-    else
-      if ! show_menu "SSH Keypairs" "Name|Fingerprint|Hypervisor" "$KEY_ITEMS"; then
-        error "Failed to select a keypair."
-        exit 1
-      fi
-      KEYPAIR="$SELECTED_ID"
-      KEYPAIR_NAME="$KEYPAIR"
-      log "Selected keypair: $KEYPAIR"
-    fi
+    # -k was passed — resolve from the already-fetched list
+    KEYPAIR_NAME="$KEYPAIR"
+    log "Keypair: $KEYPAIR"
   fi
 fi
 
