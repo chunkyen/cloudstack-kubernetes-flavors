@@ -714,10 +714,8 @@ if [[ -n "$NODE_OFFERING_WORKER" ]]; then
   ((OFF_IDX++)) || true
 fi
 
-# If no per-node-type offerings were set, use the global serviceofferingid
-if [[ $OFF_IDX -eq 0 && -n "$SERVICE_OFFERING" ]]; then
-  CREATE_ARGS+=("serviceofferingid=$SERVICE_OFFERING")
-fi
+# No global serviceofferingid — per-node-type offerings are the only mechanism.
+# If neither is set, CloudStack uses its own default.
 
 $CSI_ENABLED && CREATE_ARGS+=("enablecsi=true")
 
