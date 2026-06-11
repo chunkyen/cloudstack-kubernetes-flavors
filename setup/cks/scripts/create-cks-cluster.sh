@@ -377,9 +377,11 @@ if [[ -n "$TEMPLATE" ]]; then
 else
   log "Detecting available templates..."
 
-  # Query broadly: don't restrict to type=user — CKS templates registered via
-  # registerKubernetesSupportedVersion may have a different type classification.
-  cmk list templates zoneid="$ZONE_ID" pagesize=50 page=1
+  # templatefilter is required by the API. Use 'executable' to get all templates
+  # that can deploy a VM — covers user-registered ones AND public templates.
+  # This includes CKS templates registered via registerKubernetesSupportedVersion
+  # which may not be classified as type=user.
+  cmk list templates zoneid="$ZONE_ID" templatefilter=executable pagesize=50 page=1
   if ! cmk_ok; then
     warn "Failed to list templates: $(cmk_err)"
     warn "Will use default template from K8s version."
