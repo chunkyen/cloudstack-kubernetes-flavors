@@ -122,10 +122,26 @@ The symptom: `kube-proxy`, `coredns`, `kube-controller-manager`, and `kube-apise
 Running `journalctl -u kubelet -f` on the control node reveals the digest verification failure:
 
 ```text
-pod_workers.go:1324] "Error syncing pod, skipping" err="failed to \"StartContainer\" for \"cilium-envoy\" with ImagePullBackOff: \"Back-off pulling image \\\"quay.io/cilium/cilium-envoy:v1.36.6-1776000132-2437d2edeaf4d9b56ef279bd0d71127440c067aa@sha256:ba0ab8adac082d50d525fd2c5ba096c8facea3a471561b7c61c7a5b9c2e0de0d\\\": ErrImagePull: rpc error: code = DeadlineExceeded desc = failed to pull and unpack image \\\"quay.io/cilium/cilium-envoy@sha256:ba0ab8adac082d50d525fd2c5ba096c8facea3a471561b7c61c7a5b9c2e0de0d\\\": failed to resolve reference \\\"quay.io/cilium/cilium-envoy@sha256:ba0ab8adac082d50d525fd2c5ba096c8facea3a471561b7c61c7a5b9c2e0de0d\\\": failed to do request: Head \\\"https://quay.io/v2/cilium/cilium-envoy/manifests/sha256:ba0ab8adac082d50d525fd2c5ba096c8facea3a471561b7c61c7a5b9c2e0de0d\\\": dial tcp: lookup quay.io: i/o timeout\"" pod="kube-system/cilium-envoy-6p6kf" podUID="90798992-b980-42a1-b952-66a66265e602"
+pod_workers.go:1324] "Error syncing pod, skipping" err=
+  "failed to \"StartContainer\" for \"cilium-envoy\" with ImagePullBackOff:
+    Back-off pulling image \"
+      quay.io/cilium/cilium-envoy:v1.36.6-1776000132-2437d2edeaf4d9b56ef279bd0d71127440c067aa
+      @sha256:ba0ab8adac082d50d525fd2c5ba096c8facea3a471561b7c61c7a5b9c2e0de0d\"
+    ErrImagePull: rpc error: code = DeadlineExceeded
+      desc = failed to pull and unpack image \"
+        quay.io/cilium/cilium-envoy
+        @sha256:ba0ab8adac082d50d525fd2c5ba096c8facea3a471561b7c61c7a5b9c2e0de0d\"
+      failed to resolve reference \"
+        quay.io/cilium/cilium-envoy
+        @sha256:ba0ab8adac082d50d525fd2c5ba096c8facea3a471561b7c61c7a5b9c2e0de0d\"
+      failed to do request:
+        Head \"https://quay.io/v2/cilium/cilium-envoy/manifests/
+          sha256:ba0ab8adac082d50d525fd2c5ba096c8facea3a471561b7c61c7a5b9c2e0de0d\"
+        dial tcp: lookup quay.io: i/o timeout"
+pod="kube-system/cilium-envoy-6p6kf" podUID="90798992-b980-42a1-b952-66a66265e602"
 ```
 
-The key detail is `lookup quay.io: i/o timeout` — Kubernetes attempts to verify the digest via a HEAD request to `quay.io`, which fails because there's no internet access.
+The key detail is `lookup quay.io: i/o timeout` — Kubernetes attempts to verify the digest via a HEAD request to `quay.io`, which fails because there's no internet access. Note how the image reference includes **`@sha256:...`** digest pins (shown on their own lines above) — these are what trigger the external registry lookup.
 
 This is a fundamental mismatch between how Helm generates manifests (digest-pinned) and how `create-kubernetes-binaries-iso.sh` packages images (tag-only). A proper fix would require either modifying the Cilium manifest to use tag-based references before baking into the ISO, or ensuring the bundled image tarballs include digest metadata matching what the manifest expects.
 
