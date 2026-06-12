@@ -32,7 +32,7 @@ Initial testing with the **1.32.5 Calico ISO** shows that most CKS operations wo
 
 Upgrading beyond a certain point requires internet access:
 
-- ❌ **Upgrade to 1.34.7 (and likely later versions)** — upgrade fails when disconnected
+- ❌ **Upgrade to 1.34.x** — upgrade fails when disconnected
 - As soon as internet is restored, the same upgrade succeeds
 
 Additionally, with the corrupted pause container in the 1.34.7 ISO:
