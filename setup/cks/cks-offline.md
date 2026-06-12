@@ -84,7 +84,7 @@ A separate issue compounds the problem: the official [1.34.7 Calico x86_64 ISO](
 
 This is extremely hard to detect — if you're online, the node silently pulls the correct `pause:3.10.1` from an external registry instead of using the broken one from the ISO, and everything appears to work fine. Only in fully offline mode does this issue surface.
 
-**Affected operations:** Not just upgrades — **creating a new cluster with 1.34.7 also fails** in an offline environment for the same reason. The worker node can't find `pause:3.10.1` locally (corrupted in ISO) and can't pull it from the internet.
+**Affected operations:** Not just upgrades — **creating a new cluster with 1.34.7 also fails** in an offline environment for the same reason. The pause container is required not only on worker nodes (for health check Jobs) but also on control plane nodes, where core pods like `kube-apiserver`, `kube-scheduler`, and `kube-controller-manager` depend on it as their base image. With a corrupted `pause:3.10.1` in the ISO and no internet to fall back on, neither node type can start its pods.
 
 **Workaround:** If the imported pause image from the 1.34.7 ISO is corrupted, you'll need to obtain a valid `pause:3.10.1` tarball (e.g., export it from a node with internet access using `ctr -n k8s.io images export`) and import it manually before attempting the upgrade.
 
