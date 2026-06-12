@@ -104,11 +104,12 @@ mount /dev/sr0 /mnt/iso
 Instead of importing just the pause container, import everything in the `docker/` directory — the node needs more than just that one image:
 
 ```bash
-ctr -n k8s.io images import /mnt/iso/docker/*.tar
+for f in /mnt/iso/docker/*.tar; do ctr -n k8s.io images import "$f"; done
 ```
 
-**5. Verify the images are imported:**
+> **Note:** `ctr images import` doesn't accept multiple files at once, so a simple loop is needed.
 
+**5. Verify the images are imported:**
 
 ```bash
 crictl images | grep pause
