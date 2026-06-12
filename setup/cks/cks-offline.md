@@ -28,14 +28,51 @@ Initial testing with the **1.32.5 Calico ISO** shows that most CKS operations wo
 - ✅ **Day 2 scaling** — adding/removing worker nodes works
 - ✅ **Upgrade to 1.33.1** — upgrading from 1.32.5 to the next version works
 
-## 4. What Fails Without Internet
+## 4. What Fails Without Internet — The Root Cause
 
 Upgrading beyond a certain point requires internet access:
 
 - ❌ **Upgrade to 1.34.7 (and likely later versions)** — upgrade fails when disconnected
 - As soon as internet is restored, the same upgrade succeeds
 
-This suggests that something changed in CKS between 1.33.x and 1.34.x — either `kubeadm` started pulling additional images from external registries at init time, or some component now references a remote URL that wasn't previously needed.
+### Investigation
+
+During an offline upgrade from 1.33.x to 1.34.7, the process stalls while creating **upgrade health check pods** — a Job that verifies control plane upgrade completion before moving on to worker nodes.
+
+On a failed (offline) upgrade, the health check pod gets stuck in a **ContainerCreating → Terminated** loop:
+- The pod attempts to start but is immediately terminated
+- Kubernetes retries, and the cycle repeats until the overall upgrade times out
+
+On a successful (online) upgrade, the same pod reaches **Completed** status without issue.
+
+### The Pause Container Version Change
+
+The health check pod uses the `pause` container as its base image. Comparing the CKS ISOs:
+
+| K8s Version | ISO Pause Image |
+|-------------|-----------------|
+| 1.32.x      | `pause:3.10`    |
+| 1.33.x      | `pause:3.10`    |
+| 1.34.x      | `pause:3.10.1`  |
+
+The pause container version changed in the 1.34 ISO — from `3.10` to `3.10.1`. This small change is the key.
+
+### Why It Fails Offline
+
+In a cluster with 1 control plane and 1 worker node:
+
+1. The upgrade starts on the **control plane** first. During this phase, the management server imports all 1.34 images (including `pause:3.10.1`) from the ISO onto that node.
+2. Once the control plane is upgraded, the **upgrade health check pod** needs to run — and Kubernetes schedules it on a node that is _not_ being actively upgraded (i.e., the worker node).
+3. The worker node still runs 1.33.x and has only `pause:3.10` in its local image store (verified via `crictl images`).
+4. The health check pod requests `pause:3.10.1`, but the worker node doesn't have it locally.
+5. **With internet:** the worker pulls `pause:3.10.1` from an external registry → pod completes → upgrade proceeds.
+6. **Without internet:** the pull fails silently, the container is terminated, Kubernetes retries → infinite loop → upgrade stalls and eventually times out.
+
+### Summary
+
+The root cause is that CKS upgrades only import new images onto the node currently being upgraded. When a health check pod (or any intermediate Job) gets scheduled on a _different_ node that hasn't been upgraded yet, that node lacks the newer images — including `pause:3.10.1`. Without internet to pull them, the pod can't start.
+
+This explains why upgrades up to 1.33.x work offline (same pause version as before) but 1.34+ fails (new pause version required on non-upgraded nodes).
 
 ## 5. The Workaround(s)
 
@@ -44,10 +81,9 @@ This suggests that something changed in CKS between 1.33.x and 1.34.x — either
 
 ## 6. Caveats & Limitations
 
-- Offline upgrades work only up to a certain version (currently **1.33.1**); beyond that, internet is required
-- The exact breaking change between 1.33.x and 1.34.x has not yet been identified
-- Things that broke or had unexpected behavior
-- Known gaps vs online deployment
+- Offline upgrades work only up to **1.33.x**; beyond that, the pause container version change breaks health check pods on non-upgraded nodes
+- The root cause is that CKS imports images only onto the node currently being upgraded — intermediate Jobs scheduled on other nodes can't find their required images without internet
+- This affects any upgrade where new image versions are introduced (pause container or otherwise) that must run on a node not yet upgraded
 
 ## 7. Verification
 
