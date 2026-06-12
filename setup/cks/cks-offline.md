@@ -39,7 +39,11 @@ Additionally, with the corrupted pause container in the 1.34.7 ISO:
 
 - ❌ **Creating a new cluster with 1.34.7** — also fails offline for the same reason (see [Corrupted Pause Container](#corrupted-pause-container-in-1347-iso) below)
 
-### Investigation
+The failure mode differs depending on which ISO you're using. The two main scenarios are documented below.
+
+### 4.1 Pre-Built Calico ISO — Pause Container Issue
+
+#### Investigation
 
 During an offline upgrade from 1.33.x to 1.34.7, the process stalls while creating **upgrade health check pods** — a Job that verifies control plane upgrade completion before moving on to worker nodes.
 
@@ -96,7 +100,7 @@ To avoid relying on official ISOs that may have corrupted images, you can build 
 
 **Testing your custom ISO offline:** Before deploying to production, validate your ISO by creating a CKS cluster in an **offline environment**. This is the only way to catch issues like corrupted images that would be silently masked when internet connectivity provides a fallback. The same test methodology described in this guide (cluster creation → scaling → upgrade) will confirm the ISO works end-to-end without any network dependency.
 
-### Cilium Custom ISO — Image Digest Mismatch
+### 4.2 Custom Cilium ISO — Image Digest Mismatch
 
 When building a custom CKS ISO with **Cilium** CNI, there's another offline failure mode. The Cilium manifest is generated via Helm chart and references images using **digest pins** (e.g., `quay.io/cilium/cilium@sha256:xxxxx`). However, the bundled image tarballs in the ISO are stored **without the digest reference**.
 
@@ -105,6 +109,8 @@ When Kubernetes tries to start Cilium pods, it sees the digest-pinned image name
 The symptom: `kube-proxy`, `coredns`, `kube-controller-manager`, and `kube-apiserver` all start successfully (they use tag-based references), but Cilium CNI pods remain in **ImagePullBackOff** or **ErrImagePull**. Since Cilium is required for cluster networking, the overall CKS deployment is considered failed.
 
 This is a fundamental mismatch between how Helm generates manifests (digest-pinned) and how `create-kubernetes-binaries-iso.sh` packages images (tag-only). A proper fix would require either modifying the Cilium manifest to use tag-based references before baking into the ISO, or ensuring the bundled image tarballs include digest metadata matching what the manifest expects.
+
+> **Note:** The pause container issue described in [Section 4.1](#41-pre-built-calico-iso---pause-container-issue) also applies during upgrades of Cilium custom ISOs — if a new pause version is introduced, the same worker-node image-missing problem will occur.
 
 ## 5. The Workaround — Manually Import Images on Non-Upgraded Nodes
 
