@@ -20,26 +20,38 @@ This is a real barrier for air-gapped deployments, government/military environme
 
 - All K8s images are already baked into the ISO — no local registry or pre-download step required
 - The ISO is self-contained for cluster creation
+- Pre-built Calico ISOs are available from [download.cloudstack.org/cks/](https://download.cloudstack.org/cks/) (x86 and ARM variants)
 
-## 3. What Fails Without Internet
+## 3. What Works Offline
 
-- Breakdown of which steps fail and why:
-  - CNI plugin installation (Calico/Cilium manifests pulled from web)
-  - CSI driver deployment
-  - Anything else observed failing
+Initial testing with the **1.32.5 Calico ISO** shows that most CKS operations work without internet:
 
-## 4. The Workaround(s)
+- ✅ **Cluster creation** — provisioning succeeds fully offline
+- ✅ **Day 2 scaling** — adding/removing worker nodes works
+- ✅ **Upgrade to 1.33.1** — upgrading from 1.32.5 to the next version works
+
+## 4. What Fails Without Internet
+
+Upgrading beyond a certain point requires internet access:
+
+- ❌ **Upgrade to 1.34.7 (and likely later versions)** — upgrade fails when disconnected
+- As soon as internet is restored, the same upgrade succeeds
+
+This suggests that something changed in CKS between 1.33.x and 1.34.x — either `kubeadm` started pulling additional images from external registries at init time, or some component now references a remote URL that wasn't previously needed.
+
+## 5. The Workaround(s)
 
 - Specific workaround(s) — what was done differently
 - Step-by-step walkthrough
 
-## 5. Caveats & Limitations
+## 6. Caveats & Limitations
 
-- What still doesn't work fully offline
+- Offline upgrades work only up to a certain version (currently **1.33.1**); beyond that, internet is required
+- The exact breaking change between 1.33.x and 1.34.x has not yet been identified
 - Things that broke or had unexpected behavior
 - Known gaps vs online deployment
 
-## 6. Verification
+## 7. Verification
 
 - How to confirm the cluster is functional without internet
 - Test checklist (nodes join, pods schedule, CNI works, etc.)
