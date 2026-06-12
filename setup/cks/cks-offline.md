@@ -2,6 +2,14 @@
 
 > Official CloudStack docs say internet is required during cluster creation. This documents what happens when you disconnect, and how to make it work anyway.
 
+## What the Docs Say
+
+The [CloudStack Kubernetes Service documentation](https://docs.cloudstack.apache.org/en/latest/plugins/cloudstack-kubernetes-service.html) states:
+
+> "Using a pre-packaged ISO containing required binaries and docker images allows faster provisioning on the node Instances of a Kubernetes cluster. **Complete offline provisioning of the Kubernetes cluster is not supported at present as the kubeadm init command needs active Internet access.**"
+
+This guide documents that it _is_ possible, with workarounds.
+
 ## 1. The Problem
 
 - What official docs say about network requirements
