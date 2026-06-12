@@ -96,6 +96,16 @@ To avoid relying on official ISOs that may have corrupted images, you can build 
 
 **Testing your custom ISO offline:** Before deploying to production, validate your ISO by creating a CKS cluster in an **offline environment**. This is the only way to catch issues like corrupted images that would be silently masked when internet connectivity provides a fallback. The same test methodology described in this guide (cluster creation → scaling → upgrade) will confirm the ISO works end-to-end without any network dependency.
 
+### Cilium Custom ISO — Image Digest Mismatch
+
+When building a custom CKS ISO with **Cilium** CNI, there's another offline failure mode. The Cilium manifest is generated via Helm chart and references images using **digest pins** (e.g., `quay.io/cilium/cilium@sha256:xxxxx`). However, the bundled image tarballs in the ISO are stored **without the digest reference**.
+
+When Kubernetes tries to start Cilium pods, it sees the digest-pinned image name and attempts to verify the digest against an external registry. In an offline environment, this verification fails — the pod can't be created even though the actual image tarball is already baked into the ISO.
+
+The symptom: `kube-proxy`, `coredns`, `kube-controller-manager`, and `kube-apiserver` all start successfully (they use tag-based references), but Cilium CNI pods remain in **ImagePullBackOff** or **ErrImagePull**. Since Cilium is required for cluster networking, the overall CKS deployment is considered failed.
+
+This is a fundamental mismatch between how Helm generates manifests (digest-pinned) and how `create-kubernetes-binaries-iso.sh` packages images (tag-only). A proper fix would require either modifying the Cilium manifest to use tag-based references before baking into the ISO, or ensuring the bundled image tarballs include digest metadata matching what the manifest expects.
+
 ## 5. The Workaround — Manually Import Images on Non-Upgraded Nodes
 
 To complete an offline upgrade beyond 1.33.x, you need to manually import the new images onto nodes that haven't been upgraded yet.
