@@ -1,7 +1,5 @@
 # CKS Offline Deployment — Workaround Guide
 
-> Official CloudStack docs say internet is required during cluster creation. This documents what happens when you disconnect, and how to make it work anyway.
-
 ## What the Docs Say
 
 The [CloudStack Kubernetes Service documentation](https://docs.cloudstack.apache.org/en/latest/plugins/cloudstack-kubernetes-service.html) states:
