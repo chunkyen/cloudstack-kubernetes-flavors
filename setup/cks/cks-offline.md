@@ -12,9 +12,15 @@ This guide documents that it _is_ possible, with workarounds.
 
 ## 1. The Problem
 
-- What official docs say about network requirements
-- Why CKS needs internet (what components pull from the web during provisioning)
-- When offline deployment matters (air-gapped, restricted environments)
+The CloudStack documentation explicitly states that complete offline provisioning of Kubernetes clusters is not supported — `kubeadm init` allegedly requires active internet access. This means if your management server or zone has no outbound connectivity to the public internet, cluster creation is expected to fail.
+
+In practice, CKS needs internet during node provisioning for several reasons:
+
+- **CNI plugin manifests** are pulled from the web (e.g., Calico YAML from GitHub) and applied after `kubeadm init` completes.
+- **Additional components** like the Kubernetes dashboard or CSI driver may be deployed via remote URLs baked into the ISO build scripts.
+- Any custom CNI configuration registered in CloudStack that references external image registries will also fail without connectivity.
+
+This is a real barrier for air-gapped deployments, government/military environments, and any setup where management servers are intentionally disconnected from the internet. The documentation's stance makes it seem like there's no way around it — but as this guide demonstrates, it _is_ possible with some workarounds.
 
 ## 2. No Special Preparation Needed
 
