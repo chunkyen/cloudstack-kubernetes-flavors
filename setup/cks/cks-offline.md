@@ -35,6 +35,10 @@ Upgrading beyond a certain point requires internet access:
 - ❌ **Upgrade to 1.34.7 (and likely later versions)** — upgrade fails when disconnected
 - As soon as internet is restored, the same upgrade succeeds
 
+Additionally, with the corrupted pause container in the 1.34.7 ISO:
+
+- ❌ **Creating a new cluster with 1.34.7** — also fails offline for the same reason (see [Corrupted Pause Container](#corrupted-pause-container-in-1347-iso) below)
+
 ### Investigation
 
 During an offline upgrade from 1.33.x to 1.34.7, the process stalls while creating **upgrade health check pods** — a Job that verifies control plane upgrade completion before moving on to worker nodes.
@@ -79,6 +83,8 @@ This explains why upgrades up to 1.33.x work offline (same pause version as befo
 A separate issue compounds the problem: the official [1.34.7 Calico x86_64 ISO](https://download.cloudstack.org/cks/setup-v1.34.7-calico-x86_64.iso) contains a **corrupted pause container** image (`pause:3.10.1`). 
 
 This is extremely hard to detect — if you're online, the node silently pulls the correct `pause:3.10.1` from an external registry instead of using the broken one from the ISO, and everything appears to work fine. Only in fully offline mode does this issue surface.
+
+**Affected operations:** Not just upgrades — **creating a new cluster with 1.34.7 also fails** in an offline environment for the same reason. The worker node can't find `pause:3.10.1` locally (corrupted in ISO) and can't pull it from the internet.
 
 **Workaround:** If the imported pause image from the 1.34.7 ISO is corrupted, you'll need to obtain a valid `pause:3.10.1` tarball (e.g., export it from a node with internet access using `ctr -n k8s.io images export`) and import it manually before attempting the upgrade.
 
