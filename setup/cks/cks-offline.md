@@ -8,20 +8,17 @@
 - Why CKS needs internet (what components pull from the web during provisioning)
 - When offline deployment matters (air-gapped, restricted environments)
 
-## 2. What Fails Without Internet
+## 2. No Special Preparation Needed
+
+- All K8s images are already baked into the ISO — no local registry or pre-download step required
+- The ISO is self-contained for cluster creation
+
+## 3. What Fails Without Internet
 
 - Breakdown of which steps fail and why:
-  - ISO registration / download
-  - K8s image pulls on node bootstrap
-  - CNI plugin installation (Calico/Cilium manifests)
+  - CNI plugin installation (Calico/Cilium manifests pulled from web)
   - CSI driver deployment
   - Anything else observed failing
-
-## 3. Preparation — Pre-Download Everything
-
-- Mirror the required K8s images to a local registry or bake into ISO
-- Download all needed binaries/manifests ahead of time
-- Any custom ISO considerations for offline use
 
 ## 4. The Workaround(s)
 
