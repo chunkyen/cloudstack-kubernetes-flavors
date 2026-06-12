@@ -140,6 +140,8 @@ From CloudStack 4.21+, the cluster creation form includes an **Advanced Settings
 - **Service Offering:** CPU/RAM profile for control nodes (e.g., 4 CPU / 8 GB RAM)
 - **Default:** Uses the last registered SystemVM template with the global K8s service offering
 - **Note:** Registering custom templates is optional — only needed if you want templates per node type. See [Step 4](#step-4-optional-register-cks-compatible-templates) for details.
+- **⚠️ Critical Bug Warning:** In `cmk create kubernetescluster`, if both `serviceofferingid` and `nodeofferings` are provided, `nodeofferings` will override the `serviceofferingid` during deployment. However, **CKS still checks the `serviceoffering` during cluster upgrades** to verify minimum hardware requirements. To avoid upgrade failures, ensure the `serviceofferingid` matches the resource specifications (CPU/RAM) of your control plane `nodeofferings`.
+
 
 ##### 3. Worker Node Template & Service Offering
 - **Template:** CKS-marked template for worker nodes (e.g., GPU-enabled, or with specific runtime tools)

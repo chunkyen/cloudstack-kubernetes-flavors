@@ -717,8 +717,13 @@ fi
 # Set a valid serviceofferingid as a placeholder — required by CloudStack for
 # cluster upgrades (will complain if invalid). The actual per-node-type
 # offerings are applied via nodeofferings and override this.
-# Just pick the first available offering automatically.
-if [[ -n "$OFF_ITEMS" ]]; then
+#
+# BUG FIX: To prevent upgrade failures, serviceofferingid MUST match the
+# control plane node offering's specifications. If a specific control
+# plane offering was selected, use it; otherwise, fall back to the first available.
+if [[ -n "$NODE_OFFERING_CONTROLPLANE" ]]; then
+  CREATE_ARGS+=("serviceofferingid=$NODE_OFFERING_CONTROLPLANE")
+elif [[ -n "$OFF_ITEMS" ]]; then
   FIRST_OFFERING=$(echo "$OFF_ITEMS" | cut -d'|' -f1)
   CREATE_ARGS+=("serviceofferingid=$FIRST_OFFERING")
 fi
