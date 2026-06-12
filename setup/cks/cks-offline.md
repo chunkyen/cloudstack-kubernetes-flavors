@@ -99,21 +99,22 @@ mkdir -p /mnt/iso
 mount /dev/sr0 /mnt/iso
 ```
 
-**4. Import the pause container image:**
+**4. Import all new images from the ISO:**
 
-Use `ctr` (containerd) to import the tarball from the ISO:
+Instead of importing just the pause container, import everything in the `docker/` directory — the node needs more than just that one image:
 
 ```bash
-ctr -n k8s.io images import /mnt/iso/docker/pause:3.10.1.tar
+ctr -n k8s.io images import /mnt/iso/docker/*.tar
 ```
 
-**5. Verify the image is imported:**
+**5. Verify the images are imported:**
+
 
 ```bash
 crictl images | grep pause
 ```
 
-You should see `pause` with tag `3.10.1` in the output.
+You should see `pause` with tag `3.10.1` along with other 1.34.x images in the output.
 
 **6. Restart the upgrade from CloudStack Management:**
 
@@ -127,7 +128,7 @@ The upgrade health check pod should now reach **Completed** status, and the upgr
 
 ### Why This Works
 
-By pre-loading `pause:3.10.1` onto the worker node before the health check Job runs, Kubernetes doesn't need to pull it from an external registry — the image is already local in containerd's store.
+By pre-loading all the new images from the ISO onto the worker node before any intermediate Jobs run, Kubernetes doesn't need to pull anything from an external registry — everything is already local in containerd's store.
 
 ## 6. Caveats & Limitations
 
