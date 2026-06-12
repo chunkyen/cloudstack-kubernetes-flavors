@@ -74,6 +74,14 @@ The root cause is that CKS upgrades only import new images onto the node current
 
 This explains why upgrades up to 1.33.x work offline (same pause version as before) but 1.34+ fails (new pause version required on non-upgraded nodes).
 
+### Corrupted Pause Container in 1.34.7 ISO
+
+A separate issue compounds the problem: the official [1.34.7 Calico x86_64 ISO](https://download.cloudstack.org/cks/setup-v1.34.7-calico-x86_64.iso) contains a **corrupted pause container** image (`pause:3.10.1`). 
+
+This is extremely hard to detect — if you're online, the node silently pulls the correct `pause:3.10.1` from an external registry instead of using the broken one from the ISO, and everything appears to work fine. Only in fully offline mode does this issue surface.
+
+**Workaround:** If the imported pause image from the 1.34.7 ISO is corrupted, you'll need to obtain a valid `pause:3.10.1` tarball (e.g., export it from a node with internet access using `ctr -n k8s.io images export`) and import it manually before attempting the upgrade.
+
 ## 5. The Workaround — Manually Import Images on Non-Upgraded Nodes
 
 To complete an offline upgrade beyond 1.33.x, you need to manually import the new images onto nodes that haven't been upgraded yet.
@@ -136,6 +144,7 @@ By pre-loading all the new images from the ISO onto the worker node before any i
 - Offline upgrades work only up to **1.33.x**; beyond that, the pause container version change breaks health check pods on non-upgraded nodes
 - The root cause is that CKS imports images only onto the node currently being upgraded — intermediate Jobs scheduled on other nodes can't find their required images without internet
 - This affects any upgrade where new image versions are introduced (pause container or otherwise) that must run on a node not yet upgraded
+- **Corrupted ISO:** The official [1.34.7 Calico x86_64 ISO](https://download.cloudstack.org/cks/setup-v1.34.7-calico-x86_64.iso) has a corrupted `pause:3.10.1` image — goes unnoticed online (silent fallback to registry pull) but breaks offline deployment
 
 ## 7. Verification
 
