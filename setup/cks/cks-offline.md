@@ -82,6 +82,14 @@ This is extremely hard to detect — if you're online, the node silently pulls t
 
 **Workaround:** If the imported pause image from the 1.34.7 ISO is corrupted, you'll need to obtain a valid `pause:3.10.1` tarball (e.g., export it from a node with internet access using `ctr -n k8s.io images export`) and import it manually before attempting the upgrade.
 
+### Building Your Own ISO for Offline Use
+
+To avoid relying on official ISOs that may have corrupted images, you can build your own CKS ISO. This gives you full control over which K8s version and CNI are included, and ensures all container images are valid.
+
+- See the [CKS Custom ISO Build Guide](./cks-custom-iso.md) for step-by-step instructions on building a custom ISO with `create-kubernetes-binaries-iso.sh` or the community script (for Cilium).
+
+**Testing your custom ISO offline:** Before deploying to production, validate your ISO by creating a CKS cluster in an **offline environment**. This is the only way to catch issues like corrupted images that would be silently masked when internet connectivity provides a fallback. The same test methodology described in this guide (cluster creation → scaling → upgrade) will confirm the ISO works end-to-end without any network dependency.
+
 ## 5. The Workaround — Manually Import Images on Non-Upgraded Nodes
 
 To complete an offline upgrade beyond 1.33.x, you need to manually import the new images onto nodes that haven't been upgraded yet.
