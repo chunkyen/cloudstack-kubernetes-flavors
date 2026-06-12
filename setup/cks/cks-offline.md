@@ -74,10 +74,60 @@ The root cause is that CKS upgrades only import new images onto the node current
 
 This explains why upgrades up to 1.33.x work offline (same pause version as before) but 1.34+ fails (new pause version required on non-upgraded nodes).
 
-## 5. The Workaround(s)
+## 5. The Workaround — Manually Import Images on Non-Upgraded Nodes
 
-- Specific workaround(s) — what was done differently
-- Step-by-step walkthrough
+To complete an offline upgrade beyond 1.33.x, you need to manually import the new images onto nodes that haven't been upgraded yet.
+
+### Step-by-Step
+
+**1. SSH into the worker node (non-upgraded node):**
+
+```bash
+sudo -i
+```
+
+**2. Attach the 1.34 CKS ISO to the worker node:**
+
+From CloudStack UI or via API, attach the 1.34 CKS ISO as a secondary ISO to the worker VM.
+
+**3. Mount the ISO on the worker node:**
+
+The attached ISO will appear as `/dev/sr0`. Create a mount point and mount it:
+
+```bash
+mkdir -p /mnt/iso
+mount /dev/sr0 /mnt/iso
+```
+
+**4. Import the pause container image:**
+
+Use `ctr` (containerd) to import the tarball from the ISO:
+
+```bash
+ctr -n k8s.io images import /mnt/iso/docker/pause:3.10.1.tar
+```
+
+**5. Verify the image is imported:**
+
+```bash
+crictl images | grep pause
+```
+
+You should see `pause` with tag `3.10.1` in the output.
+
+**6. Restart the upgrade from CloudStack Management:**
+
+Trigger the upgrade again via UI or cmk:
+
+```bash
+cmk upgrade kubernetescluster id=<cluster-id> kubernetesversionid=<new-version-id>
+```
+
+The upgrade health check pod should now reach **Completed** status, and the upgrade to 1.34 proceeds successfully.
+
+### Why This Works
+
+By pre-loading `pause:3.10.1` onto the worker node before the health check Job runs, Kubernetes doesn't need to pull it from an external registry — the image is already local in containerd's store.
 
 ## 6. Caveats & Limitations
 
