@@ -46,6 +46,8 @@ Or grab it directly from the CloudStack source repo if you don't want to touch t
 
 ### Uploading the ISO (after build)
 
+**Via cmk CLI:**
+
 ```bash
 cmk -p <profile> register iso \
   name=kubernetes-binaries-v1.33.1-calico \
