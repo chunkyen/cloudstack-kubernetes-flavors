@@ -102,38 +102,20 @@ Add built-in workflows for safe node lifecycle management:
 ## 5. Full Air-Gapped / Offline Deployment Support
 
 ### Problem
-CKS is designed with an implicit assumption of internet connectivity. While [cks-offline.md](./cks-offline.md) documents workarounds, air-gapped deployments remain a second-class experience:
-- Initial cluster creation works offline if the ISO is self-contained ✅
-- Upgrades fail when new shared images (e.g., `pause:3.10.1`) are introduced ❌
-- Custom Cilium ISOs break due to digest-pinned image references ❌
-- No built-in tooling for validating ISOs offline before deployment ❌
-- Documentation explicitly states "complete offline provisioning is not supported" 🚫
+CKS currently assumes internet connectivity is available as a fallback. While [cks-offline.md](./cks-offline.md) documents workarounds, air-gapped deployments remain second-class citizens — upgrades fail silently without the manual pre-import workaround (§1), and documentation explicitly states "complete offline provisioning... is not supported".
 
 ### Proposal: First-Class Air-Gapped Support
-Make CKS fully functional in environments with zero outbound internet access, without manual workarounds.
-
-**Key components:**
-1. **Pre-import all images on all nodes during upgrades** (see §1) — eliminates the pause container mismatch issue natively
-2. **Strip digest pins from generated manifests by default** (building on [offline Cilium script](./cks-custom-iso.md#option-c-build-cilium-offline-iso)) — prevents registry verification failures offline
-3. **Offline ISO validation tooling** — automated pre-flight checks that verify:
-   - All referenced images exist in the ISO's `docker/` directory
-   - Image tags match manifest references (no digest-only refs)
-   - No external URLs remain in bundled YAMLs
-4. **Air-gapped deployment documentation & best practices** — official guide covering:
-   - Building self-contained custom ISOs
-   - Local registry mirroring setup
-   - Pre-import workflows for upgrades
-   - Testing methodology to validate offline readiness before production use
-5. **Configuration flag: `cks.offlineMode=true`** — enables strict offline behavior (skip external registry lookups, enforce tag-only image refs, fail-fast on missing local images)
+Make CKS fully operational in environments with zero outbound internet connectivity. This builds directly on §1 (pre-import images) but extends further:
+- **No fallback to external registries** — all image references must resolve from local ISO or internal registry
+- **Manifest validation at build time** — verify that every `image:` reference in bundled YAMLs has a matching tarball in the ISO's `docker/` directory
+- **Strict offline mode flag** — add `cks.offlineMode=true` advanced setting that:
+  - Disables any attempt to reach external registries during cluster creation/upgrade
+  - Fails fast with actionable error messages if required images are missing locally
+  - Skips digest verification (requires tag-only refs, see §4.2 offline Cilium script)
+- **Offline upgrade path** — combine §1's pre-import logic with automatic validation that all target-version images exist before starting the upgrade
 
 ### Overlap with §1 (Pre-Import Images)
 Section 1 is a prerequisite for this proposal — pre-importing images during upgrades solves the most common offline failure mode. This broader proposal wraps that fix into a complete air-gapped strategy.
-
-### Implementation Notes
-- Start with §1 as the highest-impact change (fixes upgrade failures)
-- Make digest stripping opt-in via build script flag, then default to it
-- Validation tooling can be a separate CLI utility or integrated into ISO build scripts
-- Consider an official "Air-Gapped Deployment" certification test suite in CloudStack CI
 
 ---
 
