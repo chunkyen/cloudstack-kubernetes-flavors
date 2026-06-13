@@ -104,15 +104,14 @@ Add built-in workflows for safe node lifecycle management:
 ### Problem
 CKS currently assumes internet connectivity is available as a fallback. While [cks-offline.md](./cks-offline.md) documents workarounds, air-gapped deployments remain second-class citizens — upgrades fail silently without the manual pre-import workaround (§1), and documentation explicitly states "complete offline provisioning... is not supported".
 
-### Proposal: First-Class Air-Gapped Support
-Make CKS fully operational in environments with zero outbound internet connectivity. This builds directly on §1 (pre-import images) but extends further:
-- **No fallback to external registries** — all image references must resolve from local ISO or internal registry
-- **Manifest validation at build time** — verify that every `image:` reference in bundled YAMLs has a matching tarball in the ISO's `docker/` directory
-- **Strict offline mode flag** — add `cks.offlineMode=true` advanced setting that:
-  - Disables any attempt to reach external registries during cluster creation/upgrade
-  - Fails fast with actionable error messages if required images are missing locally
-  - Skips digest verification (requires tag-only refs, see §4.2 offline Cilium script)
-- **Offline upgrade path** — combine §1's pre-import logic with automatic validation that all target-version images exist before starting the upgrade
+### Proposal: Just Make It Work Offline
+CKS should function identically whether or not internet access is available. There should be no special "offline mode" — air-gapped deployment should simply work.
+
+**Key changes:**
+- **No implicit internet fallbacks** — CKS should never attempt to reach external registries by default. All image references resolve from the local ISO (or internal registry) out of the box.
+- **Manifest validation at build time** — verify that every `image:` reference in bundled YAMLs has a matching tarball in the ISO's `docker/` directory before the ISO is finalized.
+- **Fail-fast with actionable errors** — if required images are missing locally, report exactly what's missing rather than hanging on a registry timeout.
+- **Tag-only image references by default** — strip digest pins (`@sha256:...`) from generated manifests during build (see offline Cilium script for the pattern), so no external registry verification is ever needed.
 
 ### Relationship to other improvements
 This section depends on several of the proposals above as building blocks:
