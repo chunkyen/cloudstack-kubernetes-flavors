@@ -70,7 +70,7 @@ curl -X POST \
 
 CloudStack will process and make it available for CKS cluster creation.
 
-**Via CloudStack UI:** Navigate to **Images → Kubernetes ISOs**, then click **Add Kubernetes Version**.
+**Via CloudStack UI:** Navigate to **Images → Kubernetes ISOs**. The **Add Kubernetes Version** form lets you specify a remote URL for download. For direct local upload, click the **upload icon** (📤) beside it.
 
 ### Example: Kubernetes 1.33.1 with Calico
 
