@@ -9,7 +9,7 @@
 ### Problem
 Currently, CKS imports new container images only onto the node being actively upgraded. When intermediate Jobs (health checks, etc.) are scheduled on non-upgraded nodes, those nodes lack newer image versions — causing offline upgrades to fail with `ImagePullBackOff`.
 
-See [cks-offline.md §4.1](./cks-offline.md#41-pre-built-calico-iso---pause-container-issue) for detailed analysis.
+See [cks-offline.md #4.1](./cks-offline.md#41-pre-built-calico-iso---pause-container-issue) for detailed analysis.
 
 ### Proposed Fix
 Modify the CKS upgrade orchestration logic to **pre-import all required images from the target ISO onto every cluster node** before upgrading any single node.
@@ -17,7 +17,7 @@ Modify the CKS upgrade orchestration logic to **pre-import all required images f
 This guarantees:
 - Intermediate Jobs can be safely scheduled on any node without hitting `ImagePullBackOff`
 - Offline/air-gapped upgrades work seamlessly across all K8s versions
-- No manual workaround needed (#5 in cks-offline.md)
+- No manual workaround needed (Section 5 in cks-offline.md)
 
 ### Implementation Notes
 - Requires changes to the `cloudstack-kubernetes-service` plugin code
@@ -102,7 +102,7 @@ Add built-in workflows for safe node lifecycle management:
 ## 5. Full Air-Gapped / Offline Deployment Support
 
 ### Problem
-CKS currently assumes internet connectivity is available as a fallback. While [cks-offline.md](./cks-offline.md) documents workarounds, air-gapped deployments remain second-class citizens — upgrades fail silently without the manual pre-import workaround (§1), and documentation explicitly states "complete offline provisioning... is not supported".
+CKS currently assumes internet connectivity is available as a fallback. While [cks-offline.md](./cks-offline.md) documents workarounds, air-gapped deployments remain second-class citizens — upgrades fail silently without the manual pre-import workaround (Section 1), and documentation explicitly states "complete offline provisioning... is not supported".
 
 ### Proposal: Just Make It Work Offline
 CKS should function identically whether or not internet access is available. There should be no special "offline mode" — air-gapped deployment should simply work.
@@ -114,9 +114,9 @@ CKS should function identically whether or not internet access is available. The
 - **Tag-only image references by default** — strip digest pins (`@sha256:...`) from generated manifests during build (see offline Cilium script for the pattern), so no external registry verification is ever needed.
 
 ### Relationship to other improvements
-This section depends on several of the proposals above as building blocks:
-- **§1 (Pre-Import Images):** One of the key steps — eliminates the primary upgrade failure mode in offline environments.
-- **Offline Cilium script (§4.2 cks-offline.md):** Stripping digest pins from manifests is essential for air-gapped CNI deployment.
+This section builds on several of the proposals above as key steps:
+- **Section 1 (Pre-Import Images):** One of the essential steps — eliminates the primary upgrade failure mode in offline environments.
+- **Offline Cilium script (cks-offline.md #4.2):** Stripping digest pins from manifests is required for air-gapped CNI deployment.
 
 ---
 
