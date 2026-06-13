@@ -9,26 +9,49 @@ This guide covers building custom Kubernetes binaries ISOs for CloudStack Kubern
 - Dedicated etcd binaries
 - Architecture-specific builds (ARM64)
 
-> **Run all build commands on the CloudStack management server.**
+> ⚠️ **Security best practice:** Do NOT run these build commands on your CloudStack management server. The build process installs extra packages, downloads binaries/images from the internet, and runs container operations — all unnecessary attack surface on a production mgmt node.
+>
+> **Recommended approach:** Build on an isolated worker/build machine (Ubuntu 22.04+), then copy the resulting ISO to the management server only for upload to secondary storage.
 
-## Option A: Build Calico ISO (Official Script)
+## Recommended: Isolated Build Machine
 
-### Prerequisites
+Set up a clean Ubuntu 22.04+ VM or container:
+
 ```bash
 sudo apt install -y wget curl genisoimage containerd.io
 ```
 
-### Script Location
-
-The script is provided by the `cloudstack-common` package:
+For Cilium builds (Option B), also install Helm:
 ```bash
-# Official location (may vary by distribution)
-/usr/share/cloudstack-common/scripts/util/create-kubernetes-binaries-iso.sh
-# Alternative location:
-/usr/share/cloudstack-common/scripts/cks/create-kubernetes-binaries-iso.sh
+sudo apt install -y helm
 ```
 
+### Getting the Build Scripts
+
+**Option A (Official Calico):** The script ships with `cloudstack-common` as a convenience, but it has no CloudStack dependencies — just standard Linux tools. You can either:
+
+```bash
+# Copy from mgmt server (if you already have one):
+scp root@<mgmt-server>:/usr/share/cloudstack-common/scripts/util/create-kubernetes-binaries-iso.sh ./
+chmod +x create-kubernetes-binaries-iso.sh
+```
+
+Or grab it directly from the CloudStack source repo if you don't want to touch the mgmt server at all.
+
+**Option B (Community Cilium):** Already archived in this repo — see below.
+
+### Uploading the ISO (after build)
+
+Once your ISO is built, transfer it to the management server:
+```bash
+scp /path/to/kubernetes-binaries.iso root@<mgmt-server>:/tmp/
+```
+
+Then on the mgmt server, upload via `cmk` or UI as usual.
+
 ### Example: Kubernetes 1.33.1 with Calico
+
+All commands run on your isolated build machine:
 
 ```bash
 OUTPUT_PATH=/tmp/
@@ -41,7 +64,7 @@ BUILD_NAME="v${KUBERNETES_VERSION}-cks-calico"
 ARCH="amd64"
 ETCD_VERSION="3.5.0"
 
-sudo /usr/share/cloudstack-common/scripts/util/create-kubernetes-binaries-iso.sh \
+sudo ./create-kubernetes-binaries-iso.sh \
   $OUTPUT_PATH \
   $KUBERNETES_VERSION \
   $CNI_VERSION \
@@ -87,11 +110,6 @@ $ARCH \
 > **Note:** Dedicated etcd nodes require an ISO built with etcd binaries. Available pre-built ISOs: `https://download.cloudstack.org/testing/cks/custom_templates/iso-etcd/`
 
 ## Option B: Build Cilium ISO (Community Script)
-
-### Prerequisites
-```bash
-sudo apt install -y wget curl genisoimage containerd.io helm
-```
 
 For a Cilium-based ISO that also bundles CCM, CSI, and Cluster Autoscaler.
 
