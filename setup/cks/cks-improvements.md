@@ -81,9 +81,21 @@ Implement an authentication layer using either:
 
 ---
 
-## 4. [Reserved]
+## 4. Node Lifecycle Management: Remove/Replace Failed Nodes
 
-_(Add more ideas here)_
+### Problem
+Currently, CKS supports **scale-up** (increasing vCPU/RAM via offering change) and **scale-out** (adding more nodes), but lacks a native mechanism to safely remove or replace failed nodes. When a node becomes `NotReady`, loses connectivity, or is permanently decommissioned, it remains in the cluster. Administrators must manually run `kubectl drain` and `kubectl delete node`, which falls outside CKS orchestration and can leave orphaned resources or inconsistent state.
+
+### Proposal: Native Scale-In & Node Replacement
+Add built-in workflows for safe node lifecycle management:
+- **Remove/Scale-In:** Gracefully cordon, drain, and remove a specified node via UI/API (enhancing `removeVirtualMachinesFromKubernetesCluster`)
+- **Replace Failed Node:** One-click workflow that detects `NotReady` nodes, provisions a replacement VM with matching labels/taints, imports required images, drains the old node, and decommissions it automatically
+
+### Implementation Notes
+- Leverage Kubernetes drain logic internally before terminating the CloudStack VM
+- Expose node health status in the CKS UI (e.g., highlight `NotReady` or degraded nodes)
+- Ensure stateful workloads (PVs, DaemonSets) are handled safely during removal
+- Could integrate with a custom operator for auto-healing instead of manual intervention
 
 ---
 
@@ -97,4 +109,5 @@ _(Add more ideas here)_
 | 1 | Pre-import images on all nodes during upgrade | 🔴 |
 | 2 | Replace Dashboard with Headlamp | 🔴 |
 | 3 | Dex/Pinniped + CloudStack IAM integration | 🔴 |
+| 4 | Native scale-in & failed node replacement | 🔴 |
 
