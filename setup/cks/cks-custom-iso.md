@@ -46,12 +46,10 @@ Or grab it directly from the CloudStack source repo if you don't want to touch t
 
 ### Uploading the ISO (after build)
 
-Once your ISO is built, transfer it to the management server:
-```bash
-scp /path/to/kubernetes-binaries.iso root@<mgmt-server>:/tmp/
-```
+Upload directly from your build machine — no need to copy files to the management server.
 
-Then on the mgmt server, upload via `cmk` or UI as usual.
+- **Via cmk:** Use `registerISO` pointing to a publicly accessible URL hosting the ISO, or use `upload` if you have the file locally.
+- **Via CloudStack UI:** Navigate to **Infrastructure → Secondary Storage → ISOs**, then click **Register ISO**.
 
 ### Example: Kubernetes 1.33.1 with Calico
 
