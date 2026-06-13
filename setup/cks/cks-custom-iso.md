@@ -46,20 +46,31 @@ Or grab it directly from the CloudStack source repo if you don't want to touch t
 
 ### Uploading the ISO (after build)
 
-**Via cmk CLI:**
+CKS has a dedicated upload flow — no need to host the ISO on a public URL first.
 
+**Step 1: Get an upload URL from CloudStack:**
 ```bash
-cmk -p <profile> register iso \
+cmk -p <profile> get uploadparamsfor kubernetessupportedversion \
   name=kubernetes-binaries-v1.33.1-calico \
-  url=http://<build-machine-ip>/path/to/kubernetes-binaries.iso \
+  semanticversion=1.33.1 \
+  format=ISO \
   zoneid=<zone-uuid> \
-  isextractable=true \
-  bootable=false
+  mincpunumber=2 \
+  minmemory=4096
 ```
 
-Required params: `name`, `url`, `zoneid`. The ISO must be reachable via HTTP from the CloudStack secondary storage.
+This returns a `postURL` (and other metadata) for uploading the ISO.
 
-**Via CloudStack UI:** Navigate to **Infrastructure → Secondary Storage → ISOs**, then click **Register ISO**.
+**Step 2: Upload the ISO directly:**
+```bash
+curl -X POST \
+  -F "file=@/path/to/kubernetes-binaries.iso" \
+  <postURL-from-step-1>
+```
+
+CloudStack will process and make it available for CKS cluster creation.
+
+**Via CloudStack UI:** Navigate to **Images → Kubernetes ISOs**, then click **Add Kubernetes Version**.
 
 ### Example: Kubernetes 1.33.1 with Calico
 
