@@ -15,7 +15,7 @@ Build your own only when you need:
 
 > ⚠️ **Security best practice:** Do NOT run these build commands on your CloudStack management server. The build process installs extra packages, downloads binaries/images from the internet, and runs container operations — all unnecessary attack surface on a production mgmt node.
 >
-> **Recommended approach:** Build on an isolated worker/build machine (Ubuntu 22.04+), then copy the resulting ISO to the management server only for upload to secondary storage.
+> **Recommended approach:** Build on an isolated worker/build machine (Ubuntu 22.04+), then register the ISO directly via `cmk` or the CloudStack UI.
 
 ## Recommended: Isolated Build Machine
 
