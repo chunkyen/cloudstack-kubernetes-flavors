@@ -10,6 +10,15 @@
 | [cks-upgrade.md](./cks-upgrade.md) | End-to-end CKS cluster upgrade guide (K8s version, CNI, CSI) |
 | [cks-improvements.md](./cks-improvements.md) | WIP: Proposed upstream improvements for CKS (offline support, auth/IAM, node lifecycle, etc.) |
 
+### Scripts
+
+| Script | Description |
+|--------|-------------|
+| [scripts/create-kubernetes-binaries-iso.sh](./scripts/create-kubernetes-binaries-iso.sh) | Official Calico ISO builder script (archived from CloudStack source) |
+| [scripts/create-cilium-offline-kubernetes-binaries-iso.sh](./scripts/create-cilium-offline-kubernetes-binaries-iso.sh) | Offline Cilium ISO builder — strips `@sha256:...` digest pins for air-gapped deployment |
+| [scripts/create-cks-cluster.sh](./scripts/create-cks-cluster.sh) | Automates CKS cluster creation via cmk CLI |
+| [scripts/cilium-cni-config.yaml](./scripts/cilium-cni-config.yaml) | User-data config for dynamic Cilium CNI injection at runtime |
+
 ---
 
 ## Prerequisites
