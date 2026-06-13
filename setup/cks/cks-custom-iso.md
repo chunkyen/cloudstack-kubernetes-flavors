@@ -48,8 +48,19 @@ Or grab it directly from the CloudStack source repo if you don't want to touch t
 
 Upload directly from your build machine — no need to copy files to the management server.
 
-- **Via cmk:** Use `registerISO` pointing to a publicly accessible URL hosting the ISO, or use `upload` if you have the file locally.
-- **Via CloudStack UI:** Navigate to **Infrastructure → Secondary Storage → ISOs**, then click **Register ISO**.
+**Via cmk CLI:**
+```bash
+cmk -p <profile> register iso \
+  name=kubernetes-binaries-v1.33.1-calico \
+  url=http://<build-machine-ip>/path/to/kubernetes-binaries.iso \
+  zoneid=<zone-uuid> \
+  isextractable=true \
+  bootable=false
+```
+
+Required params: `name`, `url`, `zoneid`. The ISO must be reachable via HTTP from the CloudStack secondary storage.
+
+**Via CloudStack UI:** Navigate to **Infrastructure → Secondary Storage → ISOs**, then click **Register ISO**.
 
 ### Example: Kubernetes 1.33.1 with Calico
 
