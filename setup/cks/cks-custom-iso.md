@@ -32,15 +32,15 @@ sudo apt install -y helm
 
 ### Getting the Build Scripts
 
-**Option A (Official Calico):** The script ships with `cloudstack-common` as a convenience, but it has no CloudStack dependencies — just standard Linux tools. You can either:
+**Option A (Official Calico):** The script ships with `cloudstack-common` as a convenience, but it has no CloudStack dependencies — just standard Linux tools.
 
+Copy from your management server:
 ```bash
-# Copy from mgmt server (if you already have one):
 scp root@<mgmt-server>:/usr/share/cloudstack-common/scripts/util/create-kubernetes-binaries-iso.sh ./
 chmod +x create-kubernetes-binaries-iso.sh
 ```
 
-Or grab it directly from the CloudStack source repo if you don't want to touch the mgmt server at all.
+Alternatively, an archived copy is available in this repo at [`setup/cks/scripts/create-kubernetes-binaries-iso.sh`](setup/cks/scripts/create-kubernetes-binaries-iso.sh), or grab the latest from the [CloudStack source](https://github.com/apache/cloudstack/blob/main/scripts/util/create-kubernetes-binaries-iso.sh).
 
 **Option B (Community Cilium):** Already archived in this repo — see below.
 
