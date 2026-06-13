@@ -251,7 +251,40 @@ By pre-loading all the new images from the ISO onto the worker node before any i
 - This affects any upgrade where new image versions are introduced (pause container or otherwise) that must run on a node not yet upgraded
 - **Corrupted ISO:** The official [1.34.7 Calico x86_64 ISO](https://download.cloudstack.org/cks/setup-v1.34.7-calico-x86_64.iso) has a corrupted `pause:3.10.1` image — goes unnoticed online (silent fallback to registry pull) but breaks offline deployment
 
-## 7. Verification
+## 8. Long-Term Solutions
+
+The manual workarounds above solve immediate offline upgrades, but two architectural improvements would make air-gapped CKS fully robust long-term:
+
+### 1. Local Image Registry Mirroring
+
+Instead of relying on bundled ISO tarballs or external registries, mirror all required container images to an internal registry (e.g., Harbor, Docker Registry) inside your air-gapped network.
+
+**How to update YAMLs to reference the local registry:**
+- On a build machine with internet access, pull upstream images and push them to `registry.local:5000`.
+- Rewrite all `image:` lines in the CKS manifests (`network.yaml`, `dashboard.yaml`, etc.) using `sed`:
+  ```bash
+  # Example: replace k8s.gcr.io/pause with local mirror
+  sed -i 's|k8s.gcr.io/\(.*:\)|registry.local:5000/k8s.gcr.io/\1|g' *.yaml
+  ```
+- Rebuild the custom ISO with these modified YAMLs.
+- Configure kubelet/containerd on all CKS nodes to trust the local registry via `insecure_registries` (or internal CA certs).
+
+This decouples cluster operations from upstream registry availability and simplifies future upgrades — you only need to sync new images to your mirror, not rebuild ISOs every time.
+
+### 2. Fix CKS Upgrade Logic: Pre-Import Images on All Nodes First
+
+The pause container issue occurs because **CKS currently imports new images only onto the node being actively upgraded**. When Kubernetes schedules a health check or intermediate Job on a *different* (non-upgraded) node, that node lacks the newer image versions and fails offline.
+
+**Proposed upstream fix:**
+Modify the CKS upgrade orchestration logic to **pre-import all required images from the target ISO onto every cluster node before upgrading any single node**. 
+
+This guarantees that:
+- Intermediate Jobs can be safely scheduled on any node without hitting `ImagePullBackOff`.
+- Upgrades proceed seamlessly even when new shared base images (like `pause`) are introduced in a newer K8s version.
+
+Implementing this would require changes to the `cloudstack-kubernetes-service` plugin code. Contributing this fix upstream would make offline upgrades natively reliable across all future versions without manual workarounds.
+
+## 9. Verification
 
 - How to confirm the cluster is functional without internet
 - Test checklist (nodes join, pods schedule, CNI works, etc.)
