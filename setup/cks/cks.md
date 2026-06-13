@@ -1,5 +1,17 @@
 # CKS Setup Guide
 
+## 📚 Guide Index
+
+| File | Description |
+|------|-------------|
+| [cks.md](./cks.md) | Main setup guide: enabling CKS, registering ISOs/templates, creating clusters, scaling, and troubleshooting |
+| [cks-custom-iso.md](./cks-custom-iso.md) | Build custom Kubernetes binaries ISOs (Calico, Cilium, offline-ready) |
+| [cks-offline.md](./cks-offline.md) | Air-gapped / offline deployment workarounds, root cause analysis, and long-term solutions |
+| [cks-upgrade.md](./cks-upgrade.md) | End-to-end CKS cluster upgrade guide (K8s version, CNI, CSI) |
+| [cks-improvements.md](./cks-improvements.md) | WIP: Proposed upstream improvements for CKS (offline support, auth/IAM, node lifecycle, etc.) |
+
+---
+
 ## Prerequisites
 
 - Apache CloudStack management server (ACS 4.14+ for basic CKS, 4.21+ for flexible features)
