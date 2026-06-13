@@ -114,8 +114,10 @@ Make CKS fully operational in environments with zero outbound internet connectiv
   - Skips digest verification (requires tag-only refs, see §4.2 offline Cilium script)
 - **Offline upgrade path** — combine §1's pre-import logic with automatic validation that all target-version images exist before starting the upgrade
 
-### Overlap with §1 (Pre-Import Images)
-Section 1 is a prerequisite for this proposal — pre-importing images during upgrades solves the most common offline failure mode. This broader proposal wraps that fix into a complete air-gapped strategy.
+### Relationship to other improvements
+This section depends on several of the proposals above as building blocks:
+- **§1 (Pre-Import Images):** One of the key steps — eliminates the primary upgrade failure mode in offline environments.
+- **Offline Cilium script (§4.2 cks-offline.md):** Stripping digest pins from manifests is essential for air-gapped CNI deployment.
 
 ---
 
