@@ -161,6 +161,32 @@ Because CKS only imports new images onto the node currently being upgraded, inte
 
 > 💡 **Proactive Tip:** If you know a CKS upgrade will introduce a new pause container version (or any new shared image), skip the reactive fix and **pre-import all images to every node *before* triggering the upgrade**. This guarantees all nodes have what they need immediately, preventing intermediate Jobs from failing in the first place.
 
+### Proactive Fix: Pre-Import Before Upgrade (Recommended)
+
+If you know the target CKS version introduces new shared images (e.g., a new `pause` version), import them onto **all** nodes before triggering the upgrade. This prevents intermediate Jobs from failing entirely.
+
+1. **SSH into each node** (control plane and all workers):
+   ```bash
+   sudo -i
+   ```
+2. **Attach the target CKS ISO as a secondary ISO to each VM** via CloudStack UI or API.
+3. **Mount the ISO:**
+   ```bash
+   mkdir -p /mnt/iso
+   mount /dev/sr0 /mnt/iso
+   ```
+4. **Import all images from the ISO onto every node:**
+   ```bash
+   for f in /mnt/iso/docker/*.tar; do ctr -n k8s.io images import "$f"; done
+   ```
+5. **Repeat steps 1–4 on every remaining node.**
+6. **Trigger the CKS upgrade** via cmk or UI as usual:
+   ```bash
+   cmk upgrade kubernetescluster id=<cluster-id> kubernetesversionid=<new-version-id>
+   ```
+
+Because all nodes already have the new images locally, intermediate Jobs (health checks, etc.) can be scheduled on any node without failing.
+
 ### Reactive Fix: Importing After Failure
 
 If an offline upgrade has already stalled due to a missing pause container, follow these steps:
