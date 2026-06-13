@@ -143,7 +143,13 @@ pod="kube-system/cilium-envoy-6p6kf" podUID="90798992-b980-42a1-b952-66a66265e60
 
 The key detail is `lookup quay.io: i/o timeout` — Kubernetes attempts to verify the digest via a HEAD request to `quay.io`, which fails because there's no internet access. Note how the image reference includes **`@sha256:...`** digest pins (shown on their own lines above) — these are what trigger the external registry lookup.
 
-This is a fundamental mismatch between how Helm generates manifests (digest-pinned) and how `create-kubernetes-binaries-iso.sh` packages images (tag-only). A proper fix would require either modifying the Cilium manifest to use tag-based references before baking into the ISO, or ensuring the bundled image tarballs include digest metadata matching what the manifest expects.
+This is a fundamental mismatch between how Helm generates manifests (digest-pinned) and how `create-kubernetes-binaries-iso.sh` packages images (tag-only).
+
+### Solution: Offline Cilium ISO Script ✅
+
+The [`create-cilium-offline-kubernetes-binaries-iso.sh`](setup/cks/scripts/create-cilium-offline-kubernetes-binaries-iso.sh) script solves this by stripping all `@sha256:...` digest pins from the generated YAML manifests before baking them into the ISO. This leaves tag-based image references that match what's already bundled in the containerd store, eliminating the need for external registry verification.
+
+See [Option C: Build Cilium Offline ISO](./cks-custom-iso.md#option-c-build-cilium-offline-iso) in the custom ISO build guide.
 
 > **Note:** The pause container issue described in [Section 4.1](#41-pre-built-calico-iso---pause-container-issue) also applies during upgrades of Cilium custom ISOs — if a new pause version is introduced, the same worker-node image-missing problem will occur.
 
