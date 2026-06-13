@@ -2,8 +2,12 @@
 
 ## Overview
 
-This guide covers building custom Kubernetes binaries ISOs for CloudStack Kubernetes Service (CKS). Use this when you need:
-- A specific Kubernetes version not available in pre-built ISOs
+This guide covers building custom Kubernetes binaries ISOs for CloudStack Kubernetes Service (CKS).
+
+**First check the pre-built ISOs:** [http://download.cloudstack.org/cks/](http://download.cloudstack.org/cks/) — many common versions and configurations are already available.
+
+Build your own only when you need:
+- A specific Kubernetes version not in the pre-built set
 - A different CNI plugin (Cilium instead of Calico)
 - Bundled components (CCM, CSI Driver, Cluster Autoscaler)
 - Dedicated etcd binaries
