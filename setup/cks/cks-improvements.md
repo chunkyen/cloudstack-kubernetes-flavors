@@ -120,6 +120,33 @@ This section builds on several of the proposals above as key steps:
 
 ---
 
+## 6. Restrictive Default Firewall Rules (API + SSH)
+
+### Problem
+By default, CKS creates firewall rules that open:
+- **Kube API (6443)** — sourced from `0.0.0.0/0` on the SNAT public IP
+- **SSH port-forwarded ports** (2222→node1:22, 2223→node2:22, etc.) — also sourced from `0.0.0.0/0`
+
+This exposes the API and SSH to the entire internet from cluster creation time, which is a significant security concern for production deployments.
+
+### Proposal: Allow Source IP Restriction at Cluster Creation
+Add an advanced setting (or UI/API parameter) during CKS cluster creation that lets administrators specify allowed source CIDR(s):
+- `cks.firewall.apiSourceCidr` — controls the source range on port 6443 firewall rule (default remains `0.0.0.0/0` for backward compatibility)
+- `cks.firewall.sshSourceCidr` — controls the source range on all SSH forwarded ports
+
+**Defaults:** Keep `0.0.0.0/0` as default to maintain backward compatibility, but strongly document that restricting these is recommended.
+
+**Better long-term default:** Consider flipping the default in a future major release to use a restrictive CIDR (e.g., `127.0.0.1/32` or the management server's IP range) and require explicit opt-in for open access.
+
+### Implementation Notes
+- Map new advanced settings to firewall rule creation logic in the CKS plugin (`createFirewallRule` calls)
+- Support comma-separated CIDRs if multiple ranges are needed (e.g., `10.0.0.0/8,203.0.113.5/32`)
+- Update `cks.md` documentation to call out these settings prominently
+- Consider a post-creation API/UI action to modify firewall rules without requiring cluster recreation
+- Could also support per-node SSH CIDR granularity in the future (e.g., restrict node 1 SSH to admin IP, node 2+ to bastion)
+
+---
+
 **Status Legend:**
 - 🔴 Not started
 - 🟡 In discussion / draft proposal
@@ -132,4 +159,5 @@ This section builds on several of the proposals above as key steps:
 | 3 | Dex/Pinniped + CloudStack IAM integration | 🔴 |
 | 4 | Native scale-in & failed node replacement | 🔴 |
 | 5 | Full air-gapped / offline deployment support | 🔴 |
+| 6 | Restrictive default firewall rules (API + SSH) | 🔴 |
 
