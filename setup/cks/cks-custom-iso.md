@@ -42,7 +42,9 @@ chmod +x create-kubernetes-binaries-iso.sh
 
 Alternatively, an archived copy is available in this repo at [`setup/cks/scripts/create-kubernetes-binaries-iso.sh`](setup/cks/scripts/create-kubernetes-binaries-iso.sh), or grab the latest from the [CloudStack source](https://github.com/apache/cloudstack/blob/main/scripts/util/create-kubernetes-binaries-iso.sh).
 
-**Option B (Community Cilium):** Already archived in this repo — see below.
+**Option B (Community Cilium):** Archived in this repo — see [Option B](#option-b-build-cilium-iso-community-script) below.
+
+**Option C (Offline Cilium):** Same as Option B but strips `@sha256:...` digest pins from generated YAML manifests, enabling fully offline deployment. See [Option C](#option-c-build-cilium-offline-iso).
 
 ### Uploading the ISO (after build)
 
@@ -200,6 +202,64 @@ helm upgrade --install cilium cilium/cilium --version ${CILIUM_VERSION} \
   --set kubeProxyReplacement=true \
   --take-ownership
 ```
+
+## Option C: Build Cilium Offline ISO
+
+Same as [Option B](#option-b-build-cilium-iso-community-script) but with one critical fix: **all `@sha256:...` digest pins are stripped from generated YAML manifests** before baking into the ISO.
+
+This enables **fully offline deployment**. Without this fix, Kubernetes tries to verify image digests against external registries (e.g., `quay.io`) when starting Cilium pods — which fails in air-gapped environments.
+
+**Archived in this repo:** [`create-cilium-offline-kubernetes-binaries-iso.sh`](setup/cks/scripts/create-cilium-offline-kubernetes-binaries-iso.sh)
+
+### Why This Works
+
+| Scenario | Standard Cilium Script | Offline Script |
+|----------|----------------------|----------------|
+| **Image refs in YAML** | `quay.io/cilium/cilium:v1.18.2@sha256:xxxx` | `quay.io/cilium/cilium:v1.18.2` |
+| **Kubelet behavior (offline)** | Tries to verify digest against registry → fails | Uses tag-only ref from local store → succeeds |
+| **Requires internet?** | Yes (for digest verification) | No |
+
+The actual image tarballs bundled in the ISO are identical between both scripts — only the manifest references differ.
+
+### Example Build
+
+```bash
+OUTPUT_PATH=/tmp/
+KUBERNETES_VERSION="1.34.2"
+CNI_VERSION="1.8.0"
+CRICTL_VERSION="1.34.0"
+CILIUM_VERSION="1.18.2"
+DASHBOARD_YAML="https://raw.githubusercontent.com/kubernetes/dashboard/v7.14.0/aio/deploy/recommended.yaml"
+BUILD_NAME="v${KUBERNETES_VERSION}-cks-cilium-offline"
+ARCH="amd64"
+ETCD_VERSION="3.5.0"
+
+./setup/cks/scripts/create-cilium-offline-kubernetes-binaries-iso.sh \
+  $OUTPUT_PATH \
+  $KUBERNETES_VERSION \
+  $CNI_VERSION \
+  $CRICTL_VERSION \
+  $CILIUM_VERSION \
+  $DASHBOARD_YAML \
+  $BUILD_NAME \
+  $ARCH \
+  $ETCD_VERSION
+```
+
+### Parameters
+
+Identical to Option B, with the same positional arguments. The script accepts:
+1. `OUTPUT_PATH` — directory for the output ISO
+2. `KUBERNETES_VERSION` — e.g., `1.34.2`
+3. `CNI_VERSION` — e.g., `1.8.0`
+4. `CRICTL_VERSION` — e.g., `1.34.0`
+5. `CILIUM_VERSION` — e.g., `1.18.2`
+6. `DASHBOARD_YAML` — URL to dashboard manifest
+7. `BUILD_NAME` — output filename prefix
+8. `[ARCH]` — optional, default `amd64`
+9. `[ETCD_VERSION]` — optional, for dedicated etcd nodes
+
+See [Offline Deployment Guide](./cks-offline.md) for more details on the digest pin issue and testing methodology.
 
 ## Troubleshooting
 
