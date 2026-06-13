@@ -46,8 +46,6 @@ Or grab it directly from the CloudStack source repo if you don't want to touch t
 
 ### Uploading the ISO (after build)
 
-Upload directly from your build machine — no need to copy files to the management server.
-
 **Via cmk CLI:**
 ```bash
 cmk -p <profile> register iso \
