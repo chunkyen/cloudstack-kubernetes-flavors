@@ -155,7 +155,15 @@ See [Option C: Build Cilium Offline ISO](./cks-custom-iso.md#option-c-build-cili
 
 ## 5. The Workaround — Manually Import Images on Non-Upgraded Nodes
 
-To complete an offline upgrade beyond 1.33.x, you need to manually import the new images onto nodes that haven't been upgraded yet.
+This workaround addresses the **pause container version mismatch** described in [Section 4.1](#41-pre-built-calico-iso---pause-container-issue). 
+
+Because CKS only imports new images onto the node currently being upgraded, intermediate Jobs (like health checks) scheduled on other nodes will fail if those nodes lack the newer image versions.
+
+> 💡 **Proactive Tip:** If you know a CKS upgrade will introduce a new pause container version (or any new shared image), skip the reactive fix and **pre-import all images to every node *before* triggering the upgrade**. This guarantees all nodes have what they need immediately, preventing intermediate Jobs from failing in the first place.
+
+### Reactive Fix: Importing After Failure
+
+If an offline upgrade has already stalled due to a missing pause container, follow these steps:
 
 ### Step-by-Step
 
