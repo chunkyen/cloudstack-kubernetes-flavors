@@ -232,29 +232,246 @@ A systemd oneshot that:
 
 ## Phase 7: Post-Bootstrap Verification (Management Server)
 
-| Step | Check |
-|------|-------|
-| **5** | Kubeconfig available via SSH → `/etc/kubernetes/admin.conf` |
-| **6** | Dashboard service running (`kubectl get pods -n kubernetes-dashboard`) |
-| **7** | Control nodes tainted (cluster-autoscaler scale-down-disabled) |
-| **8** | CloudStack Provider deployed (CCM + secret) |
-| **9** | CSI driver deployed (optional) |
-| **10** | State → Running |
+The management server performs the following verification steps sequentially after cloud-init reports success:
+
+### 7.1 Control VM Accessibility
+```java
+KubernetesClusterUtil.isKubernetesClusterControlVmRunning(
+    kubernetesCluster, publicIpAddress, sshPort, startTimeoutTime)
+```
+- SSHs into the control VM to verify it's running and reachable
+- For HA + direct-access networks: requires external load balancer with port forwarding configured
+
+### 7.2 API Server Health
+```java
+KubernetesClusterUtil.isKubernetesClusterServerRunning(
+    kubernetesCluster, publicIpAddress, 6443, startTimeoutTime, 15000)
+```
+- Polls `https://<public-ip>:6443` with 15-second connect timeout
+- Retries until the API server responds or the start timeout expires
+
+### 7.3 Node Readiness
+```java
+KubernetesClusterUtil.validateKubernetesClusterReadyNodesCount(
+    kubernetesCluster, publicIpAddress, sshPort, loginUser, sshKeyFile,
+    startTimeoutTime, 15000)
+```
+- Runs `kubectl get nodes` via SSH
+- Verifies all expected nodes are in `Ready` state
+
+### 7.4 ISO Detachment
+```
+detachIsoKubernetesVMs(clusterVMs)
+```
+- Removes the binaries ISO from all cluster VMs
+
+### 7.5 Kubeconfig Retrieval
+```java
+isKubernetesClusterKubeConfigAvailable(startTimeoutTime)
+```
+- Fetches `/etc/kubernetes/admin.conf` from the control node via SSH
+- Replaces private IP with public IP in the server URL
+- Stores base64-encoded in `KubernetesClusterDetailsVO` with key `kubeConfigData`
+
+### 7.6 Dashboard Verification
+```java
+isKubernetesClusterDashboardServiceRunning(onCreate=true, startTimeoutTime)
+```
+- Checks `kubectl get pods -n kubernetes-dashboard` for dashboard pod in Running state (4.22.1)
+- For unreleased 4.23.0+: tries Headlamp first (`kube-system` namespace), then falls back to Kubernetes Dashboard
+
+### 7.7 Control Node Tainting
+```
+taintControlNodes()
+```
+- Runs on each control node: 
+  ```
+  kubectl annotate node <name> cluster-autoscaler.kubernetes.io/scale-down-disabled=true
+  ```
+- Retries up to 3 times with 5s delay
+
+### 7.8 CloudStack Provider Deployment
+```
+deployProvider()
+```
+- SCPs `deploy-cloudstack-secret`, `deploy-provider`, `deploy-csi-driver`, `autoscale-kube-cluster`, `delete-pv-reclaimpolicy-delete` scripts to `/opt/bin/` on the control node
+- Creates `cloudstack-secret` in `kube-system` namespace:
+  ```bash
+  kubectl -n kube-system create secret generic cloudstack-secret \
+    --from-file=/tmp/cloud-config
+  ```
+  where `cloud-config` contains:
+  ```ini
+  [Global]
+  api-url = <CloudStack API URL>
+  api-key = <API key>
+  secret-key = <Secret key>
+  project-id = <Project UUID>  # if project account
+  ```
+- Applies the provider manifest from `provider.yaml` (imported from ISO)
+- For isolated networks only (provider manages CloudStack IPs)
+
+### 7.9 CSI Driver Deployment (optional)
+```
+deployCsiDriver()
+```
+- Applies CSI snapshot CRDs and driver manifest from ISO
+- Creates CloudStack secret if not already present
+
+### 7.10 Login User Detail Update
+```
+updateLoginUserDetails(clusterVMs)
+```
+- Adds VM detail `CKS_CONTROL_NODE_LOGIN_USER = "cloud"` for each VM
+
+### 7.11 Final State Transition
+```
+StartRequested → Running (via OperationSucceeded event)
+```
+
+### 7.12 Cluster Endpoint Update
+```
+updateKubernetesClusterEntryEndpoint()
+```
+- Sets `kubernetesCluster.setEndpoint("https://<publicIp>:6443/")`
 
 ---
 
 ## Management Server ↔ Cluster Communication
 
-### SSH Channel (Primary)
-The management server SSHs into the control node using:
-- Key: `~/.ssh/id_rsa` (or `id_rsa.cloud` in dev mode)
-- User: `cloud` (injected via cloud-init `authorized_keys`)
-- Port: 2222 for isolated/VPC networks (via port forwarding), 22 for shared/direct
+The CloudStack management server communicates with the CKS cluster through **two channels**: SSH (primary) and HTTPS (API health check only).
 
-All kubectl commands use `/opt/bin/kubectl` (from the ISO).
+### Channel 1: SSH (Primary — All kubectl Operations)
 
-### HTTPS Channel (API Server Health Check Only)
-Directly calls `https://<public-ip>:6443/version` using a TrustAll SSL context.
+All post-bootstrap verification, configuration, and ongoing management is done by SSHing into the control node and running `kubectl` commands remotely.
+
+#### How SSH Access is Established
+
+**1. SSH key injection via cloud-init**
+
+Every node's cloud-init template writes the management server's SSH public key into the `cloud` user's authorized_keys:
+
+```yaml
+# From k8s-control-node.yml, k8s-node.yml, etcd-node.yml
+users:
+- name: cloud
+  sudo: ALL=(ALL) NOPASSWD:***
+  shell: /bin/bash
+  ssh_authorized_keys:
+  {{ k8s.ssh.pub.key }}     # ← Management server key + optional user keypair
+```
+
+The `{{ k8s.ssh.pub.key }}` placeholder is replaced at template rendering time with:
+
+```java
+String pubKey = "- \"" + configurationDao.getValue("ssh.publickey") + "\"";
+// If the user specified an SSH keypair for the cluster:
+if (StringUtils.isNotEmpty(sshKeyPair)) {
+    SSHKeyPairVO sshkp = sshKeyPairDao.findByName(owner.getAccountId(), owner.getDomainId(), sshKeyPair);
+    pubKey += "\n - \"" + sshkp.getPublicKey() + "\"";
+}
+```
+
+**2. Management server's private key**
+
+```java
+// KubernetesClusterActionWorker.java
+protected File getManagementServerSshPublicKeyFile() {
+    boolean devel = Boolean.parseBoolean(configurationDao.getValue("developer"));
+    String keyFile = String.format("%s/.ssh/id_rsa", System.getProperty("user.home"));
+    if (devel) {
+        keyFile += ".cloud";  // uses id_rsa.cloud in developer mode
+    }
+    return new File(keyFile);
+}
+```
+
+So the management server authenticates with its own `~/.ssh/id_rsa` (or `id_rsa.cloud` in dev mode).
+
+**3. How the IP and port are resolved**
+
+The `getKubernetesClusterServerIpSshPort()` method determines the connection target based on network type:
+
+| Network Type | IP Source | SSH Port | Path |
+|-------------|-----------|----------|------|
+| **Isolated** | SourceNAT public IP | 2222 | Via port forwarding `publicIP:2222 → VM:22` |
+| **VPC tier** | VPC-tier public IP | 2222 | Via port forwarding `publicIP:2222 → VM:22` |
+| **Shared / Direct** | VM private IP | 22 | Directly reachable, no NAT |
+| **External LB** | `EXTERNAL_LOAD_BALANCER_IP_ADDRESS` detail | 2222 | User-provided load balancer |
+
+### Channel 2: HTTPS (API Server Health Check Only)
+
+For checking if the kube-apiserver is up, the management server directly calls the API server endpoint — no SSH needed:
+
+```java
+// KubernetesClusterUtil.java
+public static boolean isKubernetesClusterServerRunning(...) {
+    SSLContext sslContext = SSLUtils.getSSLContext();
+    sslContext.init(null, new TrustManager[]{new TrustAllManager()}, new SecureRandom());
+    URL url = new URL(String.format("https://%s:%d/version", ipAddress, port));
+    HttpsURLConnection con = (HttpsURLConnection)url.openConnection();
+    con.setSSLSocketFactory(sslContext.getSocketFactory());
+    // read /version response...
+}
+```
+
+Key details:
+- URL: `https://<public-ip>:6443/version`
+- Uses `TrustAllManager` — accepts the self-signed kube-apiserver certificate
+- Polls every 15 seconds until the API server responds
+
+### All Communication Operations (in order)
+
+| Step | Method | Transport | What runs on the control node |
+|------|--------|-----------|-------------------------------|
+| **7.1** Control VM reachability | `isKubernetesClusterControlVmRunning()` | Raw TCP socket | `new Socket().connect(ip, port)` — just a TCP handshake |
+| **7.2** API server health | `isKubernetesClusterServerRunning()` | HTTPS (TrustAll) | `GET https://<ip>:6443/version` |
+| **7.3** Node readiness | `validateKubernetesClusterReadyNodesCount()` | SSH → kubectl | `sudo /opt/bin/kubectl get nodes \| grep -w 'Ready' \| wc -l` |
+| **7.5** Kubeconfig retrieval | `getKubernetesClusterConfig()` | SSH → cat | `sudo cat /etc/kubernetes/user.conf 2>/dev/null \|\| sudo cat /etc/kubernetes/admin.conf` |
+| **7.6** Dashboard check | `isKubernetesClusterDashboardServiceRunning()` | SSH → kubectl | `sudo /opt/bin/kubectl get pods --namespace=kube-system` (searches for "headlamp" or "kubernetes-dashboard") |
+| **7.7** Control node taint | `taintControlNodes()` | SSH → kubectl | `sudo /opt/bin/kubectl annotate node <name> cluster-autoscaler.kubernetes.io/scale-down-disabled=true` |
+| **7.8** Provider deployment | `deployProvider()` | SCP + SSH | SCP scripts to `/opt/bin/`, then `sudo /opt/bin/deploy-cloudstack-secret` → `kubectl create secret` → `kubectl apply -f provider.yaml` |
+| **7.9** CSI deployment | `deployCsiDriver()` | SCP + SSH | SCP scripts, then `kubectl apply -f` CSI manifests |
+
+### How Kubeconfig is Retrieved and Stored
+
+The kubeconfig is fetched via SSH and stored in the CloudStack database for the user to download later:
+
+```java
+// Step 1: Fetch via SSH
+Pair<Boolean, String> result = SshHelper.sshExecute(ipAddress, port, user,
+    sshKeyFile, null,
+    "sudo cat /etc/kubernetes/user.conf 2>/dev/null || sudo cat /etc/kubernetes/admin.conf",
+    10000, 10000, 10000);
+
+// Step 2: Replace private IP with public IP in the server URL
+kubeConfig = kubeConfig.replace(
+    String.format("server: https://%s:%d", controlVMPrivateIpAddress, CLUSTER_API_PORT),
+    String.format("server: https://%s:%d", publicIpAddress, CLUSTER_API_PORT));
+
+// Step 3: Store base64-encoded in DB
+kubernetesClusterDetailsDao.addDetail(kubernetesCluster.getId(), "kubeConfigData",
+    Base64.encodeBase64String(kubeConfig.getBytes()...), false);
+```
+
+After bootstrap, the user retrieves the kubeconfig via `GetKubernetesClusterConfigCmd` which:
+1. Looks up the `kubeConfigData` detail from the DB
+2. Base64-decodes it
+3. Returns it to the user
+
+### SSH Execution Details
+
+All SSH operations use `SshHelper.sshExecute()` with these parameters:
+
+| Parameter | Value |
+|-----------|-------|
+| User | `cloud` (retrieved via `getControlNodeLoginUser()`) |
+| Key file | `~/.ssh/id_rsa` (or `id_rsa.cloud` in dev mode) |
+| Connect timeout | 10,000 ms |
+| KEX timeout | 10,000 ms |
+| Command timeout | Varies (10,000–60,000 ms depending on operation) |
+
+All kubectl commands use the absolute path `/opt/bin/kubectl` (not the system-installed one), since the binaries ISO installs everything to `/opt/bin/`.
 
 ---
 
@@ -262,20 +479,35 @@ Directly calls `https://<public-ip>:6443/version` using a TrustAll SSL context.
 
 ### `k8s-control-node.yml`
 - **Purpose**: First control plane node with external etcd
-- **Key files**: TLS certs, kubeadm-config.yaml, setup-kube-system, deploy-kube-system
-- **runcmd**: Configure containerd → install binaries → kubeadm init + apply manifests
+- **Key files written**:
+  - `/etc/kubernetes/pki/cloudstack/{ca.crt, apiserver.crt, apiserver.key}` — TLS certs
+  - `/etc/kubernetes/kubeadm-config.yaml` — kubeadm config with external etcd endpoints
+  - `/opt/bin/setup-kube-system` — binary installation & containerd setup
+  - `/opt/bin/deploy-kube-system` — `kubeadm init` + CNI + dashboard
+  - `/opt/bin/setup-containerd` — (optional) private registry config
+  - `/etc/systemd/system/deploy-kube-system.service` — oneshot service
+- **runcmd**:
+  - Configure containerd (`SystemdCgroup = true`)
+  - Run setup-kube-system (poll-for-ISO + install binaries)
+  - Run deploy-kube-system (kubeadm init + apply manifests)
 
 ### `k8s-control-node-add.yml`
 - **Purpose**: Additional HA control plane nodes
-- **Key difference**: Uses `kubeadm join` with certificate key
+- **Key difference**: Uses `kubeadm join` instead of `kubeadm init`, includes certificate key for `--control-plane --certificate-key`
 
 ### `k8s-node.yml`
 - **Purpose**: Worker nodes
-- **Key difference**: `kubeadm join`, VR ISO download fallback, API server wait check
+- **Key difference**: 
+  - `deploy-kube-system` runs `kubeadm join` instead of `kubeadm init`
+  - Has VR ISO download fallback (`wget` from `{{ k8s.vr.iso.mounted.ip }}`)
+  - Includes `ExecStartPre=curl -k https://<control-ip>:6443/version` to wait for API server
 
 ### `etcd-node.yml`
 - **Purpose**: External etcd nodes
-- **Key difference**: Polls for ISO by filesystem type, installs only etcd binary
+- **Key differences**:
+  - Polls for ISO by filesystem type (`TYPE=iso9660`) not label
+  - Installs only etcd binary from ISO
+  - Configures etcd as systemd service with `--initial-cluster` for peer discovery
 
 ---
 
