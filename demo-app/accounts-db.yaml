@@ -1,0 +1,120 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: accounts-db-config
+  labels:
+    app: accounts-db
+    application: bank-of-anthos
+    environment: development
+    team: accounts
+    tier: db
+data:
+  ACCOUNTS_DB_URI: postgresql://accounts-admin:accounts-pwd@accounts-db:5432/accounts-db
+  POSTGRES_DB: accounts-db
+  POSTGRES_PASSWORD: accounts-pwd
+  POSTGRES_USER: accounts-admin
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: accounts-db
+  labels:
+    application: bank-of-anthos
+    environment: development
+    team: accounts
+    tier: db
+spec:
+  ports:
+    - name: tcp
+      port: 5432
+      protocol: TCP
+      targetPort: 5432
+  selector:
+    app: accounts-db
+    application: bank-of-anthos
+    environment: development
+    team: accounts
+    tier: db
+  type: ClusterIP
+
+---
+#apiVersion: v1
+#kind: PersistentVolumeClaim
+#metadata:
+#  name: accounts-db-pvc
+#  labels:
+#    application: bank-of-anthos
+#    environment: development
+#    team: accounts
+#    tier: db
+#spec:
+#  accessModes:
+#    - ReadWriteOnce
+#  resources:
+#    requests:
+#      storage: 10Gi
+#  storageClassName: cloudstack-med
+
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: accounts-db
+  labels:
+    application: bank-of-anthos
+    environment: development
+    team: accounts
+    tier: db
+spec:
+  serviceName: accounts-db
+  replicas: 1
+  selector:
+    matchLabels:
+      app: accounts-db
+      application: bank-of-anthos
+      environment: development
+      team: accounts
+      tier: db
+  template:
+    metadata:
+      labels:
+        app: accounts-db
+        application: bank-of-anthos
+        environment: development
+        team: accounts
+        tier: db
+    spec:
+      serviceAccountName: default
+      containers:
+        - name: accounts-db
+          image: us-central1-docker.pkg.dev/bank-of-anthos-ci/bank-of-anthos/accounts-db:v0.6.7@sha256:d1f7b4b42fbbad5b3f8c85c67a15f4e27cc9a054ae8bc2379e3f0319e313ce9d
+          envFrom:
+            - configMapRef:
+                name: environment-config
+            - configMapRef:
+                name: accounts-db-config
+            - configMapRef:
+                name: demo-data-config
+          ports:
+            - containerPort: 5432
+          resources:
+            limits:
+              cpu: 250m
+              memory: 512Mi
+            requests:
+              cpu: 100m
+              memory: 128Mi
+          volumeMounts:
+            - name: postgresdb
+              mountPath: /var/lib/postgresql/data
+              subPath: postgres
+  volumeClaimTemplates:
+    - metadata:
+        name: postgresdb
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 10Gi
+#        storageClassName: cloudstack-med
