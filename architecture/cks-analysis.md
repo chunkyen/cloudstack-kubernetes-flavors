@@ -511,16 +511,417 @@ All kubectl commands use the absolute path `/opt/bin/kubectl` (not the system-in
 
 ---
 
+## State Machine
+
+```
+                           CreateRequested
+                                 │
+                                 ▼
+                             Created ──→ DestroyRequested → Destroyed
+                                 │
+                                 ▼
+                          StartRequested
+                                 │
+                                 ▼
+                              Starting
+                              /      \
+                             ▼        ▼
+                    CreateFailed    Running
+                                 /    │    \
+                      UpgradeRequested │  ScaleUpRequested / ScaleDownRequested
+                           │          │           │
+                           ▼          │           ▼
+                       Upgrading      │        Scaling
+                        /    \        │       /      \
+                       ▼      ▼       │      ▼        ▼
+             OperationFailed  ────────┘  OperationFailed
+                       \                /
+                        ▼              ▼
+                     OperationSucceeded
+                            │
+                            ▼
+                          Running
+                            │
+                            ▼
+                      StopRequested
+                            │
+                            ▼
+                         Stopping
+                         /      \
+                        ▼        ▼
+                OperationFailed  Stopped
+```
+
+**Key events:**
+- `CreateRequested` → `Created`: Cluster DB record persisted
+- `StartRequested` → `Starting`: Bootstrap begins (Phase 4)
+- `OperationSucceeded` → `Running`: All checks passed (Phase 7)
+- `CreateFailed` → Error state, ISOs detached: Bootstrap failed during create
+- `OperationFailed` → Error state: Operation failed after cluster was running
+
+### Scale State Machine
+
+```
+Running → ScaleUpRequested   / ScaleDownRequested   → Scaling
+                                                        │
+                                           OperationSucceeded → Running
+                                           OperationFailed    → Error
+```
+
+### Scale Errors and Rollback
+
+- **Scale-up failure**: `cleanupNewlyCreatedVms()` finds VMs that weren't in the original set and destroys/expunges them, removes their DB records
+- **Scale-down failure**: If `kubectl drain` or `kubectl delete node` fails (retried 3 times), the operation fails but doesn't undo already-removed nodes
+- **Offering scale failure**: If `upgradeVirtualMachine` fails for any VM, the operation aborts — already-scaled VMs keep their new offering
+- **Timeout**: All scale operations are bounded by `cloud.kubernetes.cluster.scale.timeout` (default 3600s)
+
+---
+
 ## Scaling
 
-Handled by `KubernetesClusterScaleWorker`:
-1. **Scale up**: Capacity planning → create VMs with k8s-node.yml cloud-init → kubeadm join
-2. **Scale down**: Select nodes to remove via round-robin, destroy them
-3. **Service offering change**: Resize existing VMs (XenServer/VMware/Simulator only)
-4. **Autoscaling enable/disable**: Sets min/max bounds on the cluster
+Scaling is handled by `KubernetesClusterScaleWorker`, which supports three operations in a single API call (`ScaleKubernetesClusterCmd`):
+
+1. **Change worker node count** (scale up or down)
+2. **Change service offering** for any node type (control, worker, etcd) — upgrades/downgrades existing VMs
+3. **Enable/disable autoscaling** (set min/max size)
+
+### Scale Entry Point: `scaleCluster()`
+
+```
+ScaleKubernetesClusterCmd
+  → KubernetesClusterManagerImpl.scaleKubernetesCluster()
+    → KubernetesClusterScaleWorker.scaleCluster()
+      → [init → autoscale? → offering scaling? → size scaling? → OperationSucceeded]
+```
+
+### Scale Up (Adding Worker Nodes)
+
+**Pre-flight validations:**
+- Only XenServer, VMware, and Simulator hypervisors support scaling with running VMs (KVM does not)
+- Capacity planning via `plan()` — same host capacity check as during creation
+- Must find hosts with enough CPU/RAM for `newVmRequiredCount` additional VMs
+
+**Provisioning flow (`scaleUpKubernetesClusterSize`):**
+
+1. **State transition**: `Running → Scaling` (via `ScaleUpRequested`)
+2. **Grant template access**: If using default system template, add launch permission for the account
+3. **Create VMs**: `provisionKubernetesClusterNodeVMs(newTotalCount, offset=currentCount, ...)`
+   - Creates VMs with `k8s-node.yml` cloud-init (same as initial creation)
+   - Cloud-init does `kubeadm join` with the same cluster token
+4. **Scale network rules**: Removes old firewall/port-forwarding rules, recreates with expanded range
+   - Isolated: removes SSH firewall rule, removes all port forwarding rules, recreates both
+   - VPC tier: removes and recreates port forwarding rules only
+5. **Attach binaries ISO**: `attachIsoKubernetesVMs(newVMs)` — sequential, one VM at a time
+6. **Wait for Ready nodes**: `validateKubernetesClusterReadyNodesCount()` — polls `kubectl get nodes` via SSH every 15s
+7. **Detach ISO**: `detachIsoKubernetesVMs(newVMs)`
+8. **Rollback on failure**: If node count doesn't match, `cleanupNewlyCreatedVms()` destroys and expunges all newly created VMs
+
+### Scale Down (Removing Worker Nodes)
+
+**Selecting which nodes to remove (`getWorkerNodesToRemove`):**
+- Gets all non-external, non-control, non-etcd VMs
+- Selects the **last N** VMs (sorted by creation order, reverse)
+- User can also pass explicit node IDs to remove via `nodeIds` parameter
+
+**Removal flow (`removeNodesFromCluster`):**
+
+For each targeted node VM (in reverse order):
+
+1. **Drain node**: SSH → `sudo /opt/bin/kubectl drain <hostname> --ignore-daemonsets --delete-emptydir-data`
+   - Retries up to 3 times with 30-second wait between attempts
+2. **Delete node**: SSH → `sudo /opt/bin/kubectl delete node <hostname>`
+3. **Destroy VM**: `userVmService.destroyVm(vmId, true)` then `userVmManager.expunge(vm)`
+4. **Remove DB record**: `kubernetesClusterVmMapDao.expunge(vmMapId)`
+5. **Update network rules**: Recalculate firewall port range and port forwarding rules
+
+### Service Offering Scaling
+
+Scales existing VMs of a given node type to a new compute offering:
+
+1. Validates that the new offering is different from the existing one
+2. For each VM of the target node type:
+   - Calls `userVmManager.upgradeVirtualMachine(vmId, newOfferingId, customParams)`
+   - This is a CloudStack VM upgrade — changes CPU/RAM allocation
+3. Updates the cluster DB record with new core/memory totals
+
+**Capacity recalculation**: If only one node type is being scaled, it calculates the delta:
+- `newCores = oldClusterCores - oldNodeTypeCores + newNodeTypeCores`
+- `newMemory = oldClusterMemory - oldNodeTypeMemory + newNodeTypeMemory`
+
+### Network Rule Scaling
+
+Network rules must be rebuilt on every scale operation:
+
+**Isolated networks:**
+1. Remove existing SSH firewall rule on the SourceNAT IP
+2. Remove all port forwarding rules across the port range
+3. Recreate firewall rule opening `2222–(2222 + newClusterSize - etcdCount - 1)`
+4. Recreate port forwarding: `publicIP:2222 → worker0:22`, `publicIP:2223 → worker1:22`, etc.
+
+**VPC tiers:**
+1. Remove all port forwarding rules
+2. Recreate port forwarding rules for the new VM count
+3. External nodes get ports after the default nodes (e.g., if 3 default nodes + 1 external: ports 2222-2224 for defaults, 2225 for external)
+
+### Autoscaling
+
+Autoscaling is configured via the same `ScaleKubernetesClusterCmd` API:
+
+```java
+if (isAutoscalingChanged) {
+    autoscaleCluster(this.isAutoscalingEnabled, minSize, maxSize);
+}
+```
+
+The `autoscaleCluster` method runs the `autoscale-kube-cluster` script on the control node:
+
+**Enable:**
+```bash
+./autoscale-kube-cluster -e -M <max-size> -m <min-size>
+```
+- Substitutes `<cluster-id>`, `<min>`, `<max>` in the autoscaler template (`autoscaler_tmpl.yaml`)
+- Applies the rendered manifest: `kubectl apply -f /opt/autoscaler/autoscaler_now.yaml`
+- This deploys the Kubernetes [cluster-autoscaler](https://github.com/kubernetes/autoscaler) with the CloudStack cloud provider
+
+**Disable:**
+```bash
+./autoscale-kube-cluster -d
+```
+- Runs: `kubectl delete deployment -n kube-system cluster-autoscaler`
+
+---
+
+## Upgrade
+
+Upgrade is handled by `KubernetesClusterUpgradeWorker`. It upgrades all cluster nodes to a new Kubernetes version using a new binaries ISO.
+
+### Upgrade Entry Point
+
+```
+UpgradeKubernetesClusterCmd
+  → KubernetesClusterManagerImpl.upgradeKubernetesCluster()
+    → KubernetesClusterUpgradeWorker.upgradeCluster()
+      → [init → attach new ISO → drain → upgrade → uncordon → verify → detach ISO → update DB]
+```
+
+### Prerequisites
+
+- A new `KubernetesSupportedVersion` must be registered with a new binaries ISO containing the target version's kubeadm, kubelet, kubectl, and container images
+- The upgrade version ISO must be different from the current cluster version
+- Nodes marked with `markForManualUpgrade=true` (etcd nodes) are skipped via `filterOutManualUpgradeNodesFromClusterUpgrade()`
+
+### Upgrade Flow (`upgradeCluster()`)
+
+#### 1. Init
+
+- Resolves public IP and SSH port for cluster access
+- Loads all cluster VMs, filters out manual-upgrade nodes (etcd)
+- Retrieves scripts (upgrade script, provider scripts)
+- State transition: `Running → UpgradeRequested`
+
+#### 2. Attach New Binaries ISO
+
+```java
+attachIsoKubernetesVMs(clusterVMs, upgradeVersion);
+```
+- Attaches the **new version's ISO** (not the original) to all VMs sequentially
+- This ISO contains the target version's kubeadm, kubelet, kubectl binaries and container images
+
+#### 3. Per-Node Upgrade Loop (`upgradeKubernetesClusterNodes()`)
+
+For each node (control nodes first, then workers):
+
+**a) Drain the node:**
+```bash
+sudo /opt/bin/kubectl drain <hostname> --ignore-daemonsets --delete-emptydir-data
+```
+- SSH from management server to control node, runs kubectl
+- Retries up to `cloud.kubernetes.cluster.upgrade.retries` times (default 3)
+- On final failure: detaches ISOs and throws `OperationFailed`
+- Checks timeout after each operation
+
+**b) Deploy provider** (in case it was lost):
+```java
+deployProvider();
+```
+
+**c) Run upgrade script on the node:**
+
+SCPs `upgrade-kubernetes.sh` to the node, then SSH-executes it:
+
+```bash
+./upgrade-kubernetes.sh <version> <isControlNode> <isOldVersion> <ejectIso> <externalCni>
+```
+
+The upgrade script does:
+
+1. **Polls for ISO**: `blkid -o device -t LABEL=CDROM` (up to 10 attempts × 5s = 50s)
+2. **Installs new kubeadm**: `cp <ISO>/k8s/kubeadm /opt/bin && chmod +x`
+3. **Imports new container images**: `ctr -n k8s.io image import <ISO>/docker/*.tar`
+4. **Updates CNI plugins and crictl** from ISO
+5. **kubeadm upgrade**:
+   - **First control node**: `kubeadm upgrade apply <version> -y`
+     - Fallback for CoreDNS plugin issues: `--ignore-preflight-errors=CoreDNSUnsupportedPlugins`
+   - **Other nodes**: 
+     - If old version (< 1.15): `kubeadm upgrade node config --kubelet-version <version>`
+     - Otherwise: `kubeadm upgrade node`
+6. **Installs new kubelet + kubectl**: `cp <ISO>/k8s/{kubelet,kubectl} /opt/bin`
+7. **Restarts kubelet**: `systemctl stop kubelet → daemon-reload → restart containerd → restart kubelet`
+8. **First control node only**: Re-applies CNI and dashboard manifests from the new ISO
+9. **Unmounts and ejects ISO**
+
+**d) Uncordon the node:**
+```bash
+sudo /opt/bin/kubectl uncordon <hostname>
+```
+- Polls every 15s until success or timeout
+
+**e) Wait for control node Ready** (first node only):
+```java
+isKubernetesClusterNodeReady(hostName, upgradeTimeoutTime, 15000)
+```
+- Polls `kubectl get nodes` every 15s until the control node shows `Ready`
+
+**f) Verify node version:**
+```java
+clusterNodeVersionMatches(upgradeVersion.getSemanticVersion(), ...)
+```
+- Runs `kubectl get nodes | awk '{if ($1 == "<hostname>") print $5}'`
+- Checks the reported version matches the target
+- Updates `KubernetesClusterVmMapVO.nodeVersion` in DB
+
+#### 4. Detach ISO and Update DB
+
+- Detaches the new ISO from all VMs
+- Updates `KubernetesClusterVO.kubernetesVersionId` to the new version
+- State transition: `UpgradeRequested → Running` (via `OperationSucceeded`)
+
+### Upgrade Timeline per Node
+
+| Step | Time |
+|------|------|
+| ISO poll (max) | 50s (10 attempts × 5s) |
+| Binary install + image import | ~30-120s |
+| kubeadm upgrade | ~60-120s |
+| kubelet restart | ~10s |
+| Uncordon wait | up to timeout |
+| Node Ready wait (control only) | up to timeout |
+
+Total per node: typically 2-5 minutes. For a 3-control + 5-worker cluster: ~16-40 minutes.
+
+### Upgrade Retries
+
+- **Drain**: retries `cloud.kubernetes.cluster.upgrade.retries` (default 3)
+- **Upgrade script**: retries `cloud.kubernetes.cluster.upgrade.retries` (default 3)
+- **Uncordon**: polls until `cloud.kubernetes.cluster.upgrade.timeout` (default 3600s)
+- **Node Ready**: polls until timeout
+- **Version match**: polls up to 10 retries with `waitDuration` (15s) between
+
+### Upgrade Error Handling
+
+- On any failure during a node upgrade: `logTransitStateDetachIsoAndThrow()` — detaches ISOs from all nodes and throws
+- The `upgradeTimeoutTime` is checked after each major step; if exceeded, ISOs are detached and operation fails
+- Already-upgraded nodes are NOT rolled back — they remain at the new version
+- The cluster version in the DB is only updated after ALL nodes succeed
+
+---
+
+## Error Handling
+
+The bootstrap process has robust error handling at each stage:
+
+1. **State transitions on failure**: Every failure triggers a state transition (e.g., `CreateFailed`, `OperationFailed`)
+2. **ISO detach on failure**: `logTransitStateDetachIsoAndThrow()` detaches ISOs before throwing
+3. **Template launch permission cleanup**: `deleteTemplateLaunchPermission()` revokes template access on failure
+4. **Resource cleanup**: `KubernetesClusterDestroyWorker` handles full teardown of VMs, network rules, volumes
+
+---
+
+## Key Source Files Reference
+
+All paths relative to `plugins/integrations/kubernetes-service/src/main/`:
+
+### Java Sources
+```
+java/com/cloud/kubernetes/cluster/
+├── KubernetesClusterService.java              — Service interface + ConfigKeys
+├── KubernetesClusterManagerImpl.java           — Main orchestrator
+├── actionworkers/
+│   ├── KubernetesClusterActionWorker.java      — Base worker (SSH, ISO, state, scripts)
+│   ├── KubernetesClusterResourceModifierActionWorker.java — Capacity, VM create/start
+│   ├── KubernetesClusterStartWorker.java       — Bootstrap implementation
+│   ├── KubernetesClusterDestroyWorker.java     — Teardown
+│   ├── KubernetesClusterScaleWorker.java       — Scale up/down
+│   ├── KubernetesClusterUpgradeWorker.java     — Version upgrades
+│   ├── KubernetesClusterStopWorker.java        — Stop cluster
+│   ├── KubernetesClusterAddWorker.java         — Add external nodes
+│   └── KubernetesClusterRemoveWorker.java      — Remove nodes
+├── utils/
+│   └── KubernetesClusterUtil.java              — kubectl, SSH, token generation
+└── dao/
+    ├── KubernetesClusterDao.java
+    ├── KubernetesClusterVmMapDao.java
+    └── KubernetesClusterDetailsDao.java
+```
+
+### Cloud-init Templates
+```
+resources/conf/
+├── k8s-control-node.yml          — Control plane node cloud-init
+├── k8s-control-node-add.yml      — Additional HA control node cloud-init
+├── k8s-node.yml                  — Worker node cloud-init
+└── etcd-node.yml                 — External etcd node cloud-init
+```
+
+### Shell Scripts (embedded in Java resources)
+```
+resources/script/
+├── deploy-cloudstack-secret      — Creates cloudstack-secret in kube-system
+├── deploy-provider               — Deploys CloudStack Kubernetes Provider
+├── deploy-csi-driver             — Deploys CloudStack CSI Driver
+├── autoscale-kube-cluster        — Cluster autoscaler setup
+├── delete-pv-reclaimpolicy-delete — PersistentVolume cleanup
+├── validate-cks-node             — Node validation
+└── remove-node-from-cluster      — Node removal
+```
+
+### Binaries ISO Builder
+```
+create-kubernetes-binaries-iso.sh
+```
+(Found in `cloudstack-common` package, builds `/mnt/k8sdisk/` structure described in Phase 6.3)
+
+---
+
+## ConfigKeys Reference
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `cloud.kubernetes.service.enabled` | Boolean | `true` | Master enable/disable |
+| `cloud.kubernetes.cluster.network.offering` | String | `DefaultNetworkOfferingforKubernetesService` | Network offering name |
+| `cloud.kubernetes.cluster.start.timeout` | Long | `3600` | Start timeout (seconds) |
+| `cloud.kubernetes.cluster.scale.timeout` | Long | `3600` | Scale timeout (seconds) |
+| `cloud.kubernetes.cluster.upgrade.timeout` | Long | `3600` | Upgrade timeout (seconds) |
+| `cloud.kubernetes.cluster.upgrade.retries` | Integer | `3` | Upgrade retry count |
+| `cloud.kubernetes.cluster.add.node.timeout` | Long | `3600` | Add node timeout |
+| `cloud.kubernetes.cluster.remove.node.timeout` | Long | `900` | Remove node timeout |
+| `cloud.kubernetes.cluster.experimental.features.enabled` | Boolean | `false` | Docker private registry |
+| `cloud.kubernetes.cluster.max.size` | Integer | `10` | Max cluster size (per account) |
+| `cloud.kubernetes.control.node.install.attempt.wait.duration` | Long | `15` | Control node install retry wait |
+| `cloud.kubernetes.control.node.install.reattempt.count` | Long | `100` | Control node install retries |
+| `cloud.kubernetes.worker.node.install.attempt.wait.duration` | Long | `30` | Worker node install retry wait |
+| `cloud.kubernetes.worker.node.install.reattempt.count` | Long | `40` | Worker node install retries |
+| `cloud.kubernetes.etcd.node.start.port` | Integer | `50000` | etcd SSH port forwarding start |
 
 ---
 
 ## Related
 - [CKS Upgrade Guide](../setup/cks/cks-upgrade.md) — upgrade procedures and troubleshooting
 - [CKS Custom ISO Build Guide](./cks-custom-iso.md) — building CKS-compatible ISOs
+- [CKS Improvements](./cks-improvements.md) — detailed suggestions for robustness & security improvements
+- [CAPC Architecture](./capc-analysis.md) — CloudStack API Provider for Cluster API
+- [CAPC Upgrade Guide](../setup/capc/capc-upgrade.md) — CAPC cluster upgrade procedures
+- [CNI Automation Options](../setup/capc/cni-automation-options.md) — automating CNI installation for CAPC clusters
+- [CKS Setup Guide](../setup/cks/cks.md) — initial CKS cluster deployment
+
+> **Note:** The full list of robustness & security improvement suggestions (ISO build script fixes, dashboard decoupling, token lifecycle, TLS cert validity, credential protection, SSH access restrictions, etc.) has been moved to [cks-improvements.md](./cks-improvements.md) to keep this file focused on operational analysis.
