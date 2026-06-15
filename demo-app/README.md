@@ -15,6 +15,10 @@ Based on [GoogleCloudPlatform/bank-of-anthos](https://github.com/GoogleCloudPlat
 - All deployments use the default service account
 - `ENABLE_METRICS` and `ENABLE_TRACING` set to `false` in all applicable deployments, disabling Google Cloud Operations telemetry as described in the [upstream environments docs](https://github.com/GoogleCloudPlatform/bank-of-anthos/blob/main/docs/environments.md)
 
+## Prerequisites
+
+A **CloudStack StorageClass** must exist before applying the manifests, otherwise PVCs for `accounts-db` and `ledger-db` will fail to bind. See the [example StorageClass](https://github.com/cloudstack/cloudstack-csi-driver/blob/main/examples/k8s/0-storageclass.yaml) from the CSI driver repository.
+
 ## Quick Start
 
 ```bash
