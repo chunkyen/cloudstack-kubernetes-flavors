@@ -918,7 +918,7 @@ create-kubernetes-binaries-iso.sh
 ## Related
 - [CKS Upgrade Guide](../setup/cks/cks-upgrade.md) — upgrade procedures and troubleshooting
 - [CKS Custom ISO Build Guide](./cks-custom-iso.md) — building CKS-compatible ISOs
-- [CKS Improvements](./cks-improvements.md) — detailed suggestions for robustness & security improvements
+
 - [CAPC Architecture](./capc-analysis.md) — CloudStack API Provider for Cluster API
 - [CAPC Upgrade Guide](../setup/capc/capc-upgrade.md) — CAPC cluster upgrade procedures
 - [CNI Automation Options](../setup/capc/cni-automation-options.md) — automating CNI installation for CAPC clusters
