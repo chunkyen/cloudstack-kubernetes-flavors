@@ -924,4 +924,3 @@ create-kubernetes-binaries-iso.sh
 - [CNI Automation Options](../setup/capc/cni-automation-options.md) — automating CNI installation for CAPC clusters
 - [CKS Setup Guide](../setup/cks/cks.md) — initial CKS cluster deployment
 
-> **Note:** The full list of robustness & security improvement suggestions (ISO build script fixes, dashboard decoupling, token lifecycle, TLS cert validity, credential protection, SSH access restrictions, etc.) has been moved to [cks-improvements.md](./cks-improvements.md) to keep this file focused on operational analysis.
