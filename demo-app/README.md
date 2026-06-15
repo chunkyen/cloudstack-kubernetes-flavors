@@ -2,7 +2,7 @@
 
 A minimal demo app for testing CloudStack Kubernetes infrastructure, specifically:
 
-- **CloudStack CSI driver** — persistent volume claims backed by CloudStack secondary storage (via `volumeClaimTemplates` on StatefulSets)
+- **CloudStack CSI driver** — persistent volume claims backed by CloudStack primary storage (via `volumeClaimTemplates` on StatefulSets)
 - **Cloud Controller Manager (CCM)** — LoadBalancer services that automatically provision a CloudStack public IP + load balancer rule pointing to the backend pods
 
 ## Source
@@ -19,7 +19,7 @@ Based on [google-samples/bank-of-anthos](https://github.com/google-samples/bank-
 ```bash
 # Apply all manifests
 cd demo-app
-kubectl apply -f .
+kubectl apply -f manifests/
 
 # Wait for pods to be ready
 kubectl wait --for=condition=ready pod -l application=bank-of-anthos --timeout=300s
@@ -31,6 +31,8 @@ kubectl get svc frontend
 The `frontend` service is type **LoadBalancer** — after a few minutes, CloudStack CCM will assign a public IP and configure load balancing to the frontend pods.
 
 ## Manifests
+
+All manifests are in the `manifests/` directory:
 
 | File | Description |
 |------|-------------|
@@ -49,5 +51,5 @@ The `frontend` service is type **LoadBalancer** — after a few minutes, CloudSt
 ## Cleanup
 
 ```bash
-kubectl delete -f .
+kubectl delete -f manifests/
 ```
