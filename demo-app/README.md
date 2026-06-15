@@ -6,13 +6,14 @@ A minimal demo app for testing CloudStack Kubernetes infrastructure, specificall
 - **Cloud Controller Manager (CCM)** — LoadBalancer services that automatically provision a CloudStack public IP + load balancer rule pointing to the backend pods
 
 ## Source
-Based on [google-samples/bank-of-anthos](https://github.com/google-samples/bank-of-anthos), adapted for non-GKE clusters.
+Based on [GoogleCloudPlatform/bank-of-anthos](https://github.com/GoogleCloudPlatform/bank-of-anthos), adapted for non-GKE clusters.
 
 ### Changes from upstream
 - Removed GKE-specific dependencies (Istio annotations, `iam.gke.io` workload identity)
 - Database pods (`accounts-db`, `ledger-db`) use PVC-backed storage via CloudStack CSI instead of ephemeral volumes
 - JWT secret moved to root folder alongside other manifests for simplicity
 - All deployments use the default service account
+- `ENABLE_METRICS` and `ENABLE_TRACING` set to `false` in all applicable deployments, disabling Google Cloud Operations telemetry as described in the [upstream environments docs](https://github.com/GoogleCloudPlatform/bank-of-anthos/blob/main/docs/environments.md)
 
 ## Quick Start
 
