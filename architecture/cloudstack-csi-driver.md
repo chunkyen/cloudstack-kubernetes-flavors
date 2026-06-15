@@ -42,6 +42,26 @@ The CSI Driver manages CloudStack disk volumes as Kubernetes PersistentVolumes:
 
 > When a CKS cluster is deleted, PVCs with `reclaimPolicy: Delete` will automatically remove their underlying CloudStack disks.
 
+### Example StorageClass
+
+A minimum working StorageClass looks like this:
+
+```yaml
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: cloudstack-csi
+provisioner: csi.cloudstack.apache.org
+parameters:
+  csi.cloudstack.apache.org/disk-offering-id: "<disk-offering-uuid>"
+volumeBindingMode: WaitForFirstConsumer
+reclaimPolicy: Delete
+```
+
+Replace `<disk-offering-uuid>` with the UUID of a shared disk offering from your CloudStack zone. See the [full example](https://github.com/cloudstack/cloudstack-csi-driver/blob/main/examples/k8s/0-storageclass.yaml) in the CSI driver repository.
+
+> **Important:** The StorageClass must exist before any PVC referencing it is created, otherwise the PVC will fail to bind.
+
 ## Volume Snapshots
 
 The driver supports CloudStack volume snapshots via CSI snapshot APIs:
