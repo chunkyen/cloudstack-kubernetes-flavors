@@ -436,6 +436,30 @@ The bootstrap token persists indefinitely (`--token-ttl 0`), allowing anyone wit
 
 ---
 
+## 23. Make Dashboard Deployment Optional During Bootstrap
+
+### Problem
+CKS deploys a dashboard (Kubernetes Dashboard or Headlamp) as part of the cluster bootstrap process, and blocks completion until it's running (§10). This adds unnecessary time to cluster creation for users who don't need a web UI, and can cause failures when image pulls fail.
+
+### Proposed Fix
+- Make dashboard deployment opt-in via an advanced setting (e.g., `cks.deploy.dashboard=true/false`, default `false`)
+- When disabled: skip the dashboard manifest apply in cloud-init **and** remove the blocking verification step entirely
+- Allow dashboard to be installed later as a post-bootstrap add-on via UI/API or manual `kubectl apply`
+- Keep pre-deployed components to the bare minimum required for a functional Kubernetes cluster:
+  - ✅ kube-apiserver, etcd, controller-manager, scheduler (via kubeadm)
+  - ✅ CoreDNS
+  - ✅ CNI plugin
+  - ❌ Dashboard (optional)
+  - ❌ Headlamp (optional)
+
+### Implementation Notes
+- Simplest change: add a flag in cloud-init templates to conditionally apply dashboard manifests
+- Removes the most common bootstrap failure point (§10) when disabled
+- Aligns with Kubernetes best practices — cluster addons should be installed separately from control plane bootstrap
+- Consider exposing as a UI checkbox during cluster creation for discoverability
+
+---
+
 **Status Legend:**
 - 🔴 Not started
 - 🟡 In discussion / draft proposal
@@ -465,6 +489,11 @@ The bootstrap token persists indefinitely (`--token-ttl 0`), allowing anyone wit
 | 20 | Validate cloud-init userdata signatures | 🔴 |
 | 21 | Network isolation for cluster management traffic | 🔴 |
 | 22 | Implement kubeadm token cleanup after bootstrap | 🔴 |
+| 23 | Make dashboard deployment optional during bootstrap | 🔴 |
 
 > Items #7–#22 sourced from [CKS Detailed Analysis — Bootstrap & Upgrade](../../architecture/cks-analysis.md).
+
+---
+
+## See Also
 
