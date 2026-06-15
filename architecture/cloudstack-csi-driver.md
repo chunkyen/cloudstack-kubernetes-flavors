@@ -44,7 +44,7 @@ The CSI Driver manages CloudStack disk volumes as Kubernetes PersistentVolumes:
 
 ### Example StorageClass
 
-A minimum working StorageClass looks like this:
+An example StorageClass (also see [source](https://github.com/cloudstack/cloudstack-csi-driver/blob/main/examples/k8s/0-storageclass.yaml)):
 
 ```yaml
 apiVersion: storage.k8s.io/v1
@@ -58,7 +58,7 @@ volumeBindingMode: WaitForFirstConsumer
 reclaimPolicy: Delete
 ```
 
-Replace `<disk-offering-uuid>` with the UUID of a shared disk offering from your CloudStack zone. See the [full example](https://github.com/cloudstack/cloudstack-csi-driver/blob/main/examples/k8s/0-storageclass.yaml) in the CSI driver repository.
+Replace `<disk-offering-uuid>` with the UUID of a shared disk offering from your CloudStack zone.
 
 > **Important:** The StorageClass must exist before any PVC referencing it is created, otherwise the PVC will fail to bind.
 
