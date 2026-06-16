@@ -560,7 +560,32 @@ See [CKS Custom ISO Build Guide](./cks-custom-iso.md) for details.
 | Pod ContainerCreating/Pending | `sudo /opt/bin/kubectl describe pod -n kubernetes-dashboard <pod>` |
 | deploy-kube-system infinite restart loop | `sudo systemctl status deploy-kube-system` + `journalctl -u deploy-kube-system` |
 
-#### Manual Recovery (4.22.1)
+#### Recommended Recovery: Rebuild ISO and Recreate Cluster
+
+The cleanest fix is to **rebuild the ISO with the correct dashboard manifest and image**, then recreate the cluster. This ensures CloudStack's internal state stays consistent and avoids the manual recovery pitfalls below.
+
+```bash
+# 1. Destroy the failed cluster
+cmk delete kubernetescluster id=<cluster-id>
+
+# 2. Rebuild the ISO with correct dashboard
+cmk registeriso name=v1.34.2-fixed url=http://<server>/setup-v1.34.2-fixed.iso zoneid=<zone-id> isextractable=true ispublic=true bootable=true
+cmk add kubernetessupportedversion name=v1.34.2-fixed semanticversion=1.34.2 iso=v1.34.2-fixed zoneid=<zone-id> mincpunumber=2 minmemory=2048
+
+# 3. Verify ISO contents (see Prevention section above)
+
+# 4. Create a new cluster with the fixed ISO
+cmk create kubernetescluster name=my-cks-cluster ... kubernetesversionid=<new-version-id>
+```
+
+This is the **preferred approach** because:
+- CloudStack's internal state stays clean (no stale `OperationFailed` state)
+- Future upgrades work normally (no version skew from manual patches)
+- CCM, CSI, and taints are deployed by CloudStack as intended
+
+#### Manual Recovery (4.22.1) — Last Resort
+
+> **⚠️ Warning:** Manual recovery leaves CloudStack's internal state inconsistent. Use only when you cannot destroy and recreate the cluster.
 
 If the cluster is otherwise healthy (nodes Ready, API server responding), manually deploy what the management server would have:
 
