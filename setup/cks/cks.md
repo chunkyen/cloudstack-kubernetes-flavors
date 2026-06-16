@@ -513,6 +513,8 @@ kubectl get events --sort-by='.lastTimestamp'
 
 The management server verifies the dashboard is running **before** deploying CCM and CSI. If the dashboard check fails, the pipeline stalls:
 
+> **See also:** [CKS Analysis → Phase 7: Post-Bootstrap Verification](../../architecture/cks-analysis.md#phase-7-post-bootstrap-verification-management-server) for the full source-level breakdown of this sequence.
+
 ```
 Step 5: ✅ isKubernetesClusterKubeConfigAvailable()    ← Kubeconfig available
 Step 6: ❌ isKubernetesClusterDashboardServiceRunning() ← STALLS HERE
