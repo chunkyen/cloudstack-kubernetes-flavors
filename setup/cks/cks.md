@@ -524,9 +524,13 @@ Step 9:    deployCsiDriver()                            ← CSI NEVER DEPLOYED
 Step 10:   stateTransitTo(OperationSucceeded)           ← STILL "STARTING"
 ```
 
-#### Most Common Cause: Wrong Dashboard YAML on the ISO
+#### Most Common Cause: Wrong or Missing Dashboard YAML on the ISO
 
-In 4.22.1, the management server checks for **Kubernetes Dashboard** in the `kubernetes-dashboard` namespace. The cloud-init script applies `dashboard.yaml` from the ISO. If the ISO contains `headlamp.yaml` instead (from a `main`/4.23+ build script), `dashboard.yaml` doesn't exist and the `deploy-kube-system` service fails.
+In 4.22.1, the management server checks for **Kubernetes Dashboard** in the `kubernetes-dashboard` namespace. The cloud-init script applies `dashboard.yaml` from the ISO. Common failure modes:
+
+- **Wrong file:** ISO contains `headlamp.yaml` instead (from a `main`/4.23+ build script) — `dashboard.yaml` doesn't exist
+- **Missing file:** Dashboard manifest was never downloaded during ISO build (e.g., URL returned 404, curl silently saved HTML garbage, or the dashboard step was skipped)
+- **Image missing:** Dashboard YAML exists but the container image wasn't extracted into the ISO — pod stays in `ImagePullBackOff`
 
 **Diagnose on the control node:**
 ```bash
@@ -586,7 +590,26 @@ sudo /opt/bin/kubectl get pods -n kubernetes-dashboard | grep kubernetes-dashboa
 1. **Match build script to CloudStack version** — 4.22.1 needs `dashboard.yaml`, 4.23+ uses `headlamp.yaml`
 2. **Use `-f` flag on curl** so builds fail on 404 instead of saving HTML garbage
 3. **Verify dashboard image is included** in the ISO image extraction loop
-4. **Test ISO on a throwaway cluster** before using in production
+4. **Verify ISO contents before deploying** — best practice is to confirm the dashboard YAML and images exist on the ISO before creating a cluster:
+   ```bash
+   # Mount the ISO and verify
+   mkdir -p /mnt/iso && mount -o loop your-iso.iso /mnt/iso
+
+   # Check dashboard manifest exists and is valid YAML
+   ls -la /mnt/iso/dashboard.yaml
+   head -3 /mnt/iso/dashboard.yaml  # should be YAML, not HTML
+
+   # Check dashboard image tar exists
+   ls /mnt/iso/docker/ | grep dashboard
+
+   # Check all expected files
+   for f in network.yaml dashboard.yaml provider.yaml manifest.yaml; do
+       [ -f "/mnt/iso/$f" ] || echo "MISSING: $f"
+   done
+
+   umount /mnt/iso
+   ```
+5. **Test ISO on a throwaway cluster** before using in production
 
 See [CKS Custom ISO Build Guide](./cks-custom-iso.md) for build script details.
 
