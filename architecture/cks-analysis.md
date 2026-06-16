@@ -1,4 +1,4 @@
-# CKS Detailed Analysis — Bootstrap & Upgrade
+# CKS Detailed Analysis — Bootstrap, Upgrade & Management Communication
 
 ## Overview
 
