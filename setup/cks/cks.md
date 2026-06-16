@@ -491,14 +491,102 @@ kubectl get events --sort-by='.lastTimestamp'
 
 ## Troubleshooting
 
+### Common Issues
+
 | Issue | Solution |
 |-------|----------|
 | CKS tab not visible | Verify `cloud.kubernetes.service.enabled=true` and restart management server |
 | Node fails to join cluster | Check ISO URL accessibility, network connectivity, and kubeadm logs on node |
-| Port forwarding not working | For shared networks, manually configure load balancer; isolated networks auto-provision | HA not working | Use ≥3 control nodes with Kubernetes 1.16+; configure external LB for shared networks |
+| Port forwarding not working | For shared networks, manually configure load balancer; isolated networks auto-provision |
+| HA not working | Use ≥3 control nodes with Kubernetes 1.16+; configure external LB for shared networks |
 | Custom template not showing | Ensure template is marked "For CKS" during registration |
 | ISO build fails | Check internet connectivity; script needs to download K8s binaries and images |
 | etcd nodes not working | Ensure ISO was built with etcd binaries (use `ETCD_VERSION` parameter) |
+
+---
+
+### Cluster Stuck in "Starting" with Kubeconfig Available
+
+**Symptom:** The CKS UI shows the kubeconfig is available and downloadable, but the cluster remains in `Starting` state indefinitely. Core Kubernetes components (API server, etcd, CoreDNS, CNI) are running — but CCM, CSI driver, and dashboard are **not** deployed.
+
+#### Root Cause: Dashboard Verification Blocking the Post-Bootstrap Pipeline
+
+The management server verifies the dashboard is running **before** deploying CCM and CSI. If the dashboard check fails, the pipeline stalls:
+
+```
+Step 5: ✅ isKubernetesClusterKubeConfigAvailable()    ← Kubeconfig available
+Step 6: ❌ isKubernetesClusterDashboardServiceRunning() ← STALLS HERE
+Step 7:    taintControlNodes()                          ← NEVER REACHED
+Step 8:    deployProvider()                             ← CCM NEVER DEPLOYED
+Step 9:    deployCsiDriver()                            ← CSI NEVER DEPLOYED
+Step 10:   stateTransitTo(OperationSucceeded)           ← STILL "STARTING"
+```
+
+#### Most Common Cause: Wrong Dashboard YAML on the ISO
+
+In 4.22.1, the management server checks for **Kubernetes Dashboard** in the `kubernetes-dashboard` namespace. The cloud-init script applies `dashboard.yaml` from the ISO. If the ISO contains `headlamp.yaml` instead (from a `main`/4.23+ build script), `dashboard.yaml` doesn't exist and the `deploy-kube-system` service fails.
+
+**Diagnose on the control node:**
+```bash
+# Check if dashboard.yaml exists
+ls -la /tmp/k8sconfigscripts/dashboard.yaml 2>/dev/null || echo "MISSING — this is the problem"
+
+# Check deploy-kube-system logs
+sudo journalctl -u deploy-kube-system --no-pager -n 20
+
+# Check if the success marker was created
+cat /home/cloud/success 2>/dev/null || echo "Cloud-init never completed"
+```
+
+**Fix:** Use the correct ISO build script for your CloudStack version:
+- **4.22.1:** Use `create-kubernetes-binaries-iso.sh` with `DASHBOARD_YAML_CONFIG` (6th param = full URL to Kubernetes Dashboard YAML)
+- **4.23.0+ (main):** Use the `main` branch script with `HEADLAMP_DASHBOARD_VERSION`
+
+See [CKS Custom ISO Build Guide](./cks-custom-iso.md) for details.
+
+#### Other Dashboard Failure Causes
+
+| Cause | Check |
+|-------|-------|
+| Dashboard image not in ISO | `crictl images \| grep dashboard` on control node |
+| Dashboard URL 404 (HTML saved as YAML) | `head -3 /tmp/k8sconfigscripts/dashboard.yaml` — should be YAML, not HTML |
+| Pod CrashLoopBackOff | `sudo /opt/bin/kubectl logs -n kubernetes-dashboard <pod> --previous` |
+| Pod ContainerCreating/Pending | `sudo /opt/bin/kubectl describe pod -n kubernetes-dashboard <pod>` |
+| deploy-kube-system infinite restart loop | `sudo systemctl status deploy-kube-system` + `journalctl -u deploy-kube-system` |
+
+#### Manual Recovery (4.22.1)
+
+If the cluster is otherwise healthy (nodes Ready, API server responding), manually deploy what the management server would have:
+
+```bash
+# 1. Deploy Kubernetes Dashboard (what 4.22.1 expects)
+sudo /opt/bin/kubectl apply -f https://raw.githubusercontent.com/kubernetes/dashboard/v2.7.0/aio/deploy/recommended.yaml
+
+# 2. Deploy CloudStack Provider (CCM)
+sudo /opt/bin/kubectl apply -f /opt/provider/provider.yaml
+
+# 3. Deploy CSI driver
+sudo /opt/bin/kubectl apply -f /opt/csi/snapshot-crds.yaml
+sudo /opt/bin/kubectl apply -f /opt/csi/manifest.yaml
+
+# 4. Taint control nodes
+sudo /opt/bin/kubectl annotate node <control-node-name> \
+  cluster-autoscaler.kubernetes.io/scale-down-disabled=true
+
+# 5. Verify dashboard is running
+sudo /opt/bin/kubectl get pods -n kubernetes-dashboard | grep kubernetes-dashboard
+```
+
+> **Note:** The management server already transitioned the cluster to `OperationFailed` — the state won't auto-recover. You'll need to destroy and recreate the cluster, or manually update the `kubernetes_cluster` state in the CloudStack database.
+
+#### Prevention
+
+1. **Match build script to CloudStack version** — 4.22.1 needs `dashboard.yaml`, 4.23+ uses `headlamp.yaml`
+2. **Use `-f` flag on curl** so builds fail on 404 instead of saving HTML garbage
+3. **Verify dashboard image is included** in the ISO image extraction loop
+4. **Test ISO on a throwaway cluster** before using in production
+
+See [CKS Custom ISO Build Guide](./cks-custom-iso.md) for build script details.
 
 ## Best Practices
 
