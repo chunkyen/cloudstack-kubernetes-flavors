@@ -1,12 +1,35 @@
-# CKS Detailed Analysis — Bootstrap, Upgrade & Management Communication
+# CKS Detailed Analysis — Bootstrap, Scaling, Upgrade & Management Communication
 
 ## Overview
 
-The CKS (CloudStack Kubernetes Service) bootstrap process provisions and configures a fully operational Kubernetes cluster on CloudStack-managed infrastructure. It orchestrates VM creation, networking, and Kubernetes installation using cloud-init and a pre-built binaries ISO.
+This document provides a deep dive into the CKS (CloudStack Kubernetes Service) internals — how the management server provisions, manages, and operates Kubernetes clusters end-to-end.
 
 **Source:** [`plugins/integrations/kubernetes-service/`](https://github.com/apache/cloudstack/tree/main/plugins/integrations/kubernetes-service)
 
----
+### What This Covers
+
+| Section | Scope |
+|---------|-------|
+| **Bootstrap** | Full lifecycle from API call through VM provisioning, ISO attachment, cloud-init, kubeadm init/join, post-bootstrap verification, provider/CSI deployment |
+| **Management Communication** | How the management server talks to the cluster — SSH (primary, all kubectl operations) and HTTPS (API health checks only), key injection, port forwarding, kubeconfig retrieval |
+| **Scaling** | Scale up/down (worker count), service offering changes, autoscaler deployment, network rule recalculation, rollback on failure |
+| **Upgrade** | Rolling per-node upgrade with drain/upgrade/uncordon, ISO swap, kubeadm upgrade flow, etcd exclusion, error handling |
+| **State Machine** | Full state transitions for create, start, scale, upgrade, stop, and destroy operations |
+| **Error Handling** | Failure paths, ISO detachment, cleanup, rollback behavior |
+
+### Architecture at a Glance
+
+```
+User API Call → KubernetesClusterManagerImpl
+  → Dispatches to specialized workers:
+    ├── KubernetesClusterStartWorker     (bootstrap)
+    ├── KubernetesClusterScaleWorker     (scale up/down, offering changes, autoscaling)
+    ├── KubernetesClusterUpgradeWorker   (rolling version upgrade)
+    ├── KubernetesClusterStopWorker      (stop cluster)
+    └── KubernetesClusterDestroyWorker   (teardown)
+```
+
+All workers share `KubernetesClusterActionWorker` as a base class (SSH execution, ISO attach/detach, state machine transitions, script management). The management server communicates with the cluster primarily through SSH to the control node, running `kubectl` commands remotely — not through a Kubernetes API client library.
 
 ## High-Level Architecture
 
