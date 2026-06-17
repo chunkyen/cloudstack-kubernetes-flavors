@@ -668,8 +668,8 @@ See [CKS Custom ISO Build Guide](./cks-custom-iso.md) for details.
 |-------|-------|
 | Dashboard image not in ISO | `crictl images \| grep dashboard` on control node |
 | Dashboard URL 404 (HTML saved as YAML) | `head -3 /tmp/k8sconfigscripts/dashboard.yaml` — should be YAML, not HTML |
-| Pod CrashLoopBackOff | `sudo /opt/bin/kubectl logs -n kubernetes-dashboard <pod> --previous` |
-| Pod ContainerCreating/Pending | `sudo /opt/bin/kubectl describe pod -n kubernetes-dashboard <pod>` |
+| Pod CrashLoopBackOff | `/opt/bin/kubectl logs -n kubernetes-dashboard <pod> --previous` |
+| Pod ContainerCreating/Pending | `/opt/bin/kubectl describe pod -n kubernetes-dashboard <pod>` |
 | deploy-kube-system infinite restart loop | `sudo systemctl status deploy-kube-system` + `journalctl -u deploy-kube-system` |
 
 #### Recommended Recovery: Rebuild ISO and Recreate Cluster
@@ -703,21 +703,21 @@ If the cluster is otherwise healthy (nodes Ready, API server responding), manual
 
 ```bash
 # 1. Deploy Kubernetes Dashboard (what 4.22.1 expects)
-sudo /opt/bin/kubectl apply -f https://raw.githubusercontent.com/kubernetes/dashboard/v2.7.0/aio/deploy/recommended.yaml
+/opt/bin/kubectl apply -f https://raw.githubusercontent.com/kubernetes/dashboard/v2.7.0/aio/deploy/recommended.yaml
 
 # 2. Deploy CloudStack Provider (CCM)
-sudo /opt/bin/kubectl apply -f /opt/provider/provider.yaml
+/opt/bin/kubectl apply -f /opt/provider/provider.yaml
 
 # 3. Deploy CSI driver
-sudo /opt/bin/kubectl apply -f /opt/csi/snapshot-crds.yaml
-sudo /opt/bin/kubectl apply -f /opt/csi/manifest.yaml
+/opt/bin/kubectl apply -f /opt/csi/snapshot-crds.yaml
+/opt/bin/kubectl apply -f /opt/csi/manifest.yaml
 
 # 4. Taint control nodes
-sudo /opt/bin/kubectl annotate node <control-node-name> \
+/opt/bin/kubectl annotate node <control-node-name> \
   cluster-autoscaler.kubernetes.io/scale-down-disabled=true
 
 # 5. Verify dashboard is running
-sudo /opt/bin/kubectl get pods -n kubernetes-dashboard | grep kubernetes-dashboard
+/opt/bin/kubectl get pods -n kubernetes-dashboard | grep kubernetes-dashboard
 ```
 
 > **Note:** The management server already transitioned the cluster to `OperationFailed` — the state won't auto-recover. You'll need to destroy and recreate the cluster, or manually update the `kubernetes_cluster` state in the CloudStack database.
