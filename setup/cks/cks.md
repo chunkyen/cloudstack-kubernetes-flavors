@@ -322,19 +322,131 @@ ssh -i <key> -p 2224 cloud@<VR_PUBLIC_IP>   # node 3
 
 ### Scale Cluster
 
-> **Note:** Scaling handles both **vertical scaling** (changing compute offering/CPU/RAM) and **horizontal scaling** (adding/removing worker nodes). The **Add Node** icon (➕) is separate — it adds existing VMs to the cluster.
+CKS supports three types of scaling through a single API (`scaleKubernetesCluster`):
+
+| Scaling Type | What Changes | How |
+|-------------|-------------|-----|
+| **Horizontal (Scale Up)** | Add worker nodes | Set `size` to a higher number |
+| **Horizontal (Scale Down)** | Remove worker nodes | Set `size` to a lower number, or specify `nodeIds` |
+| **Vertical** | Change CPU/RAM | Select a new service offering |
+
+> **Note:** The **Add Node** icon (➕) is separate — it adds pre-existing VMs to the cluster as external nodes.
+
+#### Scale Up (Add Worker Nodes)
+
+Scale up creates new worker VMs, attaches the binaries ISO, and waits for them to join the cluster.
 
 **UI:**
 1. Hover over the cluster name and click the **three dots (⋮)** on the right
 2. Click the **Scale** icon (📐)
-3. Adjust worker or control node count, or select a new service offering (compute spec)
+3. Increase the **Worker Nodes** count
+4. (Optional) Select a new service offering for the new nodes
+5. Click **OK**
+
+**cmk:**
+```bash
+# Scale from 2 workers to 5
+cmk scale kubernetescluster id=<cluster-id> size=5
+```
+
+**What happens behind the scenes:**
+1. CloudStack provisions new VMs with `k8s-node.yml` cloud-init
+2. New VMs run `kubeadm join` to join the existing cluster
+3. Binaries ISO is attached to new VMs (same ISO used during initial creation)
+4. Network rules (firewall + port forwarding) are recalculated to include new nodes
+5. Management server waits for all nodes to reach `Ready` state
+6. ISO is detached from new VMs
+7. On failure: newly created VMs are automatically destroyed and expunged (rollback)
+
+**Requirements:**
+- Only **XenServer, VMware, and Simulator** hypervisors support scaling with running VMs (KVM does not support live VM scaling in current CKS implementation)
+- Sufficient host capacity must be available for new VMs
+- The cluster must be in `Running` state
+
+#### Scale Down (Remove Worker Nodes)
+
+Scale down gracefully removes worker nodes from the cluster by draining workloads, deleting the node from Kubernetes, and destroying the underlying VM.
+
+**UI:**
+1. Hover over the cluster name and click the **three dots (⋮)** on the right
+2. Click the **Scale** icon (📐)
+3. Decrease the **Worker Nodes** count
 4. Click **OK**
 
 **cmk:**
 ```bash
-cmk scale kubernetescluster id=<cluster-id> workernodes=5
-cmk scale kubernetescluster id=<cluster-id> controlnodes=5
+# Scale from 5 workers down to 2
+cmk scale kubernetescluster id=<cluster-id> size=2
+
+# Or remove specific nodes by VM ID
+cmk scale kubernetescluster id=<cluster-id> nodeids=<vm-id-1>,<vm-id-2>
 ```
+
+**Which nodes are removed?**
+
+When you decrease the worker count (without specifying `nodeIds`), CKS automatically selects which nodes to remove:
+
+| Selection Rule | Detail |
+|----------------|--------|
+| **Last-created first** | Nodes are sorted by creation order; the **last N** nodes are removed |
+| **Worker-only** | Only non-external worker nodes are candidates — control nodes, etcd nodes, and externally-added nodes are **never** removed |
+| **Explicit targeting** | If `nodeIds` is provided, only those specific VMs are removed (must be worker nodes) |
+
+**What happens behind the scenes (per node, in reverse creation order):**
+
+| Step | Action | Details |
+|------|--------|---------|
+| 1 | **Drain** | `kubectl drain <hostname> --ignore-daemonsets --delete-emptydir-data` — evicts all pods, retries up to 3× with 30s wait |
+| 2 | **Delete node** | `kubectl delete node <hostname>` — removes node from cluster |
+| 3 | **Destroy VM** | `userVmService.destroyVm()` + `userVmManager.expunge()` — destroys and removes VM |
+| 4 | **Remove DB record** | `kubernetesClusterVmMapDao.expunge()` — cleans up cluster-VM mapping |
+| 5 | **Update network rules** | Firewall port range and port forwarding rules are recalculated for remaining nodes |
+
+**Important:**
+- If drain or node deletion fails after 3 retries, the entire scale-down operation aborts
+- Already-removed nodes are **not** rolled back — they stay removed
+- The operation is bounded by `cloud.kubernetes.cluster.scale.timeout` (default 3600s)
+
+#### Vertical Scaling (Change Service Offering)
+
+Change the CPU/RAM profile of existing nodes without adding or removing VMs.
+
+**UI:**
+1. Hover over the cluster name and click the **three dots (⋮)** on the right
+2. Click the **Scale** icon (📐)
+3. Select a new **Service Offering** for the target node type (control, worker, or etcd)
+4. Click **OK**
+
+**cmk:**
+```bash
+# Change global service offering
+cmk scale kubernetescluster id=<cluster-id> serviceofferingid=<new-offering-id>
+
+# Change per-node-type offering (ACS 4.21+)
+cmk scale kubernetescluster id=<cluster-id> 'nodeofferings[0].node'=worker 'nodeofferings[0].offering'=<worker-offering-id>
+```
+
+**What happens:**
+- Each VM of the target node type is upgraded via `userVmManager.upgradeVirtualMachine()`
+- This is a CloudStack VM upgrade — may require VM migration if the new offering needs different host resources
+- Cluster core/memory totals are recalculated
+- On failure: already-upgraded VMs keep their new offering (no rollback)
+
+#### Autoscaling
+
+CKS supports Kubernetes cluster-autoscaler integration for automatic scale up/down.
+
+**UI:**
+1. In the **Scale** dialog, toggle **Autoscaling** on
+2. Set **Min Size** and **Max Size** for worker nodes
+3. Click **OK**
+
+**cmk:**
+```bash
+cmk scale kubernetescluster id=<cluster-id> autoscalingenabled=true minsize=2 maxsize=10
+```
+
+This deploys the Kubernetes [cluster-autoscaler](https://github.com/kubernetes/autoscaler) with the CloudStack cloud provider, configured with the specified min/max bounds.
 
 ### Upgrade Cluster
 
