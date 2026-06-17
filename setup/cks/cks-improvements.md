@@ -81,25 +81,7 @@ Implement an authentication layer using either:
 
 ---
 
-## 4. Node Lifecycle Management: Remove/Replace Failed Nodes
-
-### Problem
-Currently, CKS supports **scale-up** (increasing vCPU/RAM via offering change) and **scale-out** (adding more nodes), but lacks a native mechanism to safely remove or replace failed nodes. When a node becomes `NotReady`, loses connectivity, or is permanently decommissioned, it remains in the cluster. Administrators must manually run `kubectl drain` and `kubectl delete node`, which falls outside CKS orchestration and can leave orphaned resources or inconsistent state.
-
-### Proposal: Native Scale-In & Node Replacement
-Add built-in workflows for safe node lifecycle management:
-- **Remove/Scale-In:** Gracefully cordon, drain, and remove a specified node via UI/API (enhancing `removeVirtualMachinesFromKubernetesCluster`)
-- **Replace Failed Node:** One-click workflow that detects `NotReady` nodes, provisions a replacement VM with matching labels/taints, imports required images, drains the old node, and decommissions it automatically
-
-### Implementation Notes
-- Leverage Kubernetes drain logic internally before terminating the CloudStack VM
-- Expose node health status in the CKS UI (e.g., highlight `NotReady` or degraded nodes)
-- Ensure stateful workloads (PVs, DaemonSets) are handled safely during removal
-- Could integrate with a custom operator for auto-healing instead of manual intervention
-
----
-
-## 5. Full Air-Gapped / Offline Deployment Support
+## 4. Full Air-Gapped / Offline Deployment Support
 
 ### Problem
 CKS currently assumes internet connectivity is available as a fallback. While [cks-offline.md](./cks-offline.md) documents workarounds, air-gapped deployments remain second-class citizens — upgrades fail silently without the manual pre-import workaround (Section 1), and documentation explicitly states "complete offline provisioning... is not supported".
@@ -120,7 +102,7 @@ This section builds on several of the proposals above as key steps:
 
 ---
 
-## 6. Restrictive Default Firewall Rules (API + SSH)
+## 5. Restrictive Default Firewall Rules (API + SSH)
 
 ### Problem
 By default, CKS creates firewall rules that open:
@@ -147,7 +129,7 @@ Add an advanced setting (or UI/API parameter) during CKS cluster creation that l
 
 ---
 
-## 7. Fix the ISO Build Script's Brittle Download Logic
+## 6. Fix the ISO Build Script's Brittle Download Logic
 
 ### Problem
 `curl -sSL` without `-f` silently produces garbage files on 404. No checksums, no fallback.
@@ -159,12 +141,12 @@ Add an advanced setting (or UI/API parameter) during CKS cluster creation that l
 - Validate downloaded YAML files with `python3 -c "import yaml; yaml.safe_load(open('file.yaml'))"` before packaging
 
 ### Implementation Notes
-- Also validate manifest integrity after download (see §8)
+- Also validate manifest integrity after download (see §7)
 - Consider making the build script fail-fast rather than silently producing a corrupt ISO
 
 ---
 
-## 8. Validate YAML Manifests Before Including in ISO
+## 7. Validate YAML Manifests Before Including in ISO
 
 ### Problem
 The build script blindly packs any downloaded file as `*.yaml`. Invalid YAML (HTML error pages, truncated files) causes cloud-init failures.
@@ -184,7 +166,7 @@ fi
 
 ---
 
-## 9. Verify All Container Images Exist Before Finalizing ISO
+## 8. Verify All Container Images Exist Before Finalizing ISO
 
 ### Problem
 The ISO is built even if some container images failed to pull or export.
@@ -196,11 +178,11 @@ The ISO is built even if some container images failed to pull or export.
 - For each `ctr image pull`, check exit code explicitly (the build script currently doesn't)
 
 ### Implementation Notes
-- This complements §5 — ensures the ISO is self-consistent regardless of deployment environment
+- This complements §4 — ensures the ISO is self-consistent regardless of deployment environment
 
 ---
 
-## 10. Decouple Dashboard Verification from CCM/CSI Deployment
+## 9. Decouple Dashboard Verification from CCM/CSI Deployment
 
 ### Problem
 The post-bootstrap pipeline in `startKubernetesClusterOnCreate()` blocks CCM, CSI, and control node tainting behind the dashboard pod being `Running`. If the dashboard pod fails, the cluster never reaches `Running` state — even though the cluster is functionally complete.
@@ -222,7 +204,7 @@ Reorder in `KubernetesClusterStartWorker.startKubernetesClusterOnCreate()`:
 
 ---
 
-## 11. Reorder ISO Attachment for Faster Bootstrap
+## 10. Reorder ISO Attachment for Faster Bootstrap
 
 ### Problem
 Sequential ISO attachment means the last worker VM in a large cluster waits minutes before receiving its ISO, extending total bootstrap time unnecessarily.
@@ -238,7 +220,7 @@ Sequential ISO attachment means the last worker VM in a large cluster waits minu
 
 ---
 
-## 12. Add Timeout Checkpoints During Upgrade
+## 11. Add Timeout Checkpoints During Upgrade
 
 ### Problem
 The upgrade timeout is checked only between major steps, not within long-running operations like `kubeadm upgrade apply`.
@@ -253,7 +235,7 @@ The upgrade timeout is checked only between major steps, not within long-running
 
 ---
 
-## 13. Add Retry Logic to cloud-init Scripts
+## 12. Add Retry Logic to cloud-init Scripts
 
 ### Problem
 The `deploy-kube-system` systemd service restarts on failure, but `kubeadm init` fails on restart because the cluster is already initialized — creating an infinite loop.
@@ -275,7 +257,7 @@ The `deploy-kube-system` systemd service restarts on failure, but `kubeadm init`
 
 ---
 
-## 14. Add Health Checks Between Cluster Lifecycle Phases
+## 13. Add Health Checks Between Cluster Lifecycle Phases
 
 ### Problem
 After bootstrap, there's no ongoing health monitoring. A cluster could degrade silently.
@@ -292,7 +274,7 @@ After bootstrap, there's no ongoing health monitoring. A cluster could degrade s
 
 ---
 
-## 15. Use Short-Lived Bootstrap Tokens with Rotation
+## 14. Use Short-Lived Bootstrap Tokens with Rotation
 
 ### Problem
 The kubeadm bootstrap token is derived from the cluster UUID (`generateClusterToken()`) and set with `--token-ttl 0` (never expires). It's embedded in every node's cloud-init userdata and the kubeadm config on disk.
@@ -308,7 +290,7 @@ The kubeadm bootstrap token is derived from the cluster UUID (`generateClusterTo
 
 ---
 
-## 16. Issue Short-Lived TLS Certificates
+## 15. Issue Short-Lived TLS Certificates
 
 ### Problem
 The API server TLS certificate is issued with a **3650-day (10-year)** validity via CloudStack CA Manager.
@@ -330,7 +312,7 @@ final Certificate certificate = caManager.issueCertificate(
 
 ---
 
-## 17. Protect CloudStack API Credentials
+## 16. Protect CloudStack API Credentials
 
 ### Problem
 The CloudStack API key and secret are passed as command-line arguments to the `deploy-cloudstack-secret` script:
@@ -356,7 +338,7 @@ This exposes API credentials in process listings (`ps aux`), shell history, syst
 
 ---
 
-## 18. Restrict SSH Access Scope
+## 17. Restrict SSH Access Scope
 
 ### Problem
 The management server's SSH key is injected into **every** cluster node, granting passwordless root-equivalent access (user `cloud` has `NOPASSWD:***`).
@@ -368,11 +350,11 @@ The management server's SSH key is injected into **every** cluster node, grantin
 - Add audit logging for all SSH sessions originating from the management server
 
 ### Implementation Notes
-- Complements §6 (Restrictive firewall rules) — reduces both network exposure and SSH key blast radius
+- Complements §5 (Restrictive firewall rules) — reduces both network exposure and SSH key blast radius
 
 ---
 
-## 19. Secure the Kubeconfig Stored in the Database
+## 18. Secure the Kubeconfig Stored in the Database
 
 ### Problem
 The cluster's admin kubeconfig is stored as base64 (not encrypted) in `KubernetesClusterDetailsVO` with key `kubeConfigData`.
@@ -387,7 +369,7 @@ The cluster's admin kubeconfig is stored as base64 (not encrypted) in `Kubernete
 
 ---
 
-## 20. Validate cloud-init Userdata Signatures
+## 19. Validate cloud-init Userdata Signatures
 
 ### Problem
 cloud-init userdata is generated by the management server and injected into VMs. There's no integrity check — if the management server is compromised, arbitrary cloud-init could be injected.
@@ -401,7 +383,7 @@ cloud-init userdata is generated by the management server and injected into VMs.
 
 ---
 
-## 21. Network Isolation for Cluster Management Traffic
+## 20. Network Isolation for Cluster Management Traffic
 
 ### Problem
 The management server communicates with cluster VMs over the same public/guest network. SSH (port 2222) and API (port 6443) are exposed via port forwarding.
@@ -415,11 +397,11 @@ The management server communicates with cluster VMs over the same public/guest n
   ```
 
 ### Implementation Notes
-- Complements §6 (Restrictive firewall rules) — this is a longer-term architectural improvement rather than just parameterizing the CIDR
+- Complements §5 (Restrictive firewall rules) — this is a longer-term architectural improvement rather than just parameterizing the CIDR
 
 ---
 
-## 22. Implement kubeadm Token Cleanup After Bootstrap
+## 21. Implement kubeadm Token Cleanup After Bootstrap
 
 ### Problem
 The bootstrap token persists indefinitely (`--token-ttl 0`), allowing anyone with network access to join nodes to the cluster.
@@ -432,14 +414,14 @@ The bootstrap token persists indefinitely (`--token-ttl 0`), allowing anyone wit
 - This should happen before `stateTransitTo(OperationSucceeded)`
 
 ### Implementation Notes
-- Direct complement of §15 (Short-lived tokens) — removes the token entirely after bootstrap completes rather than just expiring it
+- Direct complement of §14 (Short-lived tokens) — removes the token entirely after bootstrap completes rather than just expiring it
 
 ---
 
-## 23. Make Dashboard Deployment Optional During Bootstrap
+## 22. Make Dashboard Deployment Optional During Bootstrap
 
 ### Problem
-CKS deploys a dashboard (Kubernetes Dashboard or Headlamp) as part of the cluster bootstrap process, and blocks completion until it's running (§10). This adds unnecessary time to cluster creation for users who don't need a web UI, and can cause failures when image pulls fail.
+CKS deploys a dashboard (Kubernetes Dashboard or Headlamp) as part of the cluster bootstrap process, and blocks completion until it's running (§9). This adds unnecessary time to cluster creation for users who don't need a web UI, and can cause failures when image pulls fail.
 
 ### Proposed Fix
 - Make dashboard deployment opt-in via an advanced setting (e.g., `cks.deploy.dashboard=true/false`, default `false`)
@@ -454,7 +436,7 @@ CKS deploys a dashboard (Kubernetes Dashboard or Headlamp) as part of the cluste
 
 ### Implementation Notes
 - Simplest change: add a flag in cloud-init templates to conditionally apply dashboard manifests
-- Removes the most common bootstrap failure point (§10) when disabled
+- Removes the most common bootstrap failure point (§9) when disabled
 - Aligns with Kubernetes best practices — cluster addons should be installed separately from control plane bootstrap
 - Consider exposing as a UI checkbox during cluster creation for discoverability
 
@@ -470,28 +452,27 @@ CKS deploys a dashboard (Kubernetes Dashboard or Headlamp) as part of the cluste
 | 1 | Pre-import images on all nodes during upgrade | 🔴 |
 | 2 | Replace Dashboard with Headlamp | 🔴 |
 | 3 | Dex/Pinniped + CloudStack IAM integration | 🔴 |
-| 4 | Native scale-in & failed node replacement | 🔴 |
-| 5 | Full air-gapped / offline deployment support | 🔴 |
-| 6 | Restrictive default firewall rules (API + SSH) | 🔴 |
-| 7 | Fix ISO build script download logic | 🔴 |
-| 8 | Validate YAML manifests before including in ISO | 🔴 |
-| 9 | Verify all container images exist before finalizing ISO | 🔴 |
-| 10 | Decouple dashboard verification from CCM/CSI deployment | 🔴 |
-| 11 | Reorder ISO attachment for faster bootstrap | 🔴 |
-| 12 | Add timeout checkpoints during upgrade | 🔴 |
-| 13 | Add retry logic to cloud-init scripts | 🔴 |
-| 14 | Add health checks between cluster lifecycle phases | 🔴 |
-| 15 | Use short-lived bootstrap tokens with rotation | 🔴 |
-| 16 | Issue short-lived TLS certificates | 🔴 |
-| 17 | Protect CloudStack API credentials from CLI exposure | 🔴 |
-| 18 | Restrict SSH access scope to control node only | 🔴 |
-| 19 | Secure kubeconfig stored in the database | 🔴 |
-| 20 | Validate cloud-init userdata signatures | 🔴 |
-| 21 | Network isolation for cluster management traffic | 🔴 |
-| 22 | Implement kubeadm token cleanup after bootstrap | 🔴 |
-| 23 | Make dashboard deployment optional during bootstrap | 🔴 |
+| 4 | Full air-gapped / offline deployment support | 🔴 |
+| 5 | Restrictive default firewall rules (API + SSH) | 🔴 |
+| 6 | Fix ISO build script download logic | 🔴 |
+| 7 | Validate YAML manifests before including in ISO | 🔴 |
+| 8 | Verify all container images exist before finalizing ISO | 🔴 |
+| 9 | Decouple dashboard verification from CCM/CSI deployment | 🔴 |
+| 10 | Reorder ISO attachment for faster bootstrap | 🔴 |
+| 11 | Add timeout checkpoints during upgrade | 🔴 |
+| 12 | Add retry logic to cloud-init scripts | 🔴 |
+| 13 | Add health checks between cluster lifecycle phases | 🔴 |
+| 14 | Use short-lived bootstrap tokens with rotation | 🔴 |
+| 15 | Issue short-lived TLS certificates | 🔴 |
+| 16 | Protect CloudStack API credentials from CLI exposure | 🔴 |
+| 17 | Restrict SSH access scope to control node only | 🔴 |
+| 18 | Secure kubeconfig stored in the database | 🔴 |
+| 19 | Validate cloud-init userdata signatures | 🔴 |
+| 20 | Network isolation for cluster management traffic | 🔴 |
+| 21 | Implement kubeadm token cleanup after bootstrap | 🔴 |
+| 22 | Make dashboard deployment optional during bootstrap | 🔴 |
 
-> Items #7–#22 sourced from [CKS Detailed Analysis — Bootstrap & Upgrade](../../architecture/cks-analysis.md).
+> Items #6–#21 sourced from [CKS Detailed Analysis — Bootstrap & Upgrade](../../architecture/cks-analysis.md).
 
 ---
 
