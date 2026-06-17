@@ -11,6 +11,8 @@ This document provides a deep dive into the CKS (CloudStack Kubernetes Service) 
 | Section | Scope |
 |---------|-------|
 | **Bootstrap** | Full lifecycle from API call through VM provisioning, ISO attachment, cloud-init, kubeadm init/join, post-bootstrap verification, provider/CSI deployment |
+| **Start (Restart)** | Restarting a stopped cluster — VM start, API/dashboard verification, no ISO or cloud-init involved |
+| **Shutdown (Stop)** | Graceful cluster stop — stop all VMs, verify stopped state, preserve resources for restart |
 | **Management Communication** | How the management server talks to the cluster — SSH (primary, all kubectl operations) and HTTPS (API health checks only), key injection, port forwarding, kubeconfig retrieval |
 | **Scaling** | Scale up/down (worker count), service offering changes, autoscaler deployment, network rule recalculation, rollback on failure |
 | **Upgrade** | Rolling per-node upgrade with drain/upgrade/uncordon, ISO swap, kubeadm upgrade flow, etcd exclusion, error handling |
@@ -30,6 +32,8 @@ User API Call → KubernetesClusterManagerImpl
 ```
 
 All workers share `KubernetesClusterActionWorker` as a base class (SSH execution, ISO attach/detach, state machine transitions, script management). The management server communicates with the cluster primarily through SSH to the control node, running `kubectl` commands remotely — not through a Kubernetes API client library.
+
+**Note:** `KubernetesClusterStartWorker` handles **two** distinct operations — initial bootstrap (`startKubernetesClusterOnCreate`) and restarting a stopped cluster (`startStoppedKubernetesCluster`). The manager dispatches to the right path based on cluster state.
 
 ## High-Level Architecture
 
@@ -534,6 +538,199 @@ All kubectl commands use the absolute path `/opt/bin/kubectl` (not the system-in
 
 ---
 
+## Start (Restart from Stopped)
+
+CKS supports two distinct "start" operations. The first is **bootstrap** (covered in Phases 4–7 above), which provisions VMs from scratch. The second is **restart from stopped**, which starts an already-provisioned cluster that was previously stopped.
+
+The manager (`KubernetesClusterManagerImpl.startKubernetesCluster()`) routes to the correct path:
+
+```
+if (onCreate) {
+    // Cluster is in 'Created' state — full bootstrap
+    startWorker.startKubernetesClusterOnCreate(...);
+} else {
+    // Cluster is in 'Stopped' state — restart existing VMs
+    startWorker.startStoppedKubernetesCluster(...);
+}
+```
+
+### API Commands
+
+| API | Trigger | Cluster State | Worker Method |
+|-----|---------|---------------|---------------|
+| `createKubernetesCluster` | Initial creation | `Created` → bootstrap | `startKubernetesClusterOnCreate()` |
+| `startKubernetesCluster` | Explicit restart | `Stopped` → restart | `startStoppedKubernetesCluster()` |
+
+Both APIs call the same manager method `startKubernetesCluster()` but with different `onCreate` flags. The `startKubernetesCluster` API takes only `id` as a parameter.
+
+### Restart Flow (`startStoppedKubernetesCluster()`)
+
+This path is much simpler than bootstrap — all resources (VMs, volumes, networks, IPs) already exist. The management server just needs to start the VMs and verify the cluster comes up:
+
+**1. State transition:**
+```
+Stopped → StartRequested
+```
+
+**2. Start all VMs (`startKubernetesClusterVMs`):**
+
+Iterates through all cluster VMs (etcd, control, worker):
+- Calls `resizeNodeVolume(vm)` — ensures root disk sizing is correct
+- Calls `startKubernetesVM(vm, domainId, accountId, nodeType)` — starts the VM via CloudStack
+- After the loop, verifies **all** VMs reached `Running` state
+- If any VM failed to start: transitions to `OperationFailed` and throws
+
+**3. Validate endpoint:**
+```
+InetAddress.getByName(kubernetesCluster.getEndpoint().getHost())
+```
+- Resolves the cluster endpoint (stored during bootstrap) to confirm it's still valid
+
+**4. Resolve SSH access:**
+```
+getKubernetesClusterServerIpSshPort(null)
+```
+- Re-resolves public IP and SSH port (same logic as bootstrap — SourceNAT/VPC/direct)
+
+**5. API server health check:**
+```
+KubernetesClusterUtil.isKubernetesClusterServerRunning(...)
+```
+- Polls `https://<public-ip>:6443/version` every 15s until timeout
+- Same TrustAll SSL check as bootstrap
+
+**6. Kubeconfig verification (`isKubernetesClusterKubeConfigAvailable`):**
+- First checks if `kubeConfigData` is already cached in DB (from bootstrap)
+- If cached: returns `true` immediately — no SSH needed
+- If not cached: fetches via SSH from control node, replaces private IP with public IP, stores in DB
+
+**7. Dashboard verification (`isKubernetesClusterDashboardServiceRunning`):**
+- First checks `dashboardServiceRunning` detail in DB (cached from bootstrap)
+- If cached `true`: returns immediately — no SSH needed
+- If not cached: runs `kubectl get pods` via SSH to verify dashboard pod is Running
+- Caches the result for future restarts
+
+**8. Final state transition:**
+```
+StartRequested → Running (via OperationSucceeded)
+```
+
+### Key Differences: Bootstrap vs. Restart
+
+| Aspect | Bootstrap (`onCreate=true`) | Restart (`onCreate=false`) |
+|--------|---------------------------|--------------------------|
+| VMs | Provisioned from scratch (create, deploy, cloud-init) | Already exist — just started |
+| ISO | Attached, polled by cloud-init, detached | Not involved |
+| Network | Created/started, VR provisioned | Already exists (may implicitly start with VMs) |
+| cloud-init | Full kubeadm init/join flow | Not run — Kubernetes state persists on disk |
+| Provider/CSI | Deployed via SCP + kubectl | Already installed — not re-deployed |
+| Verification | Full: API, nodes, kubeconfig, dashboard, taint, provider | Lightweight: API, kubeconfig (cached), dashboard (cached) |
+| Time | 15–30+ minutes | 1–3 minutes |
+
+### Why Restart is Fast
+
+The restart path benefits from two caching mechanisms:
+1. **`kubeConfigData`** — cached after first bootstrap, reused on every restart
+2. **`dashboardServiceRunning`** — cached after first bootstrap, reused on every restart
+
+This means a typical restart only needs:
+- VM start (hypervisor-level, parallel)
+- One HTTPS poll for API server
+- No SSH calls at all (if both details are cached)
+
+---
+
+## Shutdown (Stop)
+
+CKS supports stopping a running cluster. This is a **soft stop** — it powers off all VMs but preserves all resources (volumes, networks, IPs, DB records) so the cluster can be restarted.
+
+### API Command
+
+```
+stopKubernetesCluster id=<cluster-id>
+```
+
+- Defined in `StopKubernetesClusterCmd.java`
+- Takes only `id` (cluster UUID) as parameter
+- Authorized: Admin, ResourceAdmin, DomainAdmin, User
+- Async operation (BaseAsyncCmd)
+
+### Stop Flow (`KubernetesClusterStopWorker.stop()`)
+
+```
+Running → StopRequested → Stopping → OperationSucceeded → Stopped
+```
+
+**1. State transition:**
+```
+Running → StopRequested
+```
+
+**2. Stop all VMs:**
+
+Iterates through all cluster VMs (etcd, control, worker) and calls:
+```
+userVmService.stopVirtualMachine(vm.getId(), false)
+```
+- The `false` parameter means **soft stop** (ACPI shutdown signal, not hard power-off)
+- Each VM stop is wrapped in its own `CallContext` for proper event logging
+- If a single VM stop fails (e.g., `ConcurrentOperationException`), it logs a warning but **continues** stopping the rest
+
+**3. Verify all VMs stopped:**
+
+After the stop loop, verifies every VM reached `Stopped` state:
+```
+for (UserVm vm : clusterVMs) {
+    if (vm.getState() != VirtualMachine.State.Stopped) → OperationFailed
+}
+```
+
+**4. Final state transition:**
+```
+StopRequested → Stopped (via OperationSucceeded)
+```
+
+### What is NOT Done During Stop
+
+Importantly, CKS stop does **not** perform any Kubernetes-level graceful shutdown:
+
+| Action | Done? | Notes |
+|--------|-------|-------|
+| `kubectl drain` | ❌ | No node draining |
+| `kubectl cordon` | ❌ | No node cordoning |
+| Pod eviction | ❌ | Pods are not evicted |
+| etcd snapshot | ❌ | No etcd backup |
+| Provider cleanup | ❌ | CloudStack provider not undeployed |
+| ISO detach | ❌ | No ISOs attached at this point |
+| Network teardown | ❌ | Networks, VRs, IPs preserved |
+| Volume teardown | ❌ | Root disks and data volumes preserved |
+
+This means:
+- **Workloads are interrupted** — pods on stopped nodes will be rescheduled when the cluster restarts (if they have appropriate tolerations/DA configs)
+- **etcd data persists** — stored on VM root disks, survives stop/start cycle
+- **Kubernetes state is preserved** — all cluster metadata, secrets, configs survive
+- **Network resources persist** — isolated network, VR, SourceNAT IP, port forwarding rules all remain
+
+### Stop vs. Delete
+
+| Aspect | Stop (`stopKubernetesCluster`) | Delete (`deleteKubernetesCluster`) |
+|--------|-------------------------------|-----------------------------------|
+| VMs | Powered off (preserved) | Destroyed + expunged |
+| Volumes | Preserved | Destroyed |
+| Network | Preserved | Stopped + cleaned up |
+| IPs | Preserved | Released |
+| DB records | Preserved | Removed |
+| Reversible | Yes — `startKubernetesCluster` | No — must recreate |
+| Worker | `KubernetesClusterStopWorker` | `KubernetesClusterDestroyWorker` |
+
+### Stop Error Handling
+
+- If any VM cannot be found: `OperationFailed`
+- If any VM fails to reach `Stopped` state: `OperationFailed`
+- Individual VM stop failures (concurrent ops) are logged but don't abort — the verification loop catches them
+
+---
+
 ## State Machine
 
 ```
@@ -543,36 +740,45 @@ All kubectl commands use the absolute path `/opt/bin/kubectl` (not the system-in
                              Created ──→ DestroyRequested → Destroyed
                                  │
                                  ▼
-                          StartRequested
-                                 │
-                                 ▼
-                              Starting
-                              /      \
-                             ▼        ▼
-                    CreateFailed    Running
-                                 /    │    \
+                          StartRequested ──────────────────────────┐
+                                 │                                 │
+                                 ▼                                 │ (onCreate=true)
+                              Starting                            │ (bootstrap)
+                              /      \                            │
+                             ▼        ▼                            │
+                    CreateFailed    Running                        │
+                                 /    │    \                       │
                       UpgradeRequested │  ScaleUpRequested / ScaleDownRequested
-                           │          │           │
-                           ▼          │           ▼
-                       Upgrading      │        Scaling
-                        /    \        │       /      \
-                       ▼      ▼       │      ▼        ▼
-             OperationFailed  ────────┘  OperationFailed
-                       \                /
-                        ▼              ▼
-                     OperationSucceeded
-                            │
-                            ▼
-                          Running
-                            │
-                            ▼
-                      StopRequested
-                            │
-                            ▼
-                         Stopping
-                         /      \
-                        ▼        ▼
-                OperationFailed  Stopped
+                           │          │           │                  │
+                           ▼          │           ▼                  │
+                       Upgrading      │        Scaling               │
+                        /    \        │       /      \               │
+                       ▼      ▼       │      ▼        ▼              │
+             OperationFailed  ────────┘  OperationFailed             │
+                       \                /                             │
+                        ▼              ▼                              │
+                     OperationSucceeded                               │
+                            │                                         │
+                            ▼                                         │
+                          Running                                     │
+                            │                                         │
+                            ▼                                         │
+                      StopRequested                                   │
+                            │                                         │
+                            ▼                                         │
+                         Stopping                                     │
+                         /      \                                     │
+                        ▼        ▼                                    │
+                OperationFailed  Stopped                              │
+                                    │                                 │
+                                    └──────── StartRequested ─────────┘
+                                         (onCreate=false, restart)
+                                    │
+                                    ▼
+                               OperationSucceeded
+                                    │
+                                    ▼
+                                  Running
 ```
 
 **Key events:**
