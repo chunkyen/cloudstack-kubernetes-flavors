@@ -156,15 +156,18 @@ cd /path/to/vm/disks/
 bzip2 -9 noble-server-cloudimg-amd64.img  # CloudStack decompresses on-the-fly
 ```
 
-Upload the QCOW2 file to an HTTP-accessible server or secondary storage, then proceed to Step 6.
+You can either upload the QCOW2 file to an HTTP-accessible server, or copy it directly to your management server for local registration. Both options are covered in Step 6.
 
 ### Step 6: Register as Template in CloudStack
 
-**From a local build (uploaded QCOW2 file):**
+**From a local build (QCOW2 file):**
 
-**UI:** **Compute → Templates → Register Template**, fill in name/zone/format, ✅ check "For CKS", set Is Public = true.
+Two options to get your image into CloudStack:
 
-**cmk:**
+**Option 1 — HTTP URL registration:**
+Upload the QCOW2 file to any web server accessible by your management server, then:
+- **UI:** **Compute → Templates → Register Template**, paste the URL, fill in name/zone/format, ✅ check "For CKS", set Is Public = true.
+- **cmk:**
 ```bash
 cmk register template \
   name="Ubuntu 24.04 CKS Template" \
@@ -176,6 +179,10 @@ cmk register template \
   ispublic=true \
   forcks=true
 ```
+
+**Option 2 — Direct upload (no HTTP server needed):**
+- **UI:** **Compute → Templates → Register Template**, choose "Upload" instead of URL, select the QCOW2 file from your local machine.
+- **cmk:** `cmk register template` with a local path or use the UI for large files.
 
 **From a CloudStack-native build (root disk volume):**
 
