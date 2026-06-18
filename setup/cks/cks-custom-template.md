@@ -81,19 +81,8 @@ virt-customize --verbose -a noble-server-cloudimg-amd64.img \
 
 **Option B — Build inside a VM (more control):**
 
-```bash
-# Create the VM
-virt-install \
-  --name ubuntu24-cks-template \
-  --memory 4096 \
-  --vcpus 2 \
-  --disk noble-server-cloudimg-amd64.img,bus=virtio,format=qcow2 \
-  --network network=default,model=virtio \
-  --import --noautoconsole
-
-# Log in via console or cloud-image-login
-sudo virsh console ubuntu24-cks-template
-```
+You can build the image using local KVM/libvirt, or directly inside CloudStack by deploying an instance from the Ubuntu cloud image.
+The steps below are the same either way — just use whatever hypervisor is convenient.
 
 Inside the VM:
 
