@@ -210,6 +210,117 @@ cmk create kubernetescluster \
   nodetemplates="{worker:$TEMPLATE_ID,control:$TEMPLATE_ID}"
 ```
 
+## Building CKS Templates with Packer (IaC)
+
+For teams that want version-controlled, repeatable image builds, **HashiCorp Packer** can automate the entire process. This section shows how to build a CKS-compatible template using Packer's QEMU builder.
+
+### Prerequisites
+
+- Install [Packer](https://developer.hashicorp.com/packerc/install) on your build machine
+- Access to a KVM host (for local builds) or CI runner with libvirt access
+
+### Packer Template (`cks-template.pkr.hcl`)
+
+```hcl
+variable "mgmt_pub_key" {
+  type    = string
+  default = "<paste-management-server-public-key-here>"
+}
+
+source "qemu" "ubuntu24-cks" {
+  iso_url        = "https://cloud-images.ubuntu.com/noble/current/noble-server-cloudimg-amd64.img"
+  iso_checksum   = "sha256:9d1f8e3b7c0a3e1f..." # Check latest SHA256SUMS from Ubuntu cloud images
+  output_directory = "output"
+  format         = "qcow2"
+  accelerator    = "kvm"
+  ssh_username   = "ubuntu"
+  http_directory = "files" # Optional: place CA certs or scripts here for upload
+  memory         = 2048
+  cores          = 2
+}
+
+build {
+  sources = ["source.qemu.ubuntu24-cks"]
+
+  provisioner "shell" {
+    inline = [
+      "apt-get update && apt-get upgrade -y",
+      "mkdir -p /opt/bin",
+      "apt-get install -y containerd qemu-guest-agent",
+      "systemctl enable containerd && systemctl enable qemu-guest-agent",
+      "mkdir -p /home/cloud/.ssh",
+      "echo '${var.mgmt_pub_key}' > /home/cloud/.ssh/authorized_keys",
+      "chmod 700 /home/cloud/.ssh && chmod 600 /home/cloud/.ssh/authorized_keys && chown -R cloud:cloud /home/cloud/.ssh",
+    ]
+  }
+
+  # Optional: Inject internal CA certs for private registry trust
+  provisioner "file" {
+    source      = "files/internal-ca.crt"
+    destination = "/tmp/internal-ca.crt"
+  }
+  provisioner "shell" {
+    inline = [
+      "cp /tmp/internal-ca.crt /usr/local/share/ca-certificates/internal-ca.crt",
+      "update-ca-certificates",
+      "mkdir -p /etc/containerd/certs.d/<your-private-registry-hostname>",
+      "cp /usr/local/share/ca-certificates/internal-ca.crt /etc/containerd/certs.d/<your-private-registry-hostname>/ca.crt",
+    ]
+  }
+
+  # Sysprep-equivalent cleanup before image export
+  provisioner "shell" {
+    inline = [
+      "cloud-init clean --logs",
+      "rm -f /etc/ssh/ssh_host_*",
+      "truncate -s 0 /etc/machine-id",
+      "rm -f /etc/hostid",
+      "apt-get clean && rm -rf /tmp/*",
+    ]
+  }
+
+  post-processors {
+    compress {
+      format = "tar.gz"
+    }
+  }
+}
+```
+
+### Build Workflow
+
+```bash
+# Initialize plugins and build the image
+packer init .
+packer build cks-template.pkr.hcl
+
+# The output will be in output/ as a QCOW2 file (and compressed tar.gz)
+ls -lh output/
+```
+
+### Register with CloudStack
+
+After Packer finishes, upload the resulting `output/ubuntu24-cks.qcow2` to your HTTP server or secondary storage, then register it exactly like the manual method:
+
+```bash
+cmk register template \
+  name="Ubuntu 24.04 CKS Template" \
+  url=http://<your-server>/ubuntu24-cks.qcow2 \
+  zoneid=<zone-id> \
+  format=QCOW2 \
+  hypervisortype=KVM \
+  ostypeid=<os-type-id> \
+  ispublic=true \
+  forcks=true
+```
+
+### CI/CD Integration
+
+This Packer template can be run in GitHub Actions, GitLab CI, or Jenkins to automatically rebuild and publish CKS templates whenever:
+- Base Ubuntu cloud image updates release
+- New containerd/qemu-guest-agent versions are available
+- Internal CA certificates rotate
+
 ## Pre-built CKS Templates
 
 CloudStack provides pre-built templates for Ubuntu 22.04:
