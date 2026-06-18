@@ -1,6 +1,6 @@
 # CKS Custom Template Build Guide
 
-## Overview
+## 1. Overview
 
 From CloudStack 4.21+, you can register custom VM templates for CKS cluster nodes instead of relying on the default SystemVM template. This lets you:
 
@@ -10,7 +10,7 @@ From CloudStack 4.21+, you can register custom VM templates for CKS cluster node
 
 > **Note:** The template is the **base OS image**. Kubernetes binaries still come from the ISO registered as a supported K8s version. CKS handles kernel modules, sysctl settings, and CNI configuration during bootstrap — you only need to provide the minimal requirements listed below.
 
-## Template Requirements (per CloudStack docs)
+## 2. Template Requirements (per CloudStack docs)
 
 A CKS template needs very little — most setup is done by CKS at boot time from the binaries ISO:
 
@@ -28,9 +28,9 @@ A CKS template needs very little — most setup is done by CKS at boot time from
 
 > All packages listed above come directly from the [official CloudStack CKS documentation](https://docs.cloudstack.apache.org/en/latest/plugins/cloudstack-kubernetes-service.html#build-a-custom-template-to-use-for-kubernetes-clusters-nodes).
 
-## Step-by-Step: Ubuntu 24.04 CKS Template
+## 3. Step-by-Step: Ubuntu 24.04 CKS Template
 
-### Step 1: Prepare a Build Environment
+### 3.1 Prepare a Build Environment
 
 Use a machine with `virt-install` and `virt-customize` available:
 
@@ -39,7 +39,7 @@ sudo apt install -y libvirt-daemon-system libvirt-clients \
   virtinst libguestfs-tools qemu-utils
 ```
 
-### Step 2: Download Ubuntu 24.04 Cloud Image
+### 3.2 Download Ubuntu 24.04 Cloud Image
 
 ```bash
 wget https://cloud-images.ubuntu.com/noble/current/noble-server-cloudimg-amd64.img
@@ -49,7 +49,7 @@ wget https://cloud-images.ubuntu.com/noble/current/SHA256SUMS
 sha256sum -c SHA256SUMS 2>/dev/null | grep noble-server-cloudimg-amd64.img
 ```
 
-### Step 3: Get the Management Server's SSH Public Key
+### 3.3 Get the Management Server's SSH Public Key
 
 CKS bootstraps nodes by SSHing from the management server as `cloud` user. The mgmt server's **public** key must be baked into the template — otherwise CKS cannot connect to VMs during provisioning.
 
@@ -60,7 +60,7 @@ cat /root/.ssh/id_rsa.pub.cloud
 
 Copy the public key — you'll need it in Step 4.
 
-### Step 4: Customize the Image
+### 3.4 Customize the Image
 
 **Option A — Quick build with virt-customize:**
 
@@ -124,7 +124,7 @@ rm -rf /tmp/*
 truncate -s 0 /var/log/auth.log
 ```
 
-### Step 4b: Prepare the VM for Templating (Sysprep Equivalent)
+### 3.5 Prepare the VM for Templating (Sysprep Equivalent)
 
 Before stopping the instance and registering it as a template, you must reset instance-specific data so every new clone boots clean. This is Ubuntu's equivalent of Windows Sysprep:
 
@@ -152,7 +152,7 @@ swapoff -a && mkswap <your-swap-partition> && swapon <your-swap-partition>
 
 After this, **stop the instance**. Each new cluster node will get fresh SSH keys, a new machine-id, clean DHCP state, and proper hostname from cloud-init.
 
-### Step 5: Prepare the Image (local builds only)
+### 3.6 Prepare the Image (local builds only)
 
 > If you built natively inside CloudStack, skip this step — go straight to **Step 6**.
 
@@ -165,7 +165,7 @@ bzip2 -9 noble-server-cloudimg-amd64.img  # CloudStack decompresses on-the-fly
 
 You can either upload the QCOW2 file to an HTTP-accessible server, or copy it directly to your management server for local registration. Both options are covered in Step 6.
 
-### Step 6: Register as Template in CloudStack
+### 3.7 Register as Template in CloudStack
 
 **From a local build (QCOW2 file):**
 
@@ -205,7 +205,7 @@ cmk create template \
   ispublic=true
 ```
 
-### Step 7: Verify and Use
+### 3.8 Verify and Use
 
 ```bash
 # Confirm registration
@@ -226,16 +226,16 @@ cmk create kubernetescluster \
   nodetemplates="{worker:$TEMPLATE_ID,control:$TEMPLATE_ID}"
 ```
 
-## Building CKS Templates with Packer (IaC)
+## 4. Building CKS Templates with Packer (IaC)
 
 For teams that want version-controlled, repeatable image builds, **HashiCorp Packer** can automate the entire process. This section shows how to build a CKS-compatible template using Packer's QEMU builder.
 
-### Prerequisites
+### 4.1 Prerequisites
 
 - Install [Packer](https://developer.hashicorp.com/packerc/install) on your build machine
 - Access to a KVM host (for local builds) or CI runner with libvirt access
 
-### Packer Template (`cks-template.pkr.hcl`)
+### 4.2 Packer Template (`cks-template.pkr.hcl`)
 
 ```hcl
 variable "mgmt_pub_key" {
@@ -303,7 +303,7 @@ build {
 }
 ```
 
-### Build Workflow
+### 4.3 Build Workflow
 
 ```bash
 # Initialize plugins and build the image
@@ -314,7 +314,7 @@ packer build cks-template.pkr.hcl
 ls -lh output/
 ```
 
-### Register with CloudStack
+### 4.4 Register with CloudStack
 
 After Packer finishes, upload the resulting `output/ubuntu24-cks.qcow2` to your HTTP server or secondary storage, then register it exactly like the manual method:
 
@@ -330,14 +330,14 @@ cmk register template \
   forcks=true
 ```
 
-### CI/CD Integration
+### 4.5 CI/CD Integration
 
 This Packer template can be run in GitHub Actions, GitLab CI, or Jenkins to automatically rebuild and publish CKS templates whenever:
 - Base Ubuntu cloud image updates release
 - New containerd/qemu-guest-agent versions are available
 - Internal CA certificates rotate
 
-## Troubleshooting
+## 5. Troubleshooting
 
 | Issue | Solution |
 |-------|----------|
@@ -346,7 +346,7 @@ This Packer template can be run in GitHub Actions, GitLab CI, or Jenkins to auto
 | CKS can't SSH to nodes, provisioning hangs | Verify mgmt server's public key is in `/home/cloud/.ssh/authorized_keys` with correct permissions |
 | Container runtime not found | Ensure containerd is installed and enabled (`systemctl enable containerd`) |
 
-## References
+## 6. References
 
 - [CloudStack CKS Documentation](https://docs.cloudstack.apache.org/en/latest/plugins/cloudstack-kubernetes-service.html)
 - [CKS Setup Guide](./cks.md)
