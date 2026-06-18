@@ -12,40 +12,6 @@ From CloudStack 4.21+, you can register custom VM templates for CKS cluster node
 
 > **Note:** The template is the **base OS image**. Kubernetes binaries still come from the ISO registered as a supported K8s version. The template only provides the OS foundation — CKS mounts the binaries ISO at boot to install kubeadm, kubelet, CNI, etc.
 
-## How CKS Uses Templates
-
-```
-┌──────────────────────────────────────────────────────┐
-│  CKS Cluster Node                                    │
-│                                                      │
-│  ┌────────────────────────────────────────────────┐  │
-│  │  Custom Template (your VM image)               │  │
-│  │  - OS (Ubuntu 24.04, etc.)                     │  │
-│  │  - containerd, kubelet, kubeadm, kubectl       │  │
-│  │  - cloud-init, qemu-guest-agent                │  │
-│  │  - Pre-installed tools & drivers               │  │
-│  └────────────────────────────────────────────────┘  │
-│                    ▲                                  │
-│                    │ ISO mounted at boot              │
-│  ┌────────────────────────────────────────────────┐  │
-│  │  Binaries ISO (K8s version)                    │  │
-│  │  - kubeadm binaries                            │  │
-│  │  - CNI plugin images (Calico/Cilium)           │  │
-│  │  - Kubernetes Dashboard                        │  │
-│  │  - CCM / CSI manifests                         │  │
-│  │  → mounted at /mnt/k8sdisk inside the guest    │  │
-│  └────────────────────────────────────────────────┘  │
-└──────────────────────────────────────────────────────┘
-```
-
-CKS boot sequence:
-1. CloudStack provisions the VM from your template
-2. Attaches the K8s binaries ISO as a CD-ROM device
-3. cloud-init runs (DataSourceCloudStack) — sets hostname, SSH keys, user-data
-4. cloud-init waits for `/mnt/k8sdisk/` (the mounted ISO) to appear
-5. Installs kubelet, copies K8s binaries, and runs `kubeadm init` or `kubeadm join`
-6. ISO is detached after bootstrapping completes
-
 ## Prerequisites Checklist
 
 Your template **must** have these installed and configured:
