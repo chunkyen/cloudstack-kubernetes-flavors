@@ -17,7 +17,7 @@ A CKS template needs very little — most setup is done by CKS at boot time from
 | Requirement | Why |
 |-------------|-----|
 | **cloud-init** | Receives hostname, SSH keys, and user-data from CloudStack metadata service (Ubuntu cloud images include this) |
-| **cloud-guest-utils** | Provides qemu-guest-agent for KVM ISO mount/detach and VM communication |
+| **cloud-guest-utils** | Provides guest utilities for various hypervisors (KVM, VMware, etc.) |
 | **containerd** | Container runtime for Kubernetes pods (v1.7+) |
 | **conntrack** | Required for kube-proxy and CNI networking |
 | **apt-transport-https, ca-certificates, curl, gnupg, software-properties-common, lsb-release** | Prerequisites for adding repos (e.g., containerd) |
@@ -72,7 +72,7 @@ virt-customize --verbose -a noble-server-cloudimg-amd64.img \
   --run 'mkdir -p /opt/bin' \
   --run 'apt-get update && apt-get install -y cloud-guest-utils conntrack apt-transport-https ca-certificates curl gnupg gnupg-agent software-properties-common lsb-release python3-json-pointer python3-jsonschema containerd' \
   --run "mkdir -p /home/cloud/.ssh && echo '${MGMT_PUB_KEY}' > /home/cloud/.ssh/authorized_keys && chmod 700 /home/cloud/.ssh && chmod 600 /home/cloud/.ssh/authorized_keys && chown -R cloud:cloud /home/cloud/.ssh" \
-  --run 'systemctl enable containerd && systemctl enable qemu-guest-agent' \
+  --run 'systemctl enable containerd' \
   --run 'apt-get clean && rm -rf /tmp/* /var/log/cloud-init.log /var/log/cloud-init-output.log && truncate -s 0 /var/log/auth.log && rm -f /etc/machine-id'
 ```
 
@@ -99,7 +99,6 @@ echo '%sudo ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/cloud-user
 
 # Enable services at boot
 systemctl enable containerd
-systemctl enable qemu-guest-agent
 
 # Add management server's SSH public key to cloud user
 mkdir -p /home/cloud/.ssh
