@@ -22,16 +22,14 @@ Your template **must** have these installed and configured:
 | **cloud user** | CKS cloud-init scripts run as `cloud` user; SSH access uses `cloud` | `adduser cloud --disabled-password --gecos ""` — must exist in template |
 | **Management server SSH key** | CKS management server must be able to SSH into nodes as `cloud` user | Mgmt server's public key baked into `/home/cloud/.ssh/authorized_keys` |
 | **containerd** | Container runtime for Kubernetes pods | v1.7+ recommended |
-| **kubelet** | Node agent — must match or be newer than target K8s version | Installed by template OR pulled from ISO |
-| **kubeadm** | Bootstrap tool used by CKS to init/join cluster | Installed by template OR pulled from ISO |
-| **kubectl** | CLI tool used by CKS management scripts | Installed by template OR pulled from ISO |
+| **containerd** | Container runtime for Kubernetes pods | v1.7+ recommended |
 | **qemu-guest-agent** | Required for ISO mount/detach on KVM hypervisors | `qemu-guest-agent` package; service must be enabled |
 | **conntrack** | Required for kube-proxy and CNI | `conntrack` package |
 | **ipset** | Required for Calico/CNI | `ipset` package |
 | **Kernel modules** | `br_netfilter`, `overlay` | Must be loadable at boot |
 | **Network setup** | DHCP client for primary interface | cloud-init handles this if configured correctly |
 
-> **Important:** kubelet, kubeadm, and kubectl can be pre-installed in the template OR installed from the binaries ISO at boot. Pre-installing them speeds up boot and reduces ISO size. If pre-installed, versions must be compatible with the K8s version in the ISO.
+> **Note:** kubelet, kubeadm, and kubectl are installed automatically from the binaries ISO during CKS bootstrap — no need to pre-install them in the template.
 
 ## Step-by-Step: Ubuntu 24.04 CKS Template
 
@@ -191,19 +189,7 @@ chmod 700 /home/cloud/.ssh
 chmod 600 /home/cloud/.ssh/authorized_keys
 chown -R cloud:cloud /home/cloud/.ssh
 
-# 8. (Optional) Pre-install kubelet, kubeadm, kubectl
-# Add Kubernetes apt repo
-curl -fsSL https://pkgs.k8s.io/core:/stable:/v1.32/deb/Release.key \
-  | gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg
-echo "deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] \
-  https://pkgs.k8s.io/core:/stable:/v1.32/deb/ /" \
-  > /etc/apt/sources.list.d/kubernetes.list
-apt-get update
-apt-get install -y kubelet kubeadm kubectl
-apt-mark hold kubelet kubeadm kubectl
-systemctl enable kubelet
-
-# 9. Clean up
+# 8. Clean up
 apt-get clean
 rm -rf /tmp/* /var/log/cloud-init.log /var/log/cloud-init-output.log
 truncate -s 0 /var/log/auth.log
@@ -336,11 +322,11 @@ These include: containerd, cloud-init, qemu-guest-agent, conntrack, ipset, and t
 
 ```bash
 # Core
-cloud-init          # CloudStack integration, user-data processing
+could-init          # CloudStack integration, user-data processing
 qemu-guest-agent    # KVM: ISO mount/detach, VM communication
 containerd.io       # Container runtime (v1.7+)
 
-# Kubernetes dependencies
+# Kubernetes dependencies (kubelet/kubeadm/kubectl come from ISO at boot)
 conntrack           # kube-proxy, CNI
 ipset               # Calico/CNI
 ipvsadm             # kube-proxy IPVS mode
@@ -375,7 +361,6 @@ net.ipv4.ip_forward                 = 1
 ```bash
 systemctl enable containerd
 systemctl enable qemu-guest-agent
-systemctl enable kubelet    # if pre-installed
 ```
 
 ## cloud-init Configuration
