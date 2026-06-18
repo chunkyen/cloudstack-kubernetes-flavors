@@ -148,9 +148,24 @@ After this, **stop the instance** in CloudStack and register it as a template (U
 ### Step 5: Prepare for Template Registration
 
 **If building natively inside CloudStack:**
-The disk is already in your zone's native format — no conversion needed. Just stop the instance and register it as a template directly:
-- UI: **Actions → Register As Template**, check "For CKS"
-- API/CLI: `cmk register template instanceid=<vm-id> forcks=true`
+The disk is already in your zone's native format — no conversion needed. Stop the instance, then create a template from its **root disk volume**:
+
+**UI path:**
+1. Go to **Storage → Volumes**
+2. Find the root disk of your stopped VM (type = ROOT)
+3. Click **Actions → Create Template From Volume**
+4. Enter name, ✅ check "For CKS", set Is Public = true, click OK
+
+**cmk path:**
+```bash
+# Get the root disk volume ID for a specific instance
+VOLUME_ID=$(cmk list volumes virtualmachineid=<vm-id> type=root filter=id | grep -oP '(?<="id":"')[^"]+')
+cmk create template \
+  name="Ubuntu 24.04 CKS Template" \
+  volumeid=$VOLUME_ID \
+  forcks=true \
+  ispublic=true
+```
 
 **If building locally (libvirt/qemu, Packer, etc.):**
 Stop the VM however your hypervisor requires, then navigate to the disk image location:
