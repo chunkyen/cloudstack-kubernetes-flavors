@@ -21,6 +21,7 @@ A CKS template needs very little — most setup is done by CKS at boot time from
 | **Management server SSH key** | Mgmt server must SSH into nodes to bootstrap the cluster — its public key goes in `/home/cloud/.ssh/authorized_keys` |
 | **containerd** | Container runtime for Kubernetes pods (v1.7+) |
 | **qemu-guest-agent** | Required on KVM hypervisors for ISO mount/detach and VM communication |
+| **`/opt/bin` directory** | CKS expects this directory to exist on cluster nodes |
 
 That's it. CKS installs kubelet, kubeadm, kubectl, CNI plugins, conntrack, ipset, socat, etc. from the binaries ISO during bootstrap.
 
@@ -66,6 +67,7 @@ MGMT_PUB_KEY="<paste_mgmt_server_public_key_here>"
 
 virt-customize --verbose -a noble-server-cloudimg-amd64.img \
   --install qemu-guest-agent \
+  --run 'mkdir -p /opt/bin' \
   --run 'apt-get update && apt-get install -y containerd.io' \
   --run "mkdir -p /home/cloud/.ssh && echo '${MGMT_PUB_KEY}' > /home/cloud/.ssh/authorized_keys && chmod 700 /home/cloud/.ssh && chmod 600 /home/cloud/.ssh/authorized_keys && chown -R cloud:cloud /home/cloud/.ssh" \
   --run 'systemctl enable containerd && systemctl enable qemu-guest-agent' \
@@ -80,6 +82,9 @@ The steps below are the same either way — just use whatever hypervisor is conv
 Inside the VM:
 
 ```bash
+# Create required directory (CKS expects this)
+mkdir -p /opt/bin
+
 # Install required packages
 apt-get update && apt-get upgrade -y
 apt-get install -y containerd.io qemu-guest-agent
