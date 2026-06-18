@@ -19,7 +19,8 @@ Your template **must** have these installed and configured:
 | Requirement | Why | Details |
 |-------------|-----|---------|
 | **cloud-init** | Receives hostname, SSH keys, CKS user-data from CloudStack metadata service | Must support `DataSourceCloudStack` |
-| **cloud user** | CKS cloud-init scripts run as `cloud` user; SSH access uses `cloud` | `adduser cloud --disabled-password --gecos ""` |
+| **cloud user** | CKS cloud-init scripts run as `cloud` user; SSH access uses `cloud` | `adduser cloud --disabled-password --gecos ""` — must exist in template |
+| **Management server SSH key** | CKS management server must be able to SSH into nodes as `cloud` user | Mgmt server's public key baked into `/home/cloud/.ssh/authorized_keys` |
 | **containerd** | Container runtime for Kubernetes pods | v1.7+ recommended |
 | **kubelet** | Node agent — must match or be newer than target K8s version | Installed by template OR pulled from ISO |
 | **kubeadm** | Bootstrap tool used by CKS to init/join cluster | Installed by template OR pulled from ISO |
@@ -53,6 +54,29 @@ wget https://cloud-images.ubuntu.com/noble/current/noble-server-cloudimg-amd64.i
 wget https://cloud-images.ubuntu.com/noble/current/SHA256SUMS
 sha256sum -c SHA256SUMS 2>/dev/null | grep noble-server-cloudimg-amd64.img
 ```
+
+### Step 2b: Get the Management Server's SSH Public Key
+
+CKS bootstraps nodes by SSHing from the management server as `cloud` user. The mgmt server's **public** key must be pre-installed in the template at `~cloud/.ssh/authorized_keys`, otherwise CKS cannot connect to the VMs during provisioning.
+
+SSH into your CloudStack management server and grab its public key:
+
+```bash
+# On the management server, get the public key
+# (location varies by installation — check both)
+cat /root/.ssh/id_rsa.pub
+cat ~/.ssh/id_rsa.pub
+```
+
+If no key exists, generate one:
+
+```bash
+# On the management server
+ssh-keygen -t ed25519 -f /root/.ssh/id_ed25519_cks -N "" -C "cloudstack-mgmt"
+cat /root/.ssh/id_ed25519_cks.pub
+```
+
+Copy the public key — you'll need it in Step 3b.
 
 ### Step 3: Customize the Image
 
@@ -156,6 +180,16 @@ sysctl --system
 
 # 7. Ensure 'cloud' user exists with sudo (Ubuntu cloud images have this by default)
 id cloud
+
+# 8. CRITICAL: Add management server's SSH public key to cloud user
+# Without this, CKS cannot SSH into nodes and bootstrapping will fail!
+mkdir -p /home/cloud/.ssh
+cat >> /home/cloud/.ssh/authorized_keys <<'MGMT_KEY'
+<REPLACE_WITH_MGMT_SERVER_PUBLIC_KEY>
+MGMT_KEY
+chmod 700 /home/cloud/.ssh
+chmod 600 /home/cloud/.ssh/authorized_keys
+chown -R cloud:cloud /home/cloud/.ssh
 
 # 8. (Optional) Pre-install kubelet, kubeadm, kubectl
 # Add Kubernetes apt repo
@@ -354,7 +388,7 @@ CKS relies on cloud-init to:
 
 Ubuntu cloud images come with cloud-init pre-configured for CloudStack (`DataSourceCloudStack`). Do **not** disable or replace cloud-init — CKS depends on it.
 
-> **Important:** The `cloud` user's SSH key is injected via cloud-init at deployment time, **not** pre-registered in the template. Do not add SSH keys to the template image.
+> **⚠️ Critical:** The management server's SSH public key must be pre-installed in the template at `/home/cloud/.ssh/authorized_keys`. While cloud-init can also inject keys via user-data, CKS needs immediate SSH access during the initial bootstrap phase before cloud-init finishes processing. Without this key baked into the template, CKS provisioning will hang or fail with `Failed to setup Kubernetes cluster: unable to access control node VMs`.
 
 ## Using Different Templates Per Node Type
 
