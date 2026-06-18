@@ -54,13 +54,6 @@ CKS bootstraps nodes by SSHing from the management server as `cloud` user. The m
 cat /root/.ssh/id_rsa.pub
 ```
 
-If no key exists, generate one:
-
-```bash
-ssh-keygen -t ed25519 -f /root/.ssh/id_ed25519_cks -N "" -C "cloudstack-mgmt"
-cat /root/.ssh/id_ed25519_cks.pub
-```
-
 Copy the public key — you'll need it in Step 4.
 
 ### Step 4: Customize the Image
