@@ -22,16 +22,16 @@
 
 ---
 
-## Prerequisites
+## 1. Prerequisites
 
 - Apache CloudStack management server (ACS 4.14+ for basic CKS, 4.21+ for flexible features)
 - At least one CloudStack zone with hosts (KVM recommended)
 - Root admin access to CloudStack
 - Network connectivity from management server to zone
 
-## Step 1: Enable CKS Plugin
+## 2. Enable CKS Plugin
 
-### Via CloudStack UI
+### 2.1 Via CloudStack UI
 1. Go to **Account & Domains** → **Global Settings**
 2. Search for `cloud.kubernetes.service.enabled`
 3. Set to `true`
@@ -42,7 +42,7 @@
    service cloudstack-management restart
    ```
 
-### Via cmk
+### 2.2 Via cmk
 ```bash
 cmk update globalconfiguration name=cloud.kubernetes.service.enabled value=true
 cmk update globalconfiguration name=endpoint.url value=http://<mgmt-server>:8080/client/api
@@ -54,7 +54,7 @@ service cloudstack-management restart
 
 After restart, the **Kubernetes** tab appears under **Compute** in the UI.
 
-## Step 2: Register Network Offering
+## 3. Register Network Offering
 
 Ensure a default network offering is configured:
 1. Go to **Network** → **Network Offerings**
@@ -68,9 +68,9 @@ Ensure a default network offering is configured:
 cmk update globalconfiguration name=cloud.kubernetes.cluster.network.offering value=DefaultNetworkOfferingforKubernetesService
 ```
 
-## Step 3: Register Kubernetes Binaries ISO
+## 4. Register Kubernetes Binaries ISO
 
-### Pre-built ISOs
+### 4.1 Pre-built ISOs
 
 Download from:
 - [`download.cloudstack.org/cks/`](http://download.cloudstack.org/cks/)
@@ -78,13 +78,13 @@ Download from:
 
 Register in CloudStack: **Storage** → **ISOs** → **Register ISO**
 
-### Custom ISO Builds
+### 4.2 Custom ISO Builds
 
 For custom ISO builds (Calico or Cilium), see the dedicated guide:
 
 - [**CKS Custom ISO Build Guide**](./cks-custom-iso.md)
 
-### Register the ISO as a Supported K8s Version
+### 4.3 Register the ISO as a Supported K8s Version
 
 After building or downloading an ISO, register it:
 
@@ -96,7 +96,7 @@ cmk registeriso name=v1.33.1 url=http://<server>/setup-v1.33.1.iso zoneid=<zone-
 cmk add kubernetessupportedversion name=v1.33.1 semanticversion=1.33.1 iso=<iso-name-or-id> zoneid=<zone-id> mincpunumber=2 minmemory=2048
 ```
 
-## Step 4: (Optional) Register CKS-Compatible Templates
+## 5. (Optional) Register CKS-Compatible Templates
 
 From ACS 4.21+, you can register custom templates for CKS.
 
@@ -117,9 +117,9 @@ cmk register template name=cks-custom-template url=http://<server>/cks-template.
 - SSH public key of `cloud` user — injected via cloud-init during deployment, **not** pre-registered in the template
 - Required packages — see [official docs](https://docs.cloudstack.apache.org/en/latest/plugins/cloudstack-kubernetes-service.html#build-a-custom-template-to-use-for-kubernetes-clusters-nodes)
 
-## Step 5: Create a Kubernetes Cluster
+## 6. Create a Kubernetes Cluster
 
-### Basic Cluster (Default Settings)
+### 6.1 Basic Cluster (Default Settings)
 
 Via UI:
 1. **Compute** → **Kubernetes** → **Add Kubernetes Cluster**
@@ -134,11 +134,11 @@ Via UI:
    - **Etcd Nodes:** `0` (or ≥1 for dedicated etcd)
 3. Click **Create**
 
-### Advanced Settings (ACS 4.21+)
+### 6.2 Advanced Settings (ACS 4.21+)
 
 From CloudStack 4.21+, the cluster creation form includes an **Advanced Settings** toggle that unlocks granular control over each node type. This enables heterogeneous clusters where control, worker, and etcd nodes can use different templates, service offerings, and even hypervisor types.
 
-#### When to Use Advanced Settings
+#### 6.2.1 When to Use Advanced Settings
 
 | Use Case | Why Advanced Settings |
 |----------|----------------------|
@@ -150,44 +150,44 @@ From CloudStack 4.21+, the cluster creation form includes an **Advanced Settings
 | **Persistent storage** | Enable CloudStack CSI Driver for dynamic provisioning and volume snapshots |
 
 
-#### Advanced Settings Breakdown
+#### 6.2.2 Advanced Settings Breakdown
 
-##### 1. Hypervisor Type Selection
+##### 6.2.2.1 Hypervisor Type Selection
 - **What:** Restricts node deployment to a specific hypervisor (KVM, VMware, etc.)
 - **Why:** Ensures consistent performance, enables hypervisor-specific features (e.g., GPU passthrough)
 - **Effect:** CloudStack only provisions CKS nodes on hosts matching the selected hypervisor
 
-##### 2. Control Node Template & Service Offering
+##### 6.2.2.2 Control Node Template & Service Offering
 - **Template:** CKS-marked template for control plane nodes (e.g., with pre-installed monitoring agents)
 - **Service Offering:** CPU/RAM profile for control nodes (e.g., 4 CPU / 8 GB RAM)
 - **Default:** Uses the last registered SystemVM template with the global K8s service offering
-- **Note:** Registering custom templates is optional — only needed if you want templates per node type. See [Step 4](#step-4-optional-register-cks-compatible-templates) for details.
+- **Note:** Registering custom templates is optional — only needed if you want templates per node type. See [Section 5](#5-optional-register-cks-compatible-templates) for details.
 - **⚠️ Critical Bug Warning:** In `cmk create kubernetescluster`, if both `serviceofferingid` and `nodeofferings` are provided, `nodeofferings` will override the `serviceofferingid` during deployment. However, **CKS still checks the `serviceoffering` during cluster upgrades** to verify minimum hardware requirements. To avoid upgrade failures, ensure the `serviceofferingid` matches the resource specifications (CPU/RAM) of your control plane `nodeofferings`.
 
 
-##### 3. Worker Node Template & Service Offering
+##### 6.2.2.3 Worker Node Template & Service Offering
 - **Template:** CKS-marked template for worker nodes (e.g., GPU-enabled, or with specific runtime tools)
 - **Service Offering:** CPU/RAM profile for workers (e.g., 8 CPU / 16 GB RAM for compute-heavy workloads)
 - **Default:** Uses the last registered SystemVM template with the global K8s service offering
 
-##### 4. Etcd Node Template & Service Offering (dedicated etcd)
+##### 6.2.2.4 Etcd Node Template & Service Offering (dedicated etcd)
 - **When:** Set `etcdnodes ≥ 1` during cluster creation
 - **Template:** CKS-marked template — **must be from an ISO built with etcd binaries** (use the `ETCD_VERSION` parameter in `create-kubernetes-binaries-iso.sh`)
 - **Service Offering:** CPU/RAM profile for etcd nodes (e.g., 2 CPU / 4 GB RAM with fast disk)
 - **Why:** Separating etcd from the control plane improves fault isolation and etcd performance
 - **Available ISOs:** `https://download.cloudstack.org/testing/cks/custom_templates/iso-etcd/`
 
-##### 5. CNI Configuration Selection
+##### 6.2.2.5 CNI Configuration Selection
 - **What:** Pre-registered CNI user-data configuration (from 4.21+)
 - **How to register:** **Instances** → **CNI Configuration** → **Add CNI Configuration**
 - **Why:** Allows dynamic CNI parameter injection without rebuilding ISOs
 - **Alternative:** Build ISO with CNI baked in (Step 3)
 
-###### How CNI Configuration Works
+###### 6.2.2.5.1 How CNI Configuration Works
 
 When you register a CNI configuration, CloudStack injects it as **user-data** into the CKS cluster nodes during provisioning. This runs as a shell script (`runcmd:`) after the base Kubernetes installation, allowing you to install or replace the CNI plugin at runtime.
 
-###### Example 1: BGP CNI Configuration
+###### 6.2.2.5.2 Example 1: BGP CNI Configuration
 
 For BGP peering (e.g., with Calico or Cilium):
 
@@ -199,7 +199,7 @@ For BGP peering (e.g., with Calico or Cilium):
 }
 ```
 
-###### Example 2: Cilium CNI via User-Data
+###### 6.2.2.5.3 Example 2: Cilium CNI via User-Data
 
 Install Cilium on a cluster that was provisioned with the default Calico ISO — no custom ISO needed.
 
@@ -240,7 +240,7 @@ kubectl get pods -n kube-system -l k8s-app=cilium
 kubectl -n kube-system exec -it daemonset/cilium -- cilium status
 ```
 
-###### Example 3: Custom CNI Parameters
+###### 6.2.2.5.4 Example 3: Custom CNI Parameters
 
 You can also inject arbitrary shell commands to run on node bootstrap. For example, to install a custom CNI plugin:
 
@@ -258,7 +258,7 @@ runcmd:
   - /home/cloud/custom-cni.sh
 ```
 
-##### 6. CloudStack CSI Driver Toggle
+##### 6.2.2.6 CloudStack CSI Driver Toggle
 - **What:** Enable/disable the CloudStack CSI Driver deployment on cluster creation
 - **Default:** Disabled
 - **Why:** When enabled, the CSI driver is automatically deployed to the cluster — no manual setup needed
@@ -266,7 +266,7 @@ runcmd:
 - **Manual deploy still needed for:** Pre-existing clusters, or clusters where this was not enabled during creation
 - **See also:** [CloudStack CSI Driver architecture](../../architecture/cloudstack-csi-driver.md) · [CSI setup guide](../../setup/cloudstack-csi-driver.md)
 
-#### UI Flow
+#### 6.2.3 UI Flow
 1. **Compute** → **Kubernetes** → **Add Kubernetes Cluster**
 2. Fill in basic fields (name, zone, network, version, node counts)
 3. **Toggle "Advanced Settings"** to reveal the granular options
@@ -278,9 +278,9 @@ runcmd:
 
 > **Script:** A helper script is available in this repo to automate cluster creation: [create-cks-cluster.sh](https://github.com/chunkyen/cloudstack-kubernetes-flavors/blob/main/setup/cks/scripts/create-cks-cluster.sh). It wraps the UI flow into a parameterized shell script for repeatable deployments.
 
-## Step 6: Access Your Cluster
+## 7. Access Your Cluster
 
-### Get kubeconfig
+### 7.1 Get kubeconfig
 
 **Via UI:**
 1. Navigate to **Compute** → **Kubernetes**
@@ -306,7 +306,7 @@ kubectl --kubeconfig=kubeconfig.yaml get nodes
 kubectl --kubeconfig=kubeconfig.yaml get pods -n kube-system
 ```
 
-### SSH to Nodes
+### 7.2 SSH to Nodes
 
 > **Note:** SSH access is only needed for troubleshooting — it's not required for normal cluster operations.
 
@@ -319,9 +319,9 @@ ssh -i <key> -p 2223 cloud@<VR_PUBLIC_IP>   # node 2
 ssh -i <key> -p 2224 cloud@<VR_PUBLIC_IP>   # node 3
 ```
 
-## Step 7: Cluster Management
+## 8. Cluster Management
 
-### Scale Cluster
+### 8.1 Scale Cluster
 
 CKS supports three types of scaling through a single API (`scaleKubernetesCluster`):
 
@@ -333,7 +333,7 @@ CKS supports three types of scaling through a single API (`scaleKubernetesCluste
 
 > **Note:** The **Add Node** icon (➕) is separate — it adds pre-existing VMs to the cluster as external nodes.
 
-#### Scale Up (Add Worker Nodes)
+#### 8.1.1 Scale Up (Add Worker Nodes)
 
 Scale up creates new worker VMs, attaches the binaries ISO, and waits for them to join the cluster.
 
@@ -364,7 +364,7 @@ cmk scale kubernetescluster id=<cluster-id> size=5
 - Sufficient host capacity must be available for new VMs
 - The cluster must be in `Running` state
 
-#### Scale Down (Remove Worker Nodes)
+#### 8.1.2 Scale Down (Remove Worker Nodes)
 
 Scale down gracefully removes worker nodes from the cluster by draining workloads, deleting the node from Kubernetes, and destroying the underlying VM.
 
@@ -408,7 +408,7 @@ When you decrease the worker count (without specifying `nodeIds`), CKS automatic
 - Already-removed nodes are **not** rolled back — they stay removed
 - The operation is bounded by `cloud.kubernetes.cluster.scale.timeout` (default 3600s)
 
-#### Vertical Scaling (Change Service Offering)
+#### 8.1.3 Vertical Scaling (Change Service Offering)
 
 Change the CPU/RAM profile of existing nodes without adding or removing VMs.
 
@@ -433,7 +433,7 @@ cmk scale kubernetescluster id=<cluster-id> 'nodeofferings[0].node'=worker 'node
 - Cluster core/memory totals are recalculated
 - On failure: already-upgraded VMs keep their new offering (no rollback)
 
-#### Autoscaling
+#### 8.1.4 Autoscaling
 
 CKS supports Kubernetes cluster-autoscaler integration for automatic scale up/down.
 
@@ -449,7 +449,7 @@ cmk scale kubernetescluster id=<cluster-id> autoscalingenabled=true minsize=2 ma
 
 This deploys the Kubernetes [cluster-autoscaler](https://github.com/kubernetes/autoscaler) with the CloudStack cloud provider, configured with the specified min/max bounds.
 
-### Upgrade Cluster
+### 8.2 Upgrade Cluster
 
 > **Full stack upgrade guide:** For a complete end-to-end upgrade covering K8s version, CNI, and CSI, see the [CKS Upgrade Guide](./cks-upgrade.md).
 
@@ -468,7 +468,7 @@ This deploys the Kubernetes [cluster-autoscaler](https://github.com/kubernetes/a
 cmk upgrade kubernetescluster id=<cluster-id> kubernetesversionid=<new-version-id>
 ```
 
-### Add Pre-created Worker Nodes
+### 8.3 Add Pre-created Worker Nodes
 
 > **Note:** The **Add Node** icon (➕) only appears when the cluster is in a **running** state.
 
@@ -483,12 +483,12 @@ cmk upgrade kubernetescluster id=<cluster-id> kubernetesversionid=<new-version-i
 cmk add kubernetesclusternode id=<cluster-id> instanceids=<vm-id-1>,<vm-id-2>
 ```
 
-### Remove Worker Nodes
+### 8.4 Remove Worker Nodes
 ```bash
 cmk remove kubernetesclusternode id=<cluster-id> instanceids=<vm-id-1>
 ```
 
-### Stop/Start Cluster
+### 8.5 Stop/Start Cluster
 
 **UI:**
 1. Hover over the cluster name and click the **three dots (⋮)** on the right
@@ -502,7 +502,7 @@ cmk stop kubernetescluster id=<cluster-id>
 cmk start kubernetescluster id=<cluster-id>
 ```
 
-### Delete Cluster
+### 8.6 Delete Cluster
 
 **UI:**
 1. Hover over the cluster name and click the **three dots (⋮)** on the right
@@ -514,11 +514,11 @@ cmk start kubernetescluster id=<cluster-id>
 cmk delete kubernetescluster id=<cluster-id>
 ```
 
-## Step 8: Create Storage Class
+## 9. Create Storage Class
 
 > **Note:** Even when the CloudStack CSI Driver is deployed automatically during cluster creation (via the **Enable CloudStack CSI Driver** toggle in Advanced Settings), you still need to create a StorageClass manually — the driver does not provision one by default.
 
-### Prerequisite: Create a Disk Offering
+### 9.1 Prerequisite: Create a Disk Offering
 
 Before creating the StorageClass, you need a **Disk Offering** that the CSI driver will use to provision volumes. For flexibility, use a **Custom Disk Offering** so PVs can be sized to any requirement.
 
@@ -540,11 +540,11 @@ cmk create diskoffering name=custom-disk-offering displaytext="Custom Disk Offer
 cmk list diskoffering filter=name,id,displaytext
 ```
 
-### Create the StorageClass
+### 9.2 Create the StorageClass
 
 StorageClass is created via `kubectl` only — there is no UI or cmk equivalent.
 
-1. **Get your kubeconfig** (see [Step 6](#get-kubeconfig))
+1. **Get your kubeconfig** (see [Section 7.1](#71-get-kubeconfig))
 2. **Find the Disk Offering ID:**
 ```bash
 cmk list diskoffering name=custom-disk-offering filter=id
@@ -586,7 +586,7 @@ EOF
 kubectl get pvc
 ```
 
-## Step 9: Monitoring & Verification
+## 10. Monitoring & Verification
 
 ```bash
 # Check node status
@@ -602,9 +602,9 @@ kubectl get pods -n calico-system
 kubectl get events --sort-by='.lastTimestamp'
 ```
 
-## Troubleshooting
+## 11. Troubleshooting
 
-### Common Issues
+### 11.1 Common Issues
 
 | Issue | Solution |
 |-------|----------|
@@ -618,11 +618,11 @@ kubectl get events --sort-by='.lastTimestamp'
 
 ---
 
-### Cluster Stuck in "Starting" with Kubeconfig Available
+### 11.2 Cluster Stuck in "Starting" with Kubeconfig Available
 
 **Symptom:** The CKS UI shows the kubeconfig is available and downloadable, but the cluster remains in `Starting` state indefinitely. Core Kubernetes components (API server, etcd, CoreDNS, CNI) are running — but CCM, CSI driver, and dashboard are **not** deployed.
 
-#### Root Cause: Dashboard Verification Blocking the Post-Bootstrap Pipeline
+#### 11.2.1 Root Cause: Dashboard Verification Blocking the Post-Bootstrap Pipeline
 
 The management server verifies the dashboard is running **before** deploying CCM and CSI. If the dashboard check fails, the pipeline stalls:
 
@@ -637,7 +637,7 @@ Step 9:    deployCsiDriver()                            ← CSI NEVER DEPLOYED
 Step 10:   stateTransitTo(OperationSucceeded)           ← STILL "STARTING"
 ```
 
-#### Most Common Cause: Wrong or Missing Dashboard YAML on the ISO
+#### 11.2.2 Most Common Cause: Wrong or Missing Dashboard YAML on the ISO
 
 In 4.22.1, the management server checks for **Kubernetes Dashboard** in the `kubernetes-dashboard` namespace. The cloud-init script applies `dashboard.yaml` from the ISO. Common failure modes:
 
@@ -663,7 +663,7 @@ cat /home/cloud/success 2>/dev/null || echo "Cloud-init never completed"
 
 See [CKS Custom ISO Build Guide](./cks-custom-iso.md) for details.
 
-#### Other Dashboard Failure Causes
+#### 11.2.3 Other Dashboard Failure Causes
 
 | Cause | Check |
 |-------|-------|
@@ -673,7 +673,7 @@ See [CKS Custom ISO Build Guide](./cks-custom-iso.md) for details.
 | Pod ContainerCreating/Pending | `/opt/bin/kubectl describe pod -n kubernetes-dashboard <pod>` |
 | deploy-kube-system infinite restart loop | `sudo systemctl status deploy-kube-system` + `journalctl -u deploy-kube-system` |
 
-#### Recommended Recovery: Rebuild ISO and Recreate Cluster
+#### 11.2.4 Recommended Recovery: Rebuild ISO and Recreate Cluster
 
 The cleanest fix is to **rebuild the ISO with the correct dashboard manifest and image**, then recreate the cluster. This ensures CloudStack's internal state stays consistent and avoids the manual recovery pitfalls below.
 
@@ -696,7 +696,7 @@ This is the **preferred approach** because:
 - Future upgrades work normally (no version skew from manual patches)
 - CCM, CSI, and taints are deployed by CloudStack as intended
 
-#### Manual Recovery (4.22.1) — Last Resort
+#### 11.2.5 Manual Recovery (4.22.1) — Last Resort
 
 > **⚠️ Warning:** Manual recovery leaves CloudStack's internal state inconsistent. Use only when you cannot destroy and recreate the cluster.
 
@@ -723,7 +723,7 @@ If the cluster is otherwise healthy (nodes Ready, API server responding), manual
 
 > **Note:** The management server already transitioned the cluster to `OperationFailed` — the state won't auto-recover. You'll need to destroy and recreate the cluster, or manually update the `kubernetes_cluster` state in the CloudStack database.
 
-#### Prevention
+#### 11.2.6 Prevention
 
 1. **Match build script to CloudStack version** — 4.22.1 needs `dashboard.yaml`, 4.23+ uses `headlamp.yaml`
 2. **Use `-f` flag on curl** so builds fail on 404 instead of saving HTML garbage
@@ -751,7 +751,7 @@ If the cluster is otherwise healthy (nodes Ready, API server responding), manual
 
 See [CKS Custom ISO Build Guide](./cks-custom-iso.md) for build script details.
 
-## Best Practices
+## 12. Best Practices
 
 1. **Use dedicated etcd nodes** for production clusters (from 4.21+)
 2. **Register CKS templates** pre-baked with required tools (helm, monitoring agents, etc.)
@@ -761,7 +761,7 @@ See [CKS Custom ISO Build Guide](./cks-custom-iso.md) for build script details.
 6. **Hypervisor affinity:** Select specific hypervisor types for consistent performance
 7. **Host dedication:** Dedicate hosts to domains/accounts for resource isolation
 
-## References
+## 13. References
 
 - [CloudStack CKS Documentation](http://docs.cloudstack.apache.org/en/latest/plugins/cloudstack-kubernetes-service.html)
 - [Flexible CKS Clusters (ShapeBlue)](https://www.shapeblue.com/flexible-cks-clusters-in-cloudstack-4-21/)
