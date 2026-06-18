@@ -145,19 +145,22 @@ swapoff -a && mkswap <your-swap-partition> && swapon <your-swap-partition>
 
 After this, **stop the instance** in CloudStack and register it as a template (UI: **Actions → Register As Template**, or API with `instanceid=<vm-id>`). Each new cluster node will get fresh SSH keys, a new machine-id, clean DHCP state, and proper hostname from cloud-init.
 
-### Step 5: Convert to CloudStack Format
+### Step 5: Prepare for Template Registration
 
-For KVM hypervisors, CloudStack expects QCOW2 (optionally compressed):
+**If building natively inside CloudStack:**
+The disk is already in your zone's native format — no conversion needed. Just stop the instance and register it as a template directly:
+- UI: **Actions → Register As Template**, check "For CKS"
+- API/CLI: `cmk register template instanceid=<vm-id> forcks=true`
+
+**If building locally (libvirt/qemu, Packer, etc.):**
+Stop the VM however your hypervisor requires, then navigate to the disk image location:
 
 ```bash
-# Shut down the VM if you built inside one
-virsh shutdown ubuntu24-cks-template
-
-# Compress with bzip2 (CloudStack decompresses on-the-fly)
-bzip2 -9 noble-server-cloudimg-amd64.img
+cd /path/to/vm/disks/
+bzip2 -9 noble-server-cloudimg-amd64.img  # CloudStack decompresses on-the-fly
 ```
 
-For VMware: convert to OVA/vmdk. For Hyper-V: convert to VHD.
+Upload the QCOW2 file to an HTTP-accessible server or secondary storage, then register it in Step 6.
 
 ### Step 6: Upload and Register in CloudStack
 
