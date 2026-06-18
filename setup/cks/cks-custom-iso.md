@@ -1,6 +1,6 @@
 # CKS Custom ISO Build Guide
 
-## Overview
+## 1. Overview
 
 This guide covers building custom Kubernetes binaries ISOs for CloudStack Kubernetes Service (CKS).
 
@@ -17,7 +17,7 @@ Build your own only when you need:
 >
 > **Recommended approach:** Build on an isolated worker/build machine (Ubuntu 22.04+), then register the ISO directly via `cmk` or the CloudStack UI.
 
-## Recommended: Isolated Build Machine
+## 2. Recommended: Isolated Build Machine
 
 Set up a clean Ubuntu 22.04+ VM or container:
 
@@ -30,7 +30,7 @@ For Cilium builds (Option B), also install Helm:
 sudo apt install -y helm
 ```
 
-### Getting the Build Scripts
+### 2.1 Getting the Build Scripts
 
 **Option A (Official Calico):** The script ships with `cloudstack-common` as a convenience, but it has no CloudStack dependencies — just standard Linux tools.
 
@@ -46,7 +46,7 @@ Alternatively, an archived copy is available in this repo at [`setup/cks/scripts
 
 **Option C (Offline Cilium):** Same as Option B but strips `@sha256:...` digest pins from generated YAML manifests, enabling fully offline deployment. See [Option C](#option-c-build-cilium-offline-iso).
 
-### Uploading the ISO (after build)
+### 2.2 Uploading the ISO (after build)
 
 CKS has a dedicated upload flow — no need to host the ISO on a public URL first.
 
@@ -74,7 +74,7 @@ CloudStack will process and make it available for CKS cluster creation.
 
 **Via CloudStack UI:** Navigate to **Images → Kubernetes ISOs**. The **Add Kubernetes Version** form lets you specify a remote URL for download. For direct local upload, click the **upload icon** (📤) beside it.
 
-### Example: Kubernetes 1.33.1 with Calico
+### 2.3 Example: Kubernetes 1.33.1 with Calico
 
 All commands run on your isolated build machine:
 
@@ -101,7 +101,7 @@ sudo ./create-kubernetes-binaries-iso.sh \
   $ETCD_VERSION
 ```
 
-### Parameters
+### 2.4 Parameters
 
 | Parameter | Description |
 |-----------|-------------|
@@ -115,14 +115,14 @@ sudo ./create-kubernetes-binaries-iso.sh \
 | `ARCH` | Architecture: `amd64`, `arm64`, or `aarch64` |
 | `ETCD_VERSION` | (Optional) etcd version for dedicated etcd nodes |
 
-### For ARM64
+### 2.5 For ARM64
 
 ```bash
 ARCH="arm64"  # or aarch64
 # ... same command with ARCH=arm64
 ```
 
-### For Dedicated Etcd Nodes
+### 2.6 For Dedicated Etcd Nodes
 
 Add the `ETCD_VERSION` parameter (9th positional arg):
 ```bash
@@ -134,7 +134,7 @@ $ARCH \
 
 > **Note:** Dedicated etcd nodes require an ISO built with etcd binaries. Available pre-built ISOs: `https://download.cloudstack.org/testing/cks/custom_templates/iso-etcd/`
 
-## Option B: Build Cilium ISO (Community Script)
+## 3. Option B: Build Cilium ISO (Community Script)
 
 For a Cilium-based ISO that also bundles CCM, CSI, and Cluster Autoscaler.
 
@@ -142,7 +142,7 @@ For a Cilium-based ISO that also bundles CCM, CSI, and Cluster Autoscaler.
 
 **Archived in this repo:** [`create-cilium-kubernetes-binaries-iso.sh`](setup/cks/scripts/create-cilium-kubernetes-binaries-iso.sh)
 
-### Example Build
+### 3.1 Example Build
 
 ```bash
 OUTPUT_PATH=/tmp/
@@ -168,7 +168,7 @@ ETCD_VERSION="3.5.0"
   $ETCD_VERSION
 ```
 
-### Cilium ISO vs Official Calico ISO
+### 3.2 Cilium ISO vs Official Calico ISO
 
 | Component | Official (Calico) | Community (Cilium) |
 |-----------|-------------------|-------------------|
@@ -181,7 +181,7 @@ ETCD_VERSION="3.5.0"
 | **Pre-pulled images** | No (via ISO) | Yes (containerd) |
 | **Dedicated etcd** | Optional (9th param) | Optional (9th param) |
 
-### Key Cilium Features
+### 3.3 Key Cilium Features
 
 - Uses `helm template` to generate Cilium manifests with `kubeProxyReplacement=true` (eBPF-based)
 - Hubble observability (relay + UI) enabled by default
@@ -190,7 +190,7 @@ ETCD_VERSION="3.5.0"
 - Uses shapeblue's `kubelet.service` and `10-kubeadm.conf` for newer K8s versions
 - Includes Cluster Autoscaler manifest for CloudStack
 
-### Post-Deployment: Helm Management
+### 3.4 Post-Deployment: Helm Management
 
 After the cluster is up, switch Cilium to Helm-managed mode:
 
@@ -203,15 +203,15 @@ helm upgrade --install cilium cilium/cilium --version ${CILIUM_VERSION} \
   --take-ownership
 ```
 
-## Option C: Build Cilium Offline ISO
+## 4. Option C: Build Cilium Offline ISO
 
-Same as [Option B](#option-b-build-cilium-iso-community-script) but with one critical fix: **all `@sha256:...` digest pins are stripped from generated YAML manifests** before baking into the ISO.
+Same as [Section 3](#3-option-b-build-cilium-iso-community-script) but with one critical fix: **all `@sha256:...` digest pins are stripped from generated YAML manifests** before baking into the ISO.
 
 This enables **fully offline deployment**. Without this fix, Kubernetes tries to verify image digests against external registries (e.g., `quay.io`) when starting Cilium pods — which fails in air-gapped environments.
 
 **Archived in this repo:** [`create-cilium-offline-kubernetes-binaries-iso.sh`](setup/cks/scripts/create-cilium-offline-kubernetes-binaries-iso.sh)
 
-### Why This Works
+### 4.1 Why This Works
 
 | Scenario | Standard Cilium Script | Offline Script |
 |----------|----------------------|----------------|
@@ -221,7 +221,7 @@ This enables **fully offline deployment**. Without this fix, Kubernetes tries to
 
 The actual image tarballs bundled in the ISO are identical between both scripts — only the manifest references differ.
 
-### Example Build
+### 4.2 Example Build
 
 ```bash
 OUTPUT_PATH=/tmp/
@@ -246,9 +246,9 @@ ETCD_VERSION="3.5.0"
   $ETCD_VERSION
 ```
 
-### Parameters
+### 4.3 Parameters
 
-Identical to Option B, with the same positional arguments. The script accepts:
+Identical to Section 3, with the same positional arguments. The script accepts:
 1. `OUTPUT_PATH` — directory for the output ISO
 2. `KUBERNETES_VERSION` — e.g., `1.34.2`
 3. `CNI_VERSION` — e.g., `1.8.0`
@@ -261,7 +261,7 @@ Identical to Option B, with the same positional arguments. The script accepts:
 
 See [Offline Deployment Guide](./cks-offline.md) for more details on the digest pin issue and testing methodology.
 
-## Troubleshooting
+## 5. Troubleshooting
 
 | Issue | Solution |
 |-------|----------|
@@ -271,7 +271,7 @@ See [Offline Deployment Guide](./cks-offline.md) for more details on the digest 
 | ARM64 ISO fails | Ensure `ARCH` is set to `arm64` or `aarch64` |
 | etcd nodes not working | Ensure ISO was built with etcd binaries (use `ETCD_VERSION` parameter) |
 
-## References
+## 6. References
 
 - [Official CKS Documentation](http://docs.cloudstack.apache.org/en/latest/plugins/cloudstack-kubernetes-service.html)
 - [CKS Binaries ISOs](http://download.cloudstack.org/cks/)
