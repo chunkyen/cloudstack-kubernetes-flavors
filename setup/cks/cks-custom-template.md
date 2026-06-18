@@ -17,13 +17,15 @@ A CKS template needs very little — most setup is done by CKS at boot time from
 | Requirement | Why |
 |-------------|-----|
 | **cloud-init** | Receives hostname, SSH keys, and user-data from CloudStack metadata service (Ubuntu cloud images include this) |
-| **cloud user** | CKS runs scripts as `cloud` user; mgmt server SSHs in as `cloud` (Ubuntu cloud images include this) |
-| **Management server SSH key** | Mgmt server must SSH into nodes to bootstrap the cluster — its public key goes in `/home/cloud/.ssh/authorized_keys` |
+| **cloud-guest-utils** | Provides qemu-guest-agent for KVM ISO mount/detach and VM communication |
 | **containerd** | Container runtime for Kubernetes pods (v1.7+) |
-| **qemu-guest-agent** | Required on KVM hypervisors for ISO mount/detach and VM communication |
+| **conntrack** | Required for kube-proxy and CNI networking |
+| **apt-transport-https, ca-certificates, curl, gnupg, software-properties-common, lsb-release** | Prerequisites for adding repos (e.g., containerd) |
+| **python3-json-pointer, python3-jsonschema** | Used by CKS cloud-init data processing |
+| **Management server SSH key** | Mgmt server must SSH into nodes to bootstrap the cluster — its public key goes in `/home/cloud/.ssh/authorized_keys` |
 | **`/opt/bin` directory** | CKS expects this directory to exist on cluster nodes |
 
-That's it. CKS installs kubelet, kubeadm, kubectl, CNI plugins, conntrack, ipset, socat, etc. from the binaries ISO during bootstrap.
+> All packages listed above come directly from the [official CloudStack CKS documentation](https://docs.cloudstack.apache.org/en/latest/plugins/cloudstack-kubernetes-service.html#build-a-custom-template-to-use-for-kubernetes-clusters-nodes).
 
 ## Step-by-Step: Ubuntu 24.04 CKS Template
 
@@ -59,16 +61,15 @@ Copy the public key — you'll need it in Step 4.
 
 ### Step 4: Customize the Image
 
-**Option A — Quick build with `virt-customize`:**
+**Option A — Quick build with virt-customize:**
 
 ```bash
-# Install containerd and qemu-guest-agent, then add the mgmt SSH key
+# Install required packages per CloudStack docs, then add the mgmt SSH key
 MGMT_PUB_KEY="<paste_mgmt_server_public_key_here>"
 
 virt-customize --verbose -a noble-server-cloudimg-amd64.img \
-  --install qemu-guest-agent \
   --run 'mkdir -p /opt/bin' \
-  --run 'apt-get update && apt-get install -y containerd' \
+  --run 'apt-get update && apt-get install -y cloud-guest-utils conntrack apt-transport-https ca-certificates curl gnupg gnupg-agent software-properties-common lsb-release python3-json-pointer python3-jsonschema containerd' \
   --run "mkdir -p /home/cloud/.ssh && echo '${MGMT_PUB_KEY}' > /home/cloud/.ssh/authorized_keys && chmod 700 /home/cloud/.ssh && chmod 600 /home/cloud/.ssh/authorized_keys && chown -R cloud:cloud /home/cloud/.ssh" \
   --run 'systemctl enable containerd && systemctl enable qemu-guest-agent' \
   --run 'apt-get clean && rm -rf /tmp/* /var/log/cloud-init.log /var/log/cloud-init-output.log && truncate -s 0 /var/log/auth.log && rm -f /etc/machine-id'
@@ -85,9 +86,9 @@ Inside the VM:
 # Create required directory (CKS expects this)
 mkdir -p /opt/bin
 
-# Install required packages
+# Install required packages per CloudStack docs
 apt-get update && apt-get upgrade -y
-apt-get install -y containerd qemu-guest-agent
+apt-get install -y cloud-guest-utils conntrack apt-transport-https ca-certificates curl gnupg gnupg-agent software-properties-common lsb-release python3-json-pointer python3-jsonschema containerd
 
 # Enable services at boot
 systemctl enable containerd
@@ -181,7 +182,7 @@ cmk register template \
 ```
 
 **Option 2 — Direct upload (no HTTP server needed):**
-- **UI:** **Compute → Templates → Register Template**, choose "Upload" instead of URL, select the QCOW2 file from your local machine.
+- **UI:** Same as above, but choose "Upload" instead of URL and select the QCOW2 file from your local machine.
 - **cmk:** `cmk register template` with a local path or use the UI for large files.
 
 **From a CloudStack-native build (root disk volume):**
@@ -255,7 +256,7 @@ build {
     inline = [
       "apt-get update && apt-get upgrade -y",
       "mkdir -p /opt/bin",
-      "apt-get install -y containerd qemu-guest-agent",
+      "apt-get install -y cloud-guest-utils conntrack apt-transport-https ca-certificates curl gnupg gnupg-agent software-properties-common lsb-release python3-json-pointer python3-jsonschema containerd",
       "systemctl enable containerd && systemctl enable qemu-guest-agent",
       "mkdir -p /home/cloud/.ssh",
       "echo '${var.mgmt_pub_key}' > /home/cloud/.ssh/authorized_keys",
