@@ -143,31 +143,12 @@ history -c; history -w
 swapoff -a && mkswap <your-swap-partition> && swapon <your-swap-partition>
 ```
 
-After this, **stop the instance** in CloudStack and register it as a template (UI: **Actions → Register As Template**, or API with `instanceid=<vm-id>`). Each new cluster node will get fresh SSH keys, a new machine-id, clean DHCP state, and proper hostname from cloud-init.
+After this, **stop the instance**. Each new cluster node will get fresh SSH keys, a new machine-id, clean DHCP state, and proper hostname from cloud-init.
 
-### Step 5: Prepare for Template Registration
+### Step 5: Prepare the Image (local builds only)
 
-**If building natively inside CloudStack:**
-The disk is already in your zone's native format — no conversion needed. Stop the instance, then create a template from its **root disk volume**:
+> If you built natively inside CloudStack, skip this step — go straight to **Step 6**.
 
-**UI path:**
-1. Go to **Storage → Volumes**
-2. Find the root disk of your stopped VM (type = ROOT)
-3. Click **Actions → Create Template From Volume**
-4. Enter name, ✅ check "For CKS", set Is Public = true, click OK
-
-**cmk path:**
-```bash
-# Get the root disk volume ID for a specific instance
-VOLUME_ID=$(cmk list volumes virtualmachineid=<vm-id> type=root filter=id | grep -oP '(?<="id":"')[^"]+')
-cmk create template \
-  name="Ubuntu 24.04 CKS Template" \
-  volumeid=$VOLUME_ID \
-  forcks=true \
-  ispublic=true
-```
-
-**If building locally (libvirt/qemu, Packer, etc.):**
 Stop the VM however your hypervisor requires, then navigate to the disk image location:
 
 ```bash
@@ -175,25 +156,15 @@ cd /path/to/vm/disks/
 bzip2 -9 noble-server-cloudimg-amd64.img  # CloudStack decompresses on-the-fly
 ```
 
-Upload the QCOW2 file to an HTTP-accessible server or secondary storage, then register it in Step 6.
+Upload the QCOW2 file to an HTTP-accessible server or secondary storage, then proceed to Step 6.
 
-### Step 6: Upload and Register in CloudStack
+### Step 6: Register as Template in CloudStack
 
-#### Option A — UI
+**From a local build (uploaded QCOW2 file):**
 
-1. **Compute** → **Templates** → **Register Template**
-2. Fill in:
-   - **Name:** `Ubuntu 24.04 CKS Template`
-   - **Zone:** your zone
-   - **Format:** QCOW2
-   - **Hypervisor:** KVM (or yours)
-   - **OS Type:** Ubuntu Linux (64-bit)
-3. ✅ **Check "For CKS"** — mandatory; without it, the template won't appear in CKS cluster creation
-4. Set **Is Public** = true, **Is Extractable** = true
-5. Click **Register**
+**UI:** **Compute → Templates → Register Template**, fill in name/zone/format, ✅ check "For CKS", set Is Public = true.
 
-#### Option B — cmk
-
+**cmk:**
 ```bash
 cmk register template \
   name="Ubuntu 24.04 CKS Template" \
@@ -203,8 +174,21 @@ cmk register template \
   hypervisortype=KVM \
   ostypeid=<os-type-id> \
   ispublic=true \
-  isextractable=true \
   forcks=true
+```
+
+**From a CloudStack-native build (root disk volume):**
+
+**UI:** **Storage → Volumes** → find the root disk of your stopped VM → **Actions → Create Template From Volume** ✅ check "For CKS".
+
+**cmk:**
+```bash
+VOLUME_ID=$(cmk list volumes virtualmachineid=<vm-id> type=root filter=id | grep -oP '(?<="id":"')[^"]+')
+cmk create template \
+  name="Ubuntu 24.04 CKS Template" \
+  volumeid=$VOLUME_ID \
+  forcks=true \
+  ispublic=true
 ```
 
 ### Step 7: Verify and Use
