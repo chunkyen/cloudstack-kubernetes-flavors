@@ -55,7 +55,7 @@ CKS bootstraps nodes by SSHing from the management server as `cloud` user. The m
 
 ```bash
 # On your CloudStack management server:
-cat /root/.ssh/id_rsa.pub
+cat /root/.ssh/id_rsa.pub.cloud
 ```
 
 Copy the public key — you'll need it in Step 4.
