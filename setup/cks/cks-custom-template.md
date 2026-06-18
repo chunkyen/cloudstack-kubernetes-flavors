@@ -117,6 +117,34 @@ rm -rf /tmp/*
 truncate -s 0 /var/log/auth.log
 ```
 
+### Step 4b: Prepare the VM for Templating (Sysprep Equivalent)
+
+Before stopping the instance and registering it as a template, you must reset instance-specific data so every new clone boots clean. This is Ubuntu's equivalent of Windows Sysprep:
+
+```bash
+# Reset cloud-init state (so it re-runs on first boot like a fresh VM)
+sudo cloud-init clean --logs
+
+# Remove SSH host keys (each instance should generate its own)
+rm -f /etc/ssh/ssh_host_*
+
+# Clear network manager and DHCP state
+rm -rf /var/lib/NetworkManager/
+rm -f /var/lib/dhcp/*
+rm -f /var/lib/cloud/data/dhcp.*
+
+# Remove instance-specific IDs
+truncate -s 0 /etc/machine-id
+rm -f /etc/hostid
+
+# Clear logs, history, and swap
+journalctl --rotate && journalctl --vacuum-time=1s
+history -c; history -w
+swapoff -a && mkswap <your-swap-partition> && swapon <your-swap-partition>
+```
+
+After this, **stop the instance** in CloudStack and register it as a template (UI: **Actions → Register As Template**, or API with `instanceid=<vm-id>`). Each new cluster node will get fresh SSH keys, a new machine-id, clean DHCP state, and proper hostname from cloud-init.
+
 ### Step 5: Convert to CloudStack Format
 
 For KVM hypervisors, CloudStack expects QCOW2 (optionally compressed):
