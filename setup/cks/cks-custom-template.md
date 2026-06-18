@@ -322,7 +322,7 @@ These include: containerd, cloud-init, qemu-guest-agent, conntrack, ipset, and t
 
 ```bash
 # Core
-could-init          # CloudStack integration, user-data processing
+cloud-init          # CloudStack integration, user-data processing
 qemu-guest-agent    # KVM: ISO mount/detach, VM communication
 containerd.io       # Container runtime (v1.7+)
 
