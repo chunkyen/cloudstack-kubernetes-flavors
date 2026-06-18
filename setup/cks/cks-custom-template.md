@@ -68,7 +68,7 @@ MGMT_PUB_KEY="<paste_mgmt_server_public_key_here>"
 virt-customize --verbose -a noble-server-cloudimg-amd64.img \
   --install qemu-guest-agent \
   --run 'mkdir -p /opt/bin' \
-  --run 'apt-get update && apt-get install -y containerd'
+  --run 'apt-get update && apt-get install -y containerd' \
   --run "mkdir -p /home/cloud/.ssh && echo '${MGMT_PUB_KEY}' > /home/cloud/.ssh/authorized_keys && chmod 700 /home/cloud/.ssh && chmod 600 /home/cloud/.ssh/authorized_keys && chown -R cloud:cloud /home/cloud/.ssh" \
   --run 'systemctl enable containerd && systemctl enable qemu-guest-agent' \
   --run 'apt-get clean && rm -rf /tmp/* /var/log/cloud-init.log /var/log/cloud-init-output.log && truncate -s 0 /var/log/auth.log && rm -f /etc/machine-id'
