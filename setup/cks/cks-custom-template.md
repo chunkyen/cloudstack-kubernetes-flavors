@@ -321,21 +321,6 @@ This Packer template can be run in GitHub Actions, GitLab CI, or Jenkins to auto
 - New containerd/qemu-guest-agent versions are available
 - Internal CA certificates rotate
 
-## Pre-built CKS Templates
-
-CloudStack provides pre-built templates for Ubuntu 22.04:
-
-| Hypervisor | File |
-|------------|------|
-| KVM (QCOW2) | `cks-ubuntu-2204-kvm.qcow2.bz2` |
-| VMware (OVA) | `cks-ubuntu-2204-vmware.ova` |
-| Hyper-V (VHD) | `cks-ubuntu-2204-hyperv.vhd.zip` |
-| OVM (RAW) | `cks-ubuntu-2204-ovm.raw.bz2` |
-
-Location: http://download.cloudstack.org/testing/custom_templates/ubuntu/22.04/
-
-> **Ubuntu 24.04 pre-built templates** are not yet available in official downloads.
-
 ## Troubleshooting
 
 | Issue | Solution |
