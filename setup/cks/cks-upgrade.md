@@ -2,13 +2,13 @@
 
 This guide covers upgrading a CKS-managed Kubernetes cluster **end-to-end**: the Kubernetes version (handled by CloudStack), CNI, and CSI driver.
 
-## The Upgrade Model
+## 1. The Upgrade Model
 
 CKS clusters are managed by CloudStack's management server. The Kubernetes version upgrade is an **in-place ISO-based upgrade** — CloudStack applies the new ISO to existing nodes and upgrades them in place, without replacing the VMs.
 
 Meanwhile, CNI and CSI are **workload deployments** — they run as pods inside the cluster. CNI and CSI are baked into the ISO at build time and upgrade together with the K8s version during the in-place upgrade.
 
-### What Gets Upgraded Where
+### 1.1 What Gets Upgraded Where
 
 | Component | Where | How Upgraded | Managed by CKS? |
 |-----------|-------|-------------|------------------|
@@ -22,7 +22,7 @@ Meanwhile, CNI and CSI are **workload deployments** — they run as pods inside 
 
 > **Key point:** CKS performs an **in-place ISO upgrade** — CloudStack applies the new ISO to existing nodes and upgrades them in place, without replacing the VMs. The ISO contains kubelet, kubeadm, containerd, CNI, CSI driver, and CCM. Upgrading the K8s version upgrades **all of these together** in a single operation. No separate CNI, CSI, or CCM upgrade steps are needed.
 
-## Upgrade Sequence
+## 2. Upgrade Sequence
 
 For CKS, the upgrade follows this sequence:
 
@@ -30,22 +30,22 @@ For CKS, the upgrade follows this sequence:
 2. **K8s version** — CloudStack performs an in-place ISO upgrade (this upgrades K8s, CNI, CSI, and CCM together)
 3. **Verify** all components are at the expected versions
 
-### Why Snapshot First?
+### 2.1 Why Snapshot First?
 
 - **Rollback safety**: If the upgrade fails, you can revert to the snapshots
 - **Shutdown state preferred**: Snapshots taken at shutdown are consistent and faster to restore
 - **Rollback safety**: Snapshots provide a clean revert point if the upgrade fails
 
-## Step-by-Step Upgrade
+## 3. Step-by-Step Upgrade
 
-### Prerequisites
+### 3.1 Prerequisites
 
 - Access to the CloudStack management UI or cmk CLI
 - Target K8s version registered in CloudStack
 - Access to the workload cluster kubeconfig
 - Sufficient compute resources to provision new nodes alongside existing ones
 
-### Step 1: Register New K8s Version (If Not Already Done)
+### 3.2 Register New K8s Version (If Not Already Done)
 
 Before you can upgrade, the target K8s version must be registered in CloudStack.
 
@@ -63,7 +63,7 @@ cmk add kubernetessupportedversion name=v1.33.1 semanticversion=1.33.1 iso=<iso-
 - [`download.cloudstack.org/cks/`](http://download.cloudstack.org/cks/)
 - [`packages.shapeblue.com/cks/`](http://packages.shapeblue.com/cks/)
 
-### Step 2: Create Instance Snapshots (Rollback Safety)
+### 3.3 Create Instance Snapshots (Rollback Safety)
 
 > **Note:** This step is optional but recommended. Creating instance snapshots of all K8s nodes before an upgrade provides a rollback mechanism if something goes wrong.
 
@@ -93,9 +93,9 @@ cmk createsnapshot name=cks-pre-upgrade-node-2 instanceid=<node-id>
 cmk start instance id=<node-id>
 ```
 
-### Step 3: Upgrade K8s Version (CloudStack-Native)
+### 3.4 Upgrade K8s Version (CloudStack-Native)
 
-#### Via UI
+#### 3.4.1 Via UI
 
 1. Navigate to **Compute** → **Kubernetes**
 2. Hover over the cluster name and click the **three dots (⋮)** on the right
@@ -107,13 +107,13 @@ cmk start instance id=<node-id>
 > - The cluster is in a **running** state
 > - An eligible upgrade version is registered in CloudStack
 
-#### Via cmk CLI
+#### 3.4.2 Via cmk CLI
 
 ```bash
 cmk upgrade kubernetescluster id=<cluster-id> kubernetesversionid=<new-version-id>
 ```
 
-### Step 4: Wait for In-Place Upgrade to Complete
+### 3.5 Wait for In-Place Upgrade to Complete
 
 CloudStack performs an in-place upgrade on existing nodes. Monitor progress:
 
@@ -140,7 +140,7 @@ kubectl version --short
 
 > **Estimated time:** In-place upgrade typically takes 10-30 minutes depending on cluster size and node count. Control plane nodes are upgraded first, then workers. The ISO is streamed to each node and applied in place.
 
-### Step 5: Verify the Upgrade
+### 3.6 Verify the Upgrade
 
 After the in-place ISO upgrade completes, verify all components are at the expected versions:
 
@@ -165,11 +165,11 @@ kubectl --kubeconfig=${kubeconfig} get pods -n kube-system -l k8s-app=cloudstack
 
 > **Note:** CNI, CSI, and CCM are all baked into the ISO and upgrade together with the K8s version. No separate upgrade steps are needed.
 
-## Rollback
+## 4. Rollback
 
-If something goes wrong during the upgrade, you can rollback using the snapshots created in Step 2.
+If something goes wrong during the upgrade, you can rollback using the snapshots created in Section 3.3.
 
-### Rollback via Snapshot Revert
+### 4.1 Rollback via Snapshot Revert
 
 1. **Stop the failing cluster** (if still running):
    ```bash
@@ -202,7 +202,7 @@ If something goes wrong during the upgrade, you can rollback using the snapshots
 
 > **Warning:** Rolling back via snapshot revert restores the exact state of each node at the time of the snapshot. Applications may experience downtime during the revert process.
 
-## Upgrade Checklist
+## 5. Upgrade Checklist
 
 Use this checklist to ensure a smooth upgrade:
 
@@ -218,7 +218,7 @@ Use this checklist to ensure a smooth upgrade:
 - [ ] Verify CSI volume provisioning works
 - [ ] Verify CCM LoadBalancer services work
 
-## Troubleshooting
+## 6. Troubleshooting
 
 | Issue | Check |
 |-------|-------|
@@ -233,13 +233,13 @@ Use this checklist to ensure a smooth upgrade:
 | Upgrade stuck on first node (control plane upgraded, workers never transition) | See manual recovery below |
 | Cilium daemonset stuck in CrashLoopBackOff after upgrade to 1.19.x | See [Cilium can't reach API server](#cilium-cant-reach-api-server-after-upgrade-to-119x) below |
 
-### Upgrade Stuck — Manual Recovery
+### 6.1 Upgrade Stuck — Manual Recovery
 
 If the upgrade process reports **failed** and gets stuck (e.g., control plane node completed successfully but worker nodes never transition), it's suspected that the upgrade health check job never completed. The control plane node may be at the new version but **cordoned**. You can manually complete the upgrade on each remaining node.
 
 > **Note:** If the upgrade is truly broken and manual recovery doesn't work, revert to your pre-upgrade snapshots (see [Rollback](#rollback-via-snapshot-revert)).
 
-#### Manual Recovery Steps
+#### 6.1.1 Manual Recovery Steps
 
 1. **Uncordon the control plane node** (if still cordoned):
    ```bash
@@ -398,7 +398,7 @@ If the upgrade process reports **failed** and gets stuck (e.g., control plane no
 >
 > > **Note:** This approach bypasses all of CloudStack's safety checks. Use only when all other methods have failed and you have a verified database backup.
 
-#### Why the Health Check Job Fails
+#### 6.1.2 Why the Health Check Job Fails
 
 The upgrade health check job is created by kubeadm during the upgrade process to verify cluster health. It runs on the control plane and checks if **all nodes are Ready** and at the correct version.
 
@@ -412,7 +412,7 @@ This is why manual recovery on worker nodes is necessary — you're bringing the
 
 > **Note:** For clusters stuck in "Starting" during bootstrap (dashboard verification failures, CCM/CSI not deployed), see [CKS Setup Guide → Troubleshooting: Cluster Stuck in "Starting"](./cks.md#cluster-stuck-in-starting-with-kubeconfig-available).
 
-### Cilium Can't Reach API Server After Upgrade to 1.19.x
+### 6.2 Cilium Can't Reach API Server After Upgrade to 1.19.x
 
 Upgrading Cilium from **1.18.x** (e.g., 1.18.10) to **1.19.x** (e.g., 1.19.4) can cause the Cilium DaemonSet pods to crash-loop with `Init:Error`. The logs show repeated attempts to connect to the Kubernetes API server at `https://10.96.0.1:443` that fail with:
 
@@ -450,18 +450,18 @@ level=error msg="Start hook failed" ... error="Get \"https://10.96.0.1:443/api/v
 > - Replace `6443` if your API server listens on a different port.
 > - The `--take-ownership` flag is only needed the first time you bring Cilium under Helm management. Subsequent upgrades use `--reuse-values` alone.
 
-## CNI Management
+## 7. CNI Management
 
 CNI is bundled into the CKS ISO and upgrades automatically with the K8s version. You only need to manage CNI separately when you want to **upgrade CNI independently** of the CKS upgrade (e.g., testing a newer CNI version before the next CKS release).
 
-### Re-apply Manifests
+### 7.1 Re-apply Manifests
 
 For minor version bumps or switching CNI versions without rebuilding the ISO:
 
 1. Upgrade K8s version via CloudStack (upgrades everything else automatically)
 2. Re-apply CNI manifests to get the desired CNI version
 
-### Rebuild the ISO
+### 7.2 Rebuild the ISO
 
 | Scenario | Approach |
 |----------|----------|
@@ -470,7 +470,7 @@ For minor version bumps or switching CNI versions without rebuilding the ISO:
 | Switching CNI (e.g., Calico → Cilium) | Rebuild ISO |
 | Custom CNI parameters | Use CNI configuration (ACS 4.21+) or rebuild ISO |
 
-## OS Upgrades
+## 8. OS Upgrades
 
 The CKS ISO upgrade updates Kubernetes components (kubelet, kubeadm, containerd, CNI, CSI, CCM) but does **not** update the underlying operating system. OS-level updates must be managed separately.
 
@@ -499,7 +499,7 @@ Since CKS manages nodes in-place, OS upgrades are also performed **in-place** on
 
 > **Note:** OS security updates can generally be applied independently of CKS upgrades. The Kubernetes [version skew policy](https://kubernetes.io/releases/version-skew-policy/) governs K8s component compatibility (kubelet ↔ API server), not OS versions. The main operational concern is that kernel updates require a reboot, which briefly impacts the node. Creating snapshots before OS upgrades is recommended as a safety measure.
 
-## Related
+## 9. Related
 
 - [CKS Setup Guide](./cks.md) — initial cluster deployment
 - [CKS Custom ISO Build Guide](./cks-custom-iso.md) — building CKS-compatible ISOs
