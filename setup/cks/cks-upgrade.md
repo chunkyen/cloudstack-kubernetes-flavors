@@ -231,6 +231,7 @@ Use this checklist to ensure a smooth upgrade:
 | Port forwarding broken after upgrade | Re-configure firewall rules and port forwarding in CloudStack |
 | Upgrade failed — need to rollback | Revert nodes to pre-upgrade snapshots (see Rollback section) |
 | Upgrade stuck on first node (control plane upgraded, workers never transition) | See manual recovery below |
+| Cilium daemonset stuck in CrashLoopBackOff after upgrade to 1.19.x | See [Cilium can't reach API server](#cilium-cant-reach-api-server-after-upgrade-to-119x) below |
 
 ### Upgrade Stuck — Manual Recovery
 
@@ -410,6 +411,44 @@ When the control plane upgrade succeeds but worker nodes fail to upgrade, the he
 This is why manual recovery on worker nodes is necessary — you're bringing the worker nodes to the same version as the control plane, which allows the health check job to eventually pass (or be recreated by the next upgrade attempt).
 
 > **Note:** For clusters stuck in "Starting" during bootstrap (dashboard verification failures, CCM/CSI not deployed), see [CKS Setup Guide → Troubleshooting: Cluster Stuck in "Starting"](./cks.md#cluster-stuck-in-starting-with-kubeconfig-available).
+
+### Cilium Can't Reach API Server After Upgrade to 1.19.x
+
+Upgrading Cilium from **1.18.x** (e.g., 1.18.10) to **1.19.x** (e.g., 1.19.4) can cause the Cilium DaemonSet pods to crash-loop with `Init:Error`. The logs show repeated attempts to connect to the Kubernetes API server at `https://10.96.0.1:443` that fail with:
+
+```
+level=error msg="Unable to contact k8s api-server" subsys=cilium-dbg module=k8s-client ipAddr=[https://10.96.0.1:443](https://10.96.0.1/)
+    error="Get \"https://10.96.0.1:443/api/v1/namespaces/kube-system\": dial tcp 10.96.0.1:443: connect: operation not permitted"
+level=error msg="Start hook failed" ... error="Get \"https://10.96.0.1:443/api/v1/namespaces/kube-system\": dial tcp 10.96.0.1:443: connect: operation not permitted"
+```
+
+**Root cause:** Cilium 1.19+ changed how it resolves the API server endpoint. The default `ClusterIP` address (`10.96.0.1`) may become unreachable due to network policy changes or kernel restrictions, especially when Cilium itself is responsible for that traffic (chicken-and-egg problem during init).
+
+**Solution:** Ensure Cilium is managed by Helm, then explicitly set the API server endpoint to a publicly reachable IP and port instead of the default ClusterIP.
+
+1. **Take ownership with Helm** (if Cilium was not originally installed via Helm):
+   ```bash
+   CILIUM_VERSION="1.18.2"
+   helm repo add cilium https://helm.cilium.io/
+   helm upgrade --install cilium cilium/cilium --version ${CILIUM_VERSION} \
+     --namespace kube-system \
+     --set kubeProxyReplacement=true \
+     --take-ownership
+   ```
+2. **Upgrade to the target Cilium version, pointing at a reachable API server:**
+   ```bash
+   helm upgrade cilium cilium/cilium \
+     -n kube-system \
+     --version 1.19.4 \
+     --reuse-values \
+     --set k8sServiceHost=192.168.1.10 \
+     --set k8sServicePort=6443
+   ```
+
+> **Notes:**
+> - Replace `192.168.1.10` with your CloudStack management server's (or K8s API endpoint's) reachable IP.
+> - Replace `6443` if your API server listens on a different port.
+> - The `--take-ownership` flag is only needed the first time you bring Cilium under Helm management. Subsequent upgrades use `--reuse-values` alone.
 
 ## CNI Management
 
