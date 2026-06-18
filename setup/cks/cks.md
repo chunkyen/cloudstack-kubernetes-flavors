@@ -6,6 +6,7 @@
 |------|-------------|
 | [cks.md](./cks.md) | Main setup guide: enabling CKS, registering ISOs/templates, creating clusters, scaling, and troubleshooting |
 | [cks-custom-iso.md](./cks-custom-iso.md) | Build custom Kubernetes binaries ISOs (Calico, Cilium, offline-ready) |
+| [cks-custom-template.md](./cks-custom-template.md) | Build custom VM templates for CKS nodes (Ubuntu 24.04, Rocky 9, etc.) |
 | [cks-offline.md](./cks-offline.md) | Air-gapped / offline deployment workarounds, root cause analysis, and long-term solutions |
 | [cks-upgrade.md](./cks-upgrade.md) | End-to-end CKS cluster upgrade guide (K8s version, CNI, CSI) |
 | [cks-improvements.md](./cks-improvements.md) | WIP: Proposed upstream improvements for CKS (offline support, auth/IAM, node lifecycle, etc.) |
