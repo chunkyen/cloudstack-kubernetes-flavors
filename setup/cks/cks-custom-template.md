@@ -22,6 +22,7 @@ A CKS template needs very little — most setup is done by CKS at boot time from
 | **conntrack** | Required for kube-proxy and CNI networking |
 | **apt-transport-https, ca-certificates, curl, gnupg, software-properties-common, lsb-release** | Prerequisites for adding repos (e.g., containerd) |
 | **python3-json-pointer, python3-jsonschema** | Used by CKS cloud-init data processing |
+| **cloud user with nopasswd sudo** | CKS bootstrap scripts run as `cloud` user and need passwordless sudo. Ubuntu cloud images include this; verify if building custom base images. |
 | **Management server SSH key** | Mgmt server must SSH into nodes to bootstrap the cluster — its public key goes in `/home/cloud/.ssh/authorized_keys` |
 | **`/opt/bin` directory** | CKS expects this directory to exist on cluster nodes |
 
@@ -89,6 +90,12 @@ mkdir -p /opt/bin
 # Install required packages per CloudStack docs
 apt-get update && apt-get upgrade -y
 apt-get install -y cloud-guest-utils conntrack apt-transport-https ca-certificates curl gnupg gnupg-agent software-properties-common lsb-release python3-json-pointer python3-jsonschema containerd
+
+# Ensure 'cloud' user exists with passwordless sudo (CKS bootstrap runs as this user)
+if ! id -u cloud &>/dev/null; then
+  useradd -m -s /bin/bash -G sudo cloud
+fi
+echo '%sudo ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/cloud-user
 
 # Enable services at boot
 systemctl enable containerd
