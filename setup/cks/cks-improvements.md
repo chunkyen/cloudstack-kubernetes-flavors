@@ -442,6 +442,167 @@ CKS deploys a dashboard (Kubernetes Dashboard or Headlamp) as part of the cluste
 
 ---
 
+## 23. Node Pool Support
+
+### Problem
+CKS currently supports a single flat set of worker nodes — all workers share the same service offering (CPU/RAM/disk), labels, and taints. This is insufficient for real-world workloads that require heterogeneous node types:
+
+- **GPU workloads** — need large VMs with GPU passthrough
+- **High-memory workloads** — need memory-optimized node types
+- **Spot/preemptible instances** — need a separate, cheaper node pool for fault-tolerant workloads
+- **Different disk types** — SSD for stateful workloads, standard for stateless
+- **Geographic placement** — nodes across different host racks or availability zones with different characteristics
+
+Currently, users must create multiple separate CKS clusters to achieve this, which fragments their workload and makes cross-pool networking and scheduling complex.
+
+### Proposal: Multiple Worker Node Pools
+Allow CKS clusters to define multiple **worker node pools**, each with its own:
+
+| Attribute | Description |
+|-----------|-------------|
+| **Service offering** | CPU, RAM, disk — different per pool |
+| **Node count** | Min/max or fixed count per pool |
+| **Labels** | Key-value pairs applied to all nodes in the pool |
+| **Taints** | Applied to all nodes in the pool |
+| **Disk offering** | Storage type (SSD, standard, etc.) |
+| **Host affinity** | Dedicated host or explicit dedication affinity group |
+| **Template override** | Per-pool OS template (e.g., different base images) |
+
+**Example cluster definition:**
+```
+Cluster: my-cks-cluster
+  Control nodes: 3 × Standard (2 vCPU, 4 GB)
+  Worker pools:
+    - name: general
+      count: 5
+      offering: Standard (2 vCPU, 4 GB)
+      labels: { workload-type: general }
+      taints: []
+    - name: gpu
+      count: 2
+      offering: GPU (8 vCPU, 32 GB, GPU)
+      labels: { workload-type: gpu, accelerator: nvidia-a10 }
+      taints: [{ key: nvidia.com/gpu, effect: NoSchedule }]
+    - name: spot
+      count: { min: 0, max: 10 }
+      offering: Spot (2 vCPU, 2 GB)
+      labels: { workload-type: spot, preemptible: "true" }
+      taints: [{ key: node.kubernetes.io/lifecycle, effect: NoSchedule }]
+```
+
+### How It Maps to Existing CKS Architecture
+
+The existing CKS code already has a `NodeType` enum (`CONTROL`, `WORKER`, `ETCD`) and per-node-type service offering overrides. Node pools extend the `WORKER` type into a structured collection:
+
+| Current CKS | Node Pools |
+|-------------|------------|
+| Single worker count | Multiple pools, each with own count |
+| Single worker service offering | Per-pool service offering |
+| `KubernetesClusterVmMapVO` (one row per VM) | Unchanged — each pool node still gets its own row |
+| `KubernetesClusterScaleWorker` (single count) | Extended to accept pool-level scale operations |
+| `KubernetesClusterResourceModifierActionWorker` (single offering) | Extended to accept per-pool offering changes |
+
+### API Changes
+
+**Create cluster:**
+```json
+POST /cloudstack/api/createKubernetesCluster
+{
+  "name": "my-cluster",
+  "kubernetesversionid": "...",
+  "controlnodenumber": 3,
+  "workernodetypes": [
+    {
+      "name": "general",
+      "count": 5,
+      "serviceofferingid": "...",
+      "labels": [{"key": "workload-type", "value": "general"}],
+      "taints": [],
+      "discofferingid": "..."
+    },
+    {
+      "name": "gpu",
+      "count": 2,
+      "serviceofferingid": "...",
+      "labels": [{"key": "workload-type", "value": "gpu"}],
+      "taints": [{"key": "nvidia.com/gpu", "effect": "NoSchedule"}]
+    }
+  ]
+}
+```
+
+**Scale pool:**
+```json
+POST /cloudstack/api/scaleKubernetesCluster
+{
+  "id": "<cluster-id>",
+  "workernodetypes": [
+    { "name": "general", "count": 8 },
+    { "name": "gpu", "count": 2 }
+  ]
+}
+```
+
+**Change pool offering:**
+```json
+POST /cloudstack/api/scaleKubernetesCluster
+{
+  "id": "<cluster-id>",
+  "workernodetypes": [
+    { "name": "general", "serviceofferingid": "..." }
+  ]
+}
+```
+
+### Implementation Notes
+
+**Database changes:**
+- New table `kubernetes_worker_pool` (or extend `kubernetes_cluster_vm_map`):
+  - `id` (auto-increment)
+  - `kubernetes_cluster_id` (FK)
+  - `name` (pool name, unique per cluster)
+  - `service_offering_id` (FK)
+  - `disk_offering_id` (FK, nullable)
+  - `count` (current count)
+  - `min_count` (for autoscaling pools, nullable)
+  - `max_count` (for autoscaling pools, nullable)
+  - `labels` (JSON blob)
+  - `taints` (JSON blob)
+  - `template_id` (per-pool template override, nullable)
+  - `host_affinity_group_id` (per-pool dedicated host, nullable)
+
+**Worker changes:**
+- `KubernetesClusterScaleWorker` — extend `scaleCluster()` to accept per-pool scale requests. Each pool is scaled independently (new VMs provisioned, old VMs drained and destroyed).
+- `KubernetesClusterResourceModifierActionWorker` — extend offering change to work per-pool.
+- `KubernetesClusterStartWorker` — during bootstrap, iterate over pools and create VMs per pool specification.
+
+**Cloud-init changes:**
+- Worker cloud-init template already supports joining any cluster — no changes needed for the join flow.
+- Labels and taints are applied via `kubeadm join` `--node-name` + `kubectl label/taint` after join, or via cloud-init `runcmd`.
+
+**UI changes:**
+- Add a "Worker Pools" section during cluster creation with a dynamic table (add/remove pools).
+- Show pool details in the cluster view with per-pool scale controls.
+- Display labels and taints per pool.
+
+**Scaling considerations:**
+- Pool scale-up: provision new VMs with the pool's offering, attach ISO, wait for Ready.
+- Pool scale-down: drain and destroy VMs from the targeted pool only (respecting pool name).
+- Offering change: for each VM in the pool, call `upgradeVirtualMachine` with the new offering. This is a live resize on supported hypervisors.
+- Per-pool autoscaling: extend the existing autoscaler to support pool-scoped scaling (current autoscaler is cluster-wide).
+
+**Backward compatibility:**
+- Existing clusters with a single worker type continue to work unchanged.
+- The `workernodetypeid` parameter (single worker type) remains supported as a convenience alias for a single pool called `default`.
+- `createKubernetesCluster` with the legacy single-worker parameters automatically creates a single `default` pool.
+
+### Relationship to Other Improvements
+- **§10 (Reorder ISO attachment):** Parallel ISO attachment benefits are amplified with multiple pools.
+- **§13 (Health checks):** Per-pool health monitoring would be valuable — different pools may have different failure modes (e.g., spot nodes evicting more frequently).
+- **§3 (IAM integration):** RBAC could be scoped per-pool or per-label set for fine-grained access control.
+
+---
+
 **Status Legend:**
 - 🔴 Not started
 - 🟡 In discussion / draft proposal
@@ -471,6 +632,7 @@ CKS deploys a dashboard (Kubernetes Dashboard or Headlamp) as part of the cluste
 | 20 | Network isolation for cluster management traffic | 🔴 |
 | 21 | Implement kubeadm token cleanup after bootstrap | 🔴 |
 | 22 | Make dashboard deployment optional during bootstrap | 🔴 |
+| 23 | Node pool support | 🔴 |
 
 > Items #6–#21 sourced from [CKS Detailed Analysis — Bootstrap & Upgrade](../../architecture/cks-analysis.md).
 
