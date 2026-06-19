@@ -400,7 +400,12 @@ If the upgrade process reports **failed** and gets stuck (e.g., control plane no
 
 #### 6.1.2 Why the Upgrade Gets Stuck After Control Plane Completion
 
-When the control plane node completes the in-place upgrade but worker nodes never transition, the upgrade process reports **failed** and gets stuck. This is not caused by a kubeadm health check job — CloudStack's upgrade worker (`KubernetesClusterUpgradeWorker`) orchestrates the entire upgrade flow directly via SSH from the management server, and it knows exactly which step failed on which node.
+When the control plane node completes the in-place upgrade but worker nodes never transition, the upgrade process reports **failed** and gets stuck. Two distinct layers are involved:
+
+1. **CloudStack's orchestration** — `KubernetesClusterUpgradeWorker` runs the per-node upgrade loop (drain → `upgrade-kubernetes.sh` → uncordon → verify) via SSH from the management server. It knows exactly which step failed on which node.
+2. **kubeadm's health check** — After the control plane upgrade, kubeadm creates a temporary **upgrade health check Job** to verify cluster health before proceeding to worker nodes. This Job runs on a non-upgraded worker node and requires images (like `pause`) that may not yet exist on that node.
+
+Both layers can cause the upgrade to stall.
 
 ### How CloudStack's Upgrade Flow Actually Works
 
@@ -447,11 +452,22 @@ Possible sub-cases:
 - **`kubeadm upgrade node` fails** — preflight checks fail, kubelet can't start with new config, or the node's existing kubeadm config is incompatible
 - **kubelet restart fails** — containerd fails to restart, or the new kubelet can't connect to the API server
 
-**4. Uncordon fails — node never becomes Ready**
+**4. Health check pod fails — pause container version mismatch**
+
+After the control plane completes its upgrade, kubeadm creates a temporary **upgrade health check Job** to verify the cluster is healthy before proceeding to worker nodes. This Job gets scheduled on a non-upgraded worker node.
+
+The health check pod uses the `pause` container as its base image. If the target K8s version introduces a new pause container version (e.g., `pause:3.10` → `pause:3.10.1` in K8s 1.34.x), the worker node still running the old K8s version only has the old pause image in its local containerd store. CKS only imports new images onto the node currently being upgraded, so the worker node lacks the new pause image.
+
+- **With internet:** the worker pulls the new pause image from an external registry → health check passes → upgrade proceeds.
+- **Without internet:** the pull fails, the container is terminated, Kubernetes retries → infinite loop → upgrade stalls and eventually times out.
+
+This is the root cause of offline upgrade failures when a new pause container version is introduced. See [CKS Offline Guide → Pause Container Issue](./cks-offline.md#pre-built-calico-iso---pause-container-issue) for details and workarounds.
+
+**5. Uncordon fails — node never becomes Ready**
 
 After the upgrade script completes, CloudStack runs `kubectl uncordon` and polls for the node to reach `Ready` state. If the node is stuck (e.g., kubelet is running but can't register, or the node has `NotReady` conditions), the poll eventually times out.
 
-**5. Version verification fails**
+**6. Version verification fails**
 
 CloudStack runs `kubectl get nodes` and checks the reported version against the target. If the node reports a different version (e.g., the upgrade script partially succeeded but kubelet is still on the old version), the verification fails.
 
