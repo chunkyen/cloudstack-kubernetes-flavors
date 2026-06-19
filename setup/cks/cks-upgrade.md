@@ -407,7 +407,7 @@ When the control plane node completes the in-place upgrade but worker nodes neve
 
 Both layers can cause the upgrade to stall.
 
-### How CloudStack's Upgrade Flow Actually Works
+#### 6.1.2.1 How CloudStack's Upgrade Flow Actually Works
 
 The upgrade follows a **per-node sequential loop** (control nodes first, then workers):
 
@@ -431,7 +431,7 @@ After all nodes complete: detach ISO, update `KubernetesClusterVO.kubernetesVers
 
 On failure: detach ISOs from all nodes, throw `OperationFailed`. **Already-upgraded nodes are NOT rolled back.**
 
-### Most Likely Failure Points
+#### 6.1.2.2 Most Likely Failure Points
 
 Since the flow is sequential and CloudStack has full visibility, the most likely causes are:
 
@@ -471,7 +471,7 @@ After the upgrade script completes, CloudStack runs `kubectl uncordon` and polls
 
 CloudStack runs `kubectl get nodes` and checks the reported version against the target. If the node reports a different version (e.g., the upgrade script partially succeeded but kubelet is still on the old version), the verification fails.
 
-### What Partial Upgrades Mean
+#### 6.1.2.3 What Partial Upgrades Mean
 
 If the control plane upgrade succeeds but worker upgrades fail, the cluster is in a **partially upgraded state**. This doesn't violate Kubernetes version skew policy — workers are allowed to remain temporarily on an older supported version. However:
 
@@ -480,7 +480,7 @@ If the control plane upgrade succeeds but worker upgrades fail, the cluster is i
 - The cluster may have missing system components (new CNI, new CSI) on workers
 - CloudStack's DB still shows the old version (upgrade failed before the final DB update)
 
-### What to Do
+#### 6.1.2.4 What to Do
 
 The practical approach is **manual recovery** (see [Section 6.1.1](#611-manual-recovery-steps)). This bypasses CloudStack's upgrade flow entirely and brings each worker node to the target version directly. After manual recovery, the cluster is healthy and functional — the only remaining issue is CloudStack's stale version tracking, which can be resolved by triggering a no-op upgrade or (as a last resort) updating the database.
 
