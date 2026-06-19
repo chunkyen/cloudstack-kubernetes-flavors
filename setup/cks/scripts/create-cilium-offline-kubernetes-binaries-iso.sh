@@ -17,14 +17,20 @@
 # Example:
 #   ./create-cilium-offline-kubernetes-binaries-iso.sh \
 #     /tmp/ 1.34.2 1.8.0 1.34.0 1.18.2 \
-#     https://raw.githubusercontent.com/kubernetes/dashboard/v7.14.0/aio/deploy/recommended.yaml \
+#     https://raw.githubusercontent.com/kubernetes/dashboard/v2.7.0/aio/deploy/recommended.yaml \
 #     cks-v1.34.2-cilium-offline amd64 3.5.0
+#
+# Note: The DASHBOARD_YAML_CONFIG parameter requires a full URL to the dashboard YAML file.
+# It is NOT a version number — the script does not construct the URL from a version.
+# Use the raw GitHub URL of the desired dashboard release, e.g.:
+#   https://raw.githubusercontent.com/kubernetes/dashboard/v2.7.0/aio/deploy/recommended.yaml
 
 set -e
 
 if [ $# -lt 7 ]; then
     echo "Invalid input. Valid usage: ./create-cilium-offline-kubernetes-binaries-iso.sh OUTPUT_PATH KUBERNETES_VERSION CNI_VERSION CRICTL_VERSION CILIUM_VERSION DASHBOARD_YAML_CONFIG BUILD_NAME [ARCH] [ETCD_VERSION]"
-    echo "eg: ./create-cilium-offline-kubernetes-binaries-iso.sh /tmp/ 1.34.2 1.8.0 1.34.0 1.18.2 https://raw.githubusercontent.com/kubernetes/dashboard/v7.14.0/aio/deploy/recommended.yaml cks-v1.34.2-cilium-offline amd64"
+    echo "eg: ./create-cilium-offline-kubernetes-binaries-iso.sh /tmp/ 1.34.2 1.8.0 1.34.0 1.18.2 https://raw.githubusercontent.com/kubernetes/dashboard/v2.7.0/aio/deploy/recommended.yaml cks-v1.34.2-cilium-offline amd64"
+    echo "Note: DASHBOARD_YAML_CONFIG must be a full URL to the dashboard YAML file, not a version number."
     exit 1
 fi
 
