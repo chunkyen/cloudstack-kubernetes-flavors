@@ -29,20 +29,37 @@ This guarantees:
 ## 2. Replace Kubernetes Dashboard with Headlamp
 
 ### Problem
-The Kubernetes Dashboard is deprecated and has limited functionality. CKS currently bundles it by default, but the community has moved on to more modern alternatives.
+The Kubernetes Dashboard is deprecated and has limited functionality. CKS previously bundled it by default.
 
-### Proposal: Default to Headlamp
-[Headlamp](https://github.com/kubernetes-sigs/headlamp) (Kubernetes SIG) is a modern, actively-maintained web UI for Kubernetes clusters with:
-- Plugin ecosystem for extensibility
-- Better resource management UX
-- Multi-cluster support out of the box
-- Active community and upstream SIG backing
+### Status: ✅ Implemented — PR #12776 (Merged Mar 30, 2026)
 
-### Implementation Notes
-- Replace `dashboard.yaml` references in ISO build scripts with Headlamp manifests
-- Update CKS deployment logic to install Headlamp instead of Dashboard by default
-- Consider making it configurable (Dashboard as fallback for legacy deployments)
-- May require changes to both the official Calico script and community Cilium scripts
+PR [#12776](https://github.com/apache/cloudstack/pull/12776) by **Pearl1594** — "Add support for Headlamp dashboard for kubernetes; deprecate legacy kubernetes dashboard" — has been merged into `main`.
+
+### What the PR Does
+
+- **ISO build script** (`create-kubernetes-binaries-iso.sh`): Fetches the Headlamp manifest by version and bundles `headlamp.yaml` into the ISO alongside (or instead of) `dashboard.yaml`
+- **Cloud-init** (`k8s-control-node.yml`): Installs `headlamp.yaml` when present, with fallback to `dashboard.yaml` for older clusters
+- **Readiness check** (`KubernetesClusterUtil.java`): Detects Headlamp first, then falls back to legacy Dashboard during post-bootstrap verification
+- **UI** (`KubernetesServiceTab.vue`): Updated cluster dashboard instructions to show Headlamp access steps (new clusters) while preserving legacy Dashboard steps for older clusters
+
+### Implementation Details
+
+| File Changed | What It Does |
+|---|---|
+| `ui/src/views/compute/KubernetesServiceTab.vue` | Adds Headlamp + legacy Dashboard access/token guidance in the cluster UI tab |
+| `scripts/util/create-kubernetes-binaries-iso.sh` | Switches ISO dashboard asset from Dashboard YAML URL to Headlamp manifest version |
+| `k8s-control-node.yml` | Installs `headlamp.yaml` when present (fallback to `dashboard.yaml`) |
+| `KubernetesClusterUtil.java` | Extends dashboard readiness checks to detect Headlamp first, then legacy Dashboard |
+
+### Backward Compatibility
+
+- **New clusters** (4.23+): Headlamp is deployed by default
+- **Legacy clusters** (pre-4.23): Kubernetes Dashboard continues to work unchanged
+- The UI shows both access methods depending on which dashboard is present
+
+### Related
+- GitHub issue: [#12728](https://github.com/apache/cloudstack/issues/12728) (original feature request)
+- PR: [#12776](https://github.com/apache/cloudstack/pull/12776) (merged Mar 30, 2026)
 
 ---
 
@@ -611,7 +628,7 @@ POST /cloudstack/api/scaleKubernetesCluster
 | # | Improvement | Status |
 |---|-------------|--------|
 | 1 | Pre-import images on all nodes during upgrade | 🔴 |
-| 2 | Replace Dashboard with Headlamp | 🔴 |
+| 2 | Replace Dashboard with Headlamp | 🟢 (PR #12776 merged Mar 2026) |
 | 3 | Dex/Pinniped + CloudStack IAM integration | 🔴 |
 | 4 | Full air-gapped / offline deployment support | 🔴 |
 | 5 | Restrictive default firewall rules (API + SSH) | 🔴 |
