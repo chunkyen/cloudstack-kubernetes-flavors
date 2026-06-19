@@ -398,17 +398,50 @@ If the upgrade process reports **failed** and gets stuck (e.g., control plane no
 >
 > > **Note:** This approach bypasses all of CloudStack's safety checks. Use only when all other methods have failed and you have a verified database backup.
 
-#### 6.1.2 Why the Health Check Job Fails
+#### 6.1.2 Possible Causes of Upgrade Stuck After Control Plane Completion
 
-The upgrade health check job is created by kubeadm during the upgrade process to verify cluster health. It runs on the control plane and checks if **all nodes are Ready** and at the correct version.
+When the control plane node completes the in-place upgrade but worker nodes never transition, the upgrade process appears stuck. The exact root cause is often **inconclusive** — CloudStack's upgrade flow is opaque from the workload cluster's perspective, and multiple factors could be at play. Below are plausible hypotheses, ordered from most to least likely.
 
-When the control plane upgrade succeeds but worker nodes fail to upgrade, the health check job will keep failing because:
+> **Note:** The kubeadm upgrade health check job is a temporary Job that verifies basic cluster health and reachability. It does **not** require all workers to be at the target version before passing — Kubernetes explicitly supports version skew, so old worker kubelets are compatible with a newer API server. The health check job does **not** fail simply because workers are still on the old version.
 
-1. The health check job was created when worker nodes were still at the old version
-2. Kubernetes enforces version skew policies — the API server (new version) and kubelet (old version) are incompatible
-3. The health check job will never pass until all worker nodes are upgraded to match the control plane
+**Hypothesis 1 — Health check job is stuck or failing**
 
-This is why manual recovery on worker nodes is necessary — you're bringing the worker nodes to the same version as the control plane, which allows the health check job to eventually pass (or be recreated by the next upgrade attempt).
+The health check Job may have encountered an issue such as:
+
+- One or more nodes are `NotReady` (disk pressure, memory pressure, network issues)
+- Control plane components are unhealthy (API server flapping, scheduler/controller-manager issues)
+- Networking or DNS problems preventing the check Job from reaching the API server
+- RBAC or API connectivity issues with the check Job's service account
+- Pod scheduling failures (insufficient resources, taints, or the check Job's pod being evicted)
+
+**Hypothesis 2 — ISO attachment or streaming issue**
+
+During the in-place upgrade, CloudStack attaches the new ISO to each node and streams it for application. If the ISO attachment fails, times out, or the streaming is interrupted for a worker node, that node never receives the upgrade payload. The control plane may complete successfully while workers remain stuck.
+
+**Hypothesis 3 — Node-level failure during ISO application**
+
+Even if the ISO is attached and mounted, the in-place application (replacing binaries, reloading systemd, running `kubeadm upgrade node`) may fail on a worker due to:
+
+- Insufficient disk space on `/opt/bin` or `/var/lib/kubelet`
+- Permission issues preventing binary replacement
+- A stuck or failed `kubelet` process that doesn't respond to stop/start signals
+- Containerd or other runtime issues during the transition
+
+**Hypothesis 4 — CloudStack state tracking mismatch**
+
+CloudStack tracks upgrade progress internally. If the management server's state machine gets out of sync (e.g., it marks a node as "upgrading" but never receives the completion signal), the node remains stuck in the upgrade flow even if the node itself is healthy and at the correct version.
+
+**Hypothesis 5 — Partial upgrade with degraded cluster health**
+
+If some workers upgraded successfully but others failed, the cluster may be in a partially upgraded state. While this doesn't violate version skew policy, the degraded state (some nodes `NotReady`, missing system pods, etc.) may prevent CloudStack from marking the overall upgrade as complete.
+
+**What to do:**
+
+Since the root cause is often unclear, the practical approach is **manual recovery** (see [Section 6.1.1](#611-manual-recovery-steps)). This bypasses CloudStack's upgrade flow entirely and brings each worker node to the target version directly. After manual recovery, the cluster is healthy and functional — the only remaining issue is CloudStack's stale version tracking, which can be resolved by triggering a no-op upgrade or (as a last resort) updating the database.
+
+**What partial upgrades mean:**
+
+If the control plane upgrade succeeds but worker upgrades fail, the cluster may remain in a partially upgraded state. This doesn't automatically violate Kubernetes version skew policy — workers are allowed to remain temporarily on an older supported version. However, if worker failures leave nodes `NotReady` or otherwise degrade cluster health, the upgrade flow may not complete. Manual recovery of worker nodes restores cluster health and brings the cluster to a consistent state.
 
 > **Note:** For clusters stuck in "Starting" during bootstrap (dashboard verification failures, CCM/CSI not deployed), see [CKS Setup Guide → Troubleshooting: Cluster Stuck in "Starting"](./cks.md#cluster-stuck-in-starting-with-kubeconfig-available).
 
