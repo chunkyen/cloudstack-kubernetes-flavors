@@ -274,15 +274,53 @@ The `deploy-kube-system` systemd service restarts on failure, but `kubeadm init`
 
 ---
 
-## 13. Comprehensive Cluster Health Check
+## 13. Health Checks Between Cluster Lifecycle Phases
 
 ### Problem
-After bootstrap, there's no ongoing health monitoring. A cluster could degrade silently — nodes go NotReady, pods crash-loop, etcd loses quorum, certificates expire — and the management server has no visibility until the user notices something is broken. The only health checks that currently exist are during bootstrap (Phase 7) and restart, and they're one-time checks, not continuous monitoring.
+After bootstrap, there's no ongoing health monitoring. A cluster could degrade silently — nodes go NotReady, pods crash-loop, etcd loses quorum, certificates expire — and the management server has no visibility until the user notices something is broken.
 
-### Proposal: Management-Initiated Health Check API
+More critically, **there are no health checks before lifecycle operations**. If a cluster is already degraded, operations like upgrade, scale, or destroy can fail catastrophically:
 
-Add a new API command `checkKubernetesClusterHealth` that the management server can call on-demand or schedule periodically to get a comprehensive health status of a CKS cluster. The health check runs against the cluster via SSH to the control node (kubectl) and HTTPS to the API server, producing a structured health report.
+- **Upgrade on a degraded cluster** — if nodes are already NotReady or etcd is unstable, the rolling upgrade will corrupt the cluster state
+- **Scale on a degraded cluster** — if the API server is slow or unresponsive, new nodes may fail to join, leaving the cluster in a half-formed state
+- **Destroy on a degraded cluster** — if nodes can't be drained properly, orphaned resources (PVs, network rules, VMs) are left behind
 
+### Part A: Pre-Lifecycle Health Gate
+
+Before every major lifecycle operation, run a health gate that validates the cluster is in a safe state to proceed. If the gate fails, the operation is blocked and the user is shown what's wrong.
+
+**Health gate checklist (runs before upgrade, scale, destroy):**
+
+| Check | Command | Pass Criteria | Block If |
+|-------|---------|---------------|----------|
+| API server reachable | `kubectl cluster-info` / HTTPS `/version` | Responds within 5s | Unreachable or >5s latency |
+| All nodes Ready | `kubectl get nodes` | All nodes in Ready state | Any node NotReady |
+| etcd healthy | `etcdctl endpoint health --cluster` | All members healthy | Quorum at risk |
+| Core pods running | `kubectl get pods -n kube-system` | All kube-system pods Running | Any critical pod Failed/CrashLoopBackOff |
+| No pending PVs | `kubectl get pv` | No PVs in `Failed` or `Bound` state with no backing volume | Pending/failed PVs |
+| Sufficient resources | `kubectl top nodes` (if metrics-server) or `df -h` | Disk usage <80%, memory available | Disk >80% or memory exhausted |
+
+**Implementation:**
+- Create a new `KubernetesClusterHealthGateWorker` (similar to existing worker pattern)
+- Called at the start of `KubernetesClusterUpgradeWorker`, `KubernetesClusterScaleWorker`, `KubernetesClusterDestroyWorker`
+- If gate fails: abort operation, emit CloudStack event with details, return error to user
+- If gate passes: proceed with the lifecycle operation
+
+**Example — upgrade pre-flight gate:**
+```
+UpgradeKubernetesClusterCmd
+  → KubernetesClusterUpgradeWorker
+    → KubernetesClusterHealthGateWorker.check()
+      ├── API server reachable? → NO → abort: "API server unreachable, cannot upgrade"
+      ├── All nodes Ready? → NO → abort: "2 nodes NotReady, fix before upgrading"
+      ├── etcd healthy? → YES
+      ├── Core pods running? → YES
+      └── Gate PASSED → continue with upgrade
+```
+
+### Part B: Comprehensive Health Check API
+
+Add a new API command `checkKubernetesClusterHealth` that the management server can call on-demand or schedule periodically to get a full health status of a CKS cluster.\n
 **API signature:**
 ```json
 POST /cloudstack/api/checkKubernetesClusterHealth
@@ -350,16 +388,9 @@ POST /cloudstack/api/checkKubernetesClusterHealth
 | **Disk Usage** | SSH → `df -h` on each node | Node disk usage below threshold | WARNING if >80%, CRITICAL if >90% |
 | **CloudStack Provider** | SSH → check provider deployment | CloudStack provider is deployed and healthy | DEGRADED if provider missing |
 
-### On-Demand vs. Periodic
+### Part C: Periodic Background Monitoring
 
-**On-demand (API call):**
-- User or admin calls `checkKubernetesClusterHealth` via API
-- Management server SSHs to control node, runs all checks, returns structured report
-- Takes ~10-30 seconds depending on cluster size
-- Useful for troubleshooting, pre-upgrade validation, and manual monitoring
-
-**Periodic (scheduled background job):**
-- Management server runs health checks on all clusters on a schedule (e.g., every 5 minutes)
+The management server runs health checks on all clusters on a schedule (e.g., every 5 minutes):
 - Only reports changes (state transitions: HEALTHY → DEGRADED → CRITICAL)
 - Stores health history for trend analysis
 - Triggers CloudStack events/alerts when status degrades
@@ -389,7 +420,7 @@ POST /cloudstack/api/checkKubernetesClusterHealth
 - Flag certificates expiring within 30 days as WARNING, expired as CRITICAL
 
 **Performance considerations:**
-- On-demand checks: run sequentially, total time ~10-30s for typical clusters
+- Pre-lifecycle gate: run sequentially, total time ~10-30s (must pass before operation proceeds)
 - Periodic checks: run in background, use connection pooling for SSH sessions
 - Cache results for 60 seconds to avoid redundant checks during the same polling interval
 - For large clusters (>50 nodes), consider sampling rather than checking every node
@@ -410,7 +441,8 @@ POST /cloudstack/api/checkKubernetesClusterHealth
 - **§23 (Force-remove failed nodes):** Health checks should detect failed nodes and suggest force-remove as a remediation
 - **§25 (Scale control plane nodes):** Health checks should detect degraded control plane (lost quorum, missing nodes) and suggest scale-up
 - **§15 (Short-lived TLS certificates):** Health checks should detect expiring certificates and trigger rotation
-- **§13 (Health checks):** This is the detailed specification of the original health check proposal
+- **§11 (Timeout checkpoints):** Health gate provides the "checkpoint" that §11 describes
+- **§24 (Force-remove failed nodes):** Health gate should block operations if failed nodes are present
 
 ---
 
