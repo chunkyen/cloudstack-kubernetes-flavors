@@ -539,6 +539,79 @@ Instead of extending `scaleKubernetesCluster`, create a new `KubernetesClusterFo
 - §23 (Node Pool Support) — force-remove would be essential for node pools where a single broken node shouldn't block pool management
 - §13 (Health checks) — health checks could detect stuck nodes and suggest force-remove
 
+### Force-Remove Failed Control Plane Node
+
+Force-removing a failed control plane node requires additional steps beyond worker nodes because of etcd membership and cluster quorum:
+
+**Prerequisites:**
+- At least 2 of 3 control plane nodes must still be healthy (maintain etcd quorum)
+- If all control plane nodes are down and the cluster is unresponsive, manual intervention is required on the remaining infrastructure
+
+**Force-remove flow for control plane:**
+
+1. **Validate quorum** — ensure at least 2 control plane nodes remain healthy after removal
+   ```bash
+   # Check current control plane node status
+   sudo /opt/bin/kubectl get nodes | grep control-plane
+   # Verify remaining nodes can form quorum
+   ```
+
+2. **Identify the failed node** — by hostname or VM ID
+
+3. **Force-delete from Kubernetes** — SSH to a healthy control node:
+   ```bash
+   sudo /opt/bin/kubectl delete node <hostname> --force --grace-period=0
+   ```
+   If `delete --force` hangs (node is completely unresponsive), fall back to:
+   ```bash
+   sudo /opt/bin/kubectl patch node <hostname> -p '{"metadata":{"finalizers":null}}'
+   sudo /opt/bin/kubectl delete node <hostname>
+   ```
+
+4. **Remove from etcd** — critical step not needed for worker nodes:
+   ```bash
+   # List etcd members
+   sudo /opt/bin/etcdctl member list
+   # Remove the failed node from etcd cluster
+   sudo /opt/bin/etcdctl member remove <member-id>
+   ```
+   If etcd is external (separate etcd nodes), this step is not needed — only remove from Kubernetes.
+
+5. **Destroy VM at CloudStack level** — `userVmService.destroyVm(vmId, true)` + `userVmManager.expunge(vm)`
+
+6. **Remove DB record** — `kubernetesClusterVmMapDao.expunge(vmMapId)`
+
+7. **Update network rules** — recalculate SSH port forwarding range if needed
+
+8. **Log a warning** — force-removal of a control plane node is a destructive operation
+
+**API signature:**
+```json
+POST /cloudstack/api/forceRemoveKubernetesClusterNode
+{
+  "id": "<cluster-id>",
+  "nodeId": "<node-vm-id>",
+  "forceRemove": true   // indicates control plane force-remove with etcd cleanup
+}
+```
+
+**Safety considerations:**
+- **Quorum check:** API must validate that at least 2 control plane nodes remain after removal. If cluster has 3 control nodes, force-remove is allowed (2 remain). If cluster has 2 control nodes, force-remove is blocked (1 remaining < quorum).
+- **etcd membership:** If etcd is co-located on control nodes, the etcd member must be removed from the cluster. If etcd is external (separate etcd nodes), this step is skipped.
+- **Certificate management:** The failed node's TLS certificates are orphaned. Consider adding a certificate rotation step to revoke the failed node's certificates.
+- **Kubeconfig update:** If the removed node was the control node used for kubeconfig retrieval, update the stored kubeconfig to point to a healthy control node.
+- **Explicit confirmation:** Require the user to type the node name and confirm "FORCE REMOVE CONTROL PLANE" to prevent accidental removal.
+
+**UI considerations:**
+- Show a prominent warning: "Force-removing a control plane node will bypass Kubernetes drain and remove the node from etcd. This operation cannot be undone."
+- Grey out the button if removing this node would break etcd quorum (e.g., cluster has 2 control nodes and this is one of them)
+- Display current control plane node count and quorum status
+
+**Related to:**
+- §25 (Scale control plane nodes) — after force-removing a failed control plane node, the user may want to scale up to restore HA
+- §13 (Health checks) — health checks should detect failed control plane nodes and suggest force-remove
+- §23 (Force-remove failed nodes) — this is the control plane variant of the same problem
+
 ---
 
 ## 24. Node Pool Support
