@@ -274,20 +274,143 @@ The `deploy-kube-system` systemd service restarts on failure, but `kubeadm init`
 
 ---
 
-## 13. Add Health Checks Between Cluster Lifecycle Phases
+## 13. Comprehensive Cluster Health Check
 
 ### Problem
-After bootstrap, there's no ongoing health monitoring. A cluster could degrade silently.
+After bootstrap, there's no ongoing health monitoring. A cluster could degrade silently — nodes go NotReady, pods crash-loop, etcd loses quorum, certificates expire — and the management server has no visibility until the user notices something is broken. The only health checks that currently exist are during bootstrap (Phase 7) and restart, and they're one-time checks, not continuous monitoring.
 
-### Proposed Fix
-- Add a periodic health check scanner in the management server that:
-  - Verifies the API server is reachable
-  - Checks node count matches expected
-  - Reports degraded clusters via CloudStack events/alerts
-- Expose cluster health as a new field on `KubernetesClusterResponse`
+### Proposal: Management-Initiated Health Check API
+
+Add a new API command `checkKubernetesClusterHealth` that the management server can call on-demand or schedule periodically to get a comprehensive health status of a CKS cluster. The health check runs against the cluster via SSH to the control node (kubectl) and HTTPS to the API server, producing a structured health report.
+
+**API signature:**
+```json
+POST /cloudstack/api/checkKubernetesClusterHealth
+{
+  "id": "<cluster-id>"
+}
+```
+
+**Response structure:**
+```json
+{
+  "healthStatus": "HEALTHY | DEGRADED | CRITICAL | UNKNOWN",
+  "timestamp": "2026-06-23T03:15:00Z",
+  "checks": {
+    "apiServer": { "status": "OK", "latencyMs": 12 },
+    "etcd": { "status": "OK", "memberCount": 3, "leader": "cks-etcd-0" },
+    "nodes": {
+      "expected": 5,
+      "ready": 5,
+      "notReady": [],
+      "details": [
+        { "name": "cks-worker-0", "status": "Ready", "age": "3d" },
+        { "name": "cks-worker-1", "status": "Ready", "age": "3d" }
+      ]
+    },
+    "corePods": {
+      "kubeSystem": { "expected": 12, "running": 12, "failed": [] },
+      "coredns": { "pods": 2, "ready": 2, "issues": [] },
+      "cilium": { "daemonset": "RollingUpdate", "ready": 5, "desired": 5, "issues": [] },
+      "ccm": { "deployment": "Available", "replicas": 1, "issues": [] },
+      "csi": { "daemonset": "Ready", "nodes": 5, "issues": [] }
+    },
+    "certificates": {
+      "apiserver": { "expires": "2027-03-15", "daysRemaining": 265 },
+      "etcd": { "expires": "2027-03-15", "daysRemaining": 265 }
+    },
+    "storage": {
+      "storageClasses": [{ "name": "cloudstack-csi", "provisioner": "cloudstack.io/csi", "status": "Available" }],
+      "pvCount": 3,
+      "pvFailed": 0
+    },
+    "network": {
+      "dnsReachable": true,
+      "ingressIPs": 1,
+      "egressRules": 0
+    }
+  },
+  "alerts": [],
+  "recommendations": []
+}
+```
+
+### Health Check Categories
+
+| Check | Method | What It Validates | Failure Impact |
+|-------|--------|-------------------|----------------|
+| **API Server** | HTTPS `GET /version` | API server is reachable and responding | CRITICAL if unreachable |
+| **etcd** | SSH → `etcdctl endpoint health` | etcd cluster health, member count, leader election | CRITICAL if quorum lost |
+| **Node Readiness** | SSH → `kubectl get nodes` | All expected nodes are in Ready state | DEGRADED if any NotReady, CRITICAL if >50% down |
+| **Core Pods** | SSH → `kubectl get pods -n kube-system` | Core system pods (coredns, cilium, ccm, csi, dashboard) are Running | DEGRADED if non-critical pods failed, CRITICAL if critical pods down |
+| **Control Plane Pods** | SSH → `kubectl get pods -n kube-system` | API server, controller-manager, scheduler are Running | CRITICAL if any control plane pod down |
+| **Certificate Expiry** | SSH → check cert paths or `kubeadm certs check-expiration` | TLS certificates haven't expired and aren't near expiry | WARNING if <30 days, CRITICAL if expired |
+| **Storage** | SSH → `kubectl get sc,pv,pvc` | Storage classes available, PVs not in Failed state | DEGRADED if PVs failed, CRITICAL if no storage class |
+| **Network** | SSH → `kubectl get svc -n kube-system` + DNS test | CoreDNS resolving, services reachable | DEGRADED if DNS broken |
+| **Disk Usage** | SSH → `df -h` on each node | Node disk usage below threshold | WARNING if >80%, CRITICAL if >90% |
+| **CloudStack Provider** | SSH → check provider deployment | CloudStack provider is deployed and healthy | DEGRADED if provider missing |
+
+### On-Demand vs. Periodic
+
+**On-demand (API call):**
+- User or admin calls `checkKubernetesClusterHealth` via API
+- Management server SSHs to control node, runs all checks, returns structured report
+- Takes ~10-30 seconds depending on cluster size
+- Useful for troubleshooting, pre-upgrade validation, and manual monitoring
+
+**Periodic (scheduled background job):**
+- Management server runs health checks on all clusters on a schedule (e.g., every 5 minutes)
+- Only reports changes (state transitions: HEALTHY → DEGRADED → CRITICAL)
+- Stores health history for trend analysis
+- Triggers CloudStack events/alerts when status degrades
+- Can be configured per-cluster or globally
 
 ### Implementation Notes
-- Could be implemented as a scheduled job or integrated into existing heartbeat mechanisms
+
+**SSH execution:**
+- All kubectl commands run via SSH to the control node (same channel used for bootstrap verification)
+- Batch multiple kubectl commands into a single SSH session to minimize overhead
+- Use `kubectl get` with `--no-headers` and `--output=json` for machine-readable output
+- Timeout each SSH command to prevent hanging on unresponsive nodes
+
+**HTTPS checks:**
+- API server health check via HTTPS `/version` (already implemented in `isKubernetesClusterServerRunning`)
+- Can be extended to check `/healthz` and `/readyz` for deeper health info
+- Uses existing `TrustAllManager` for self-signed cert handling
+
+**etcd health:**
+- If external etcd: SSH to etcd nodes and run `etcdctl endpoint health --cluster`
+- If co-located on control nodes: SSH to control node and run `etcdctl endpoint health --cluster`
+- Check leader election status and member count
+
+**Certificate checks:**
+- Run `kubeadm certs check-expiration` on the control node (available in kubeadm 1.22+)
+- Parse output to extract expiry dates for all certificates
+- Flag certificates expiring within 30 days as WARNING, expired as CRITICAL
+
+**Performance considerations:**
+- On-demand checks: run sequentially, total time ~10-30s for typical clusters
+- Periodic checks: run in background, use connection pooling for SSH sessions
+- Cache results for 60 seconds to avoid redundant checks during the same polling interval
+- For large clusters (>50 nodes), consider sampling rather than checking every node
+
+**CloudStack integration:**
+- Store health status in `KubernetesClusterVO.healthStatus` (new field)
+- Emit CloudStack events when health status changes: `EVENT_CKS_CLUSTER_DEGRADED`, `EVENT_CKS_CLUSTER_CRITICAL`
+- Add health status to the CKS cluster list response (`listKubernetesClusters`)
+- Add health status badge to the CKS cluster detail page in the UI
+- Support filtering clusters by health status in the UI
+
+**Alerting:**
+- DEGRADED: warning event, logged but no immediate action required
+- CRITICAL: alert event, could trigger notification (email, Slack, etc.)
+- Configurable thresholds: e.g., "alert if >1 node NotReady for >5 minutes"
+
+### Relationship to Other Improvements
+- **§23 (Force-remove failed nodes):** Health checks should detect failed nodes and suggest force-remove as a remediation
+- **§25 (Scale control plane nodes):** Health checks should detect degraded control plane (lost quorum, missing nodes) and suggest scale-up
+- **§15 (Short-lived TLS certificates):** Health checks should detect expiring certificates and trigger rotation
+- **§13 (Health checks):** This is the detailed specification of the original health check proposal
 
 ---
 
