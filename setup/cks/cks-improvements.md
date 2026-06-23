@@ -716,11 +716,7 @@ The user has no way to recover by adding a replacement control plane node throug
 **2. Scaling up for increased workload**
 As workloads grow, control plane resources (CPU, RAM) may need to scale. Currently the only option is to change the service offering (CPU/RAM) of existing control nodes — but you cannot add a 4th or 5th control plane node to distribute the load. This is a hard limit.
 
-**3. Disaster recovery and maintenance**
-If the management server needs to perform maintenance that requires stopping all control nodes temporarily, there is no way to spin up temporary replacement control nodes to maintain cluster availability during the outage window.
 
-**4. Multi-zone / availability zone distribution**
-For production deployments, control plane nodes should be distributed across availability zones for fault tolerance. Currently, if a zone goes down, all control plane nodes in that zone are lost simultaneously. There is no way to add control plane nodes in a different zone without recreating the entire cluster.
 
 ### Current State
 
