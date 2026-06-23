@@ -702,6 +702,164 @@ POST /cloudstack/api/scaleKubernetesCluster
 
 ---
 
+## 25. Scale Control Plane Nodes (Add/Remove HA Control Plane Nodes)
+
+### Why This Is Necessary
+
+CKS currently allows scaling worker nodes up and down via `scaleKubernetesCluster`, but **control plane node count is immutable after cluster creation**. This creates several critical failure scenarios:
+
+**1. Failed control plane node recovery**
+When a control plane node fails (disk full, kernel panic, hardware failure, kubelet crash-loop), the cluster loses quorum if it drops below the minimum required for etcd consensus. With 3 control nodes, losing 1 still leaves quorum (2/3). But if a second fails, the cluster becomes **completely unresponsive** — API server rejects requests, no new workloads can be scheduled, and the management server cannot manage the cluster because it communicates through the API.
+
+The user has no way to recover by adding a replacement control plane node through the API. They would need to manually rebuild the node and join it via `kubeadm join --control-plane`, which is error-prone and requires access to the certificate key (stored on the remaining healthy control nodes).
+
+**2. Scaling up for increased workload**
+As workloads grow, control plane resources (CPU, RAM) may need to scale. Currently the only option is to change the service offering (CPU/RAM) of existing control nodes — but you cannot add a 4th or 5th control plane node to distribute the load. This is a hard limit.
+
+**3. Disaster recovery and maintenance**
+If the management server needs to perform maintenance that requires stopping all control nodes temporarily, there is no way to spin up temporary replacement control nodes to maintain cluster availability during the outage window.
+
+**4. Multi-zone / availability zone distribution**
+For production deployments, control plane nodes should be distributed across availability zones for fault tolerance. Currently, if a zone goes down, all control plane nodes in that zone are lost simultaneously. There is no way to add control plane nodes in a different zone without recreating the entire cluster.
+
+### Current State
+
+The infrastructure is partially in place:
+
+| Component | Status | Notes |
+|-----------|--------|-------|
+| `k8s-control-node-add.yml` cloud-init template | ✅ Exists | Supports `kubeadm join --control-plane --certificate-key` |
+| `KubernetesClusterAddWorker.java` | ✅ Exists | Listed in source reference, but appears to be for external node addition, not control plane scaling |
+| `ScaleKubernetesClusterCmd` API | ✅ Exists | Only scales worker count, not control/etcd count |
+| `controlnodenumber` parameter | ✅ Exists in create | Only used during cluster creation, not in scale API |
+| Certificate key management | ❌ Missing | No mechanism to generate/retrieve certificate keys for new control plane joins |
+| API/UI for control plane scaling | ❌ Missing | No way to add/remove control plane nodes post-creation |
+
+### Proposal: `scaleControlPlane` API
+
+Add a new API command `scaleKubernetesClusterControlPlane` (or extend `scaleKubernetesCluster` with a `controlNodeCount` parameter) that supports adding and removing HA control plane nodes:
+
+**Scale up — add control plane node:**
+
+1. **Generate certificate key** — if no existing key is available, generate one:
+   ```bash
+   sudo /opt/bin/kubeadm init phase upload-certs --upload-certs
+   ```
+   This returns a certificate key used for secure control plane node joins.
+
+2. **Provision VM** — create a new VM with the control plane service offering and `k8s-control-node-add.yml` cloud-init
+
+3. **Attach binaries ISO** — attach the current version's ISO (same as existing nodes)
+
+4. **Join control plane** — cloud-init runs:
+   ```bash
+   sudo /opt/bin/kubeadm join <control-ip>:6443 \
+     --token <token> \
+     --certificate-key <cert-key> \
+     --control-plane \
+     --discovery-token-unsafe-skip-ca-verification
+   ```
+
+5. **Wait for Ready** — poll `kubectl get nodes` until the new node shows `Ready`
+
+6. **Detach ISO** — remove the ISO from the new VM
+
+7. **Update DB record** — increment `controlnodenumber` in `KubernetesClusterVO`
+
+**Scale down — remove control plane node:**
+
+⚠️ **Critical safety requirement:** Control plane scale-down must respect etcd quorum. The cluster must always maintain a majority of control nodes.
+
+1. **Validate quorum** — ensure the resulting node count is > total/2 (e.g., 3→2 is OK, 2→1 is blocked)
+2. **Select node to remove** — prefer nodes with the lowest workload pressure, or let user specify
+3. **Cordon the node:**
+   ```bash
+   sudo /opt/bin/kubectl cordon <hostname>
+   ```
+4. **Drain workloads** (if any non-control workloads are on the node):
+   ```bash
+   sudo /opt/bin/kubectl drain <hostname> --ignore-daemonsets --delete-emptydir-data
+   ```
+5. **Remove from Kubernetes:**
+   ```bash
+   sudo /opt/bin/kubectl delete node <hostname>
+   ```
+6. **Remove from etcd** — if this is the last node being removed or if etcd membership needs cleanup:
+   ```bash
+   sudo /opt/bin/etcdctl member remove <member-id>
+   ```
+7. **Destroy VM** — `userVmService.destroyVm()` + `userVmManager.expunge()`
+8. **Remove DB record** — `kubernetesClusterVmMapDao.expunge()`
+9. **Update network rules** — recalculate SSH port forwarding range
+10. **Update DB record** — decrement `controlnodenumber`
+
+**API signature:**
+```json
+POST /cloudstack/api/scaleKubernetesCluster
+{
+  "id": "<cluster-id>",
+  "controlNodeCount": 4,        // scale to 4 control nodes
+  "workernodetypeid": "...",    // existing worker scaling (unchanged)
+  "workernodenumbers": 5        // existing worker count (unchanged)
+}
+```
+
+Or as a dedicated API:
+```json
+POST /cloudstack/api/scaleKubernetesClusterControlPlane
+{
+  "id": "<cluster-id>",
+  "controlNodeCount": 4
+}
+```
+
+### Implementation Notes
+
+**Certificate key management:**
+- Store the certificate key in `KubernetesClusterDetailsVO` after bootstrap (similar to how `kubeConfigData` is stored)
+- If the key is lost (e.g., after a full cluster restart where all control nodes were stopped), regenerate it from any remaining healthy control node
+- If ALL control nodes are down and the key is lost, the cluster cannot scale control plane — this is a known limitation that requires manual recovery
+
+**Quorum safety:**
+- Minimum control plane count: 1 (single-node cluster, no HA)
+- For HA clusters: minimum 3, and scale-down must never reduce below `(total + 1) / 2`
+- Add validation in the API layer: `if (newCount <= currentCount / 2) throw new InvalidParameterValueException("Cannot reduce control plane below quorum")`
+
+**Service offering changes:**
+- The existing `scaleKubernetesCluster` already supports changing service offering for any node type via `controlServiceOfferingId`
+- This improvement focuses on **count** changes, not offering changes
+- Offering changes for control nodes already work — they call `upgradeVirtualMachine` on the VM
+
+**Cloud-init template reuse:**
+- The existing `k8s-control-node-add.yml` template already supports HA control plane join
+- It uses `kubeadm join --control-plane --certificate-key` which is the standard kubeadm pattern
+- No template changes needed — just wire it up in the worker
+
+**Network rules:**
+- Adding control nodes does NOT change the SSH port forwarding range (control nodes don't get SSH port forwards — only workers do)
+- Adding control nodes DOES change the etcd port forwarding range if etcd is co-located on control nodes
+- If external etcd is used (separate etcd nodes), no network rule changes are needed for control plane scaling
+
+**UI considerations:**
+- Add a "Control Plane" section in the cluster view showing current count and a +/- control
+- Show individual control node status (Ready/NotReady) with health indicators
+- Grey out the "+" button if the cluster is at its maximum (configurable, default 5)
+- Grey out the "-" button if the cluster is at minimum quorum
+- Show a warning when the cluster has only 1 control node (no HA)
+
+**Error handling:**
+- If `kubeadm join --control-plane` fails, the new VM should be destroyed and the operation rolled back
+- If the certificate key is invalid or expired, regenerate it and retry once
+- If etcd membership is corrupted, log a clear error message suggesting manual etcdctl recovery
+
+### Relationship to Other Improvements
+- **§23 (Force-remove failed nodes):** Force-remove is complementary — if a control plane node is frozen, force-remove can recover it, but you still need the ability to add a replacement
+- **§13 (Health checks):** Health checks should detect degraded control plane (lost quorum, missing nodes) and alert the user to scale up
+- **§17 (Restrict SSH access):** Control plane nodes should have restricted SSH access (management server key only)
+- **§24 (Node pool support):** Node pools could extend to control plane pools with per-zone placement
+
+---
+
 **Status Legend:**
 - 🔴 Not started
 - 🟡 In discussion / draft proposal
@@ -733,6 +891,7 @@ POST /cloudstack/api/scaleKubernetesCluster
 | 22 | Make dashboard deployment optional during bootstrap | 🔴 |
 | 23 | Force-remove failed/unreachable nodes | 🔴 |
 | 24 | Node pool support | 🔴 |
+| 25 | Scale control plane nodes (add/remove HA control plane) | 🔴 |
 
 > Items #6–#21 sourced from [CKS Detailed Analysis — Bootstrap & Upgrade](../../architecture/cks-analysis.md).
 
