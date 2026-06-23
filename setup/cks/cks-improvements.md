@@ -459,7 +459,89 @@ CKS deploys a dashboard (Kubernetes Dashboard or Headlamp) as part of the cluste
 
 ---
 
-## 23. Node Pool Support
+## 23. Force-Remove Failed / Unreachable Nodes
+
+### Problem
+The current scale-down path (`KubernetesClusterScaleWorker.scaleDownKubernetesClusterSize()` → `removeNodesFromCluster()`) relies on a healthy node to execute:
+
+1. `kubectl drain <hostname> --ignore-daemonsets --delete-emptydir-data` (retries 3×)
+2. `kubectl delete node <hostname>`
+3. `userVmService.destroyVm()` + `userVmManager.expunge()`
+4. `kubernetesClusterVmMapDao.expunge()`
+5. Recalculate network rules
+
+If a node is in a failed state — frozen, unresponsive, disk full, kubelet dead — steps 1 and 2 fail. The scale-down operation hangs or fails, and the user is stuck with a broken node that cannot be removed through the normal API.
+
+There is no mechanism to bypass the Kubernetes-level drain/delete and force-remove the node at the CloudStack infrastructure level.
+
+### Proposal: Force-Remove Node via CloudStack API
+
+Add a new API command `forceRemoveKubernetesClusterNode` (or extend `scaleKubernetesCluster` with a `forceRemove` flag) that bypasses the Kubernetes-level drain/delete and removes the node directly from CloudStack:
+
+**Force-remove flow:**
+
+1. **Identify the node** — by hostname or VM ID
+2. **Force-delete from Kubernetes** — SSH to control node, run:
+   ```bash
+   sudo /opt/bin/kubectl delete node <hostname> --force --grace-period=0
+   ```
+   This bypasses the drain step and immediately removes the node object from the API server. If the node is completely unresponsive and even `delete --force` hangs, fall back to:
+   ```bash
+   sudo /opt/bin/kubectl get nodes -o json | jq '.items[] | select(.metadata.name=="<hostname>") | .metadata.resourceVersion'  # get resource version
+   sudo /opt/bin/kubectl delete node <hostname> --raw="/api/v1/nodes/<hostname>/finalizers" -X DELETE
+   ```
+   Or as an absolute last resort, edit the node directly:
+   ```bash
+   sudo /opt/bin/kubectl patch node <hostname> -p '{"metadata":{"finalizers":null}}'
+   sudo /opt/bin/kubectl delete node <hostname>
+   ```
+3. **Destroy VM at CloudStack level** — `userVmService.destroyVm(vmId, true)` + `userVmManager.expunge(vm)`
+4. **Remove DB record** — `kubernetesClusterVmMapDao.expunge(vmMapId)`
+5. **Recalculate network rules** — same as normal scale-down (firewall rules, port forwarding)
+6. **Log a warning** — force-removal is a destructive operation; log it prominently in CloudStack event logs
+
+**API signature:**
+```json
+POST /cloudstack/api/forceRemoveKubernetesClusterNode
+{
+  "id": "<cluster-id>",
+  "nodeId": "<node-vm-id>"   // or nodeName: "<hostname>"
+}
+```
+
+Or extend the existing scale API:
+```json
+POST /cloudstack/api/scaleKubernetesCluster
+{
+  "id": "<cluster-id>",
+  "nodeIds": ["<node-vm-id>"],
+  "forceRemove": true   // bypass drain/delete, force at CloudStack level
+}
+```
+
+### Implementation Notes
+
+**Safety considerations:**
+- Force-removal skips pod eviction — running workloads on the node will be disrupted. Document this clearly.
+- The node's PersistentVolumes may be left in `Released` state if not using dynamic provisioning with reclaim policy `Delete`.
+- Consider adding a `--dry-run` mode that shows what would happen without actually removing anything.
+- Require explicit confirmation (e.g., type the node name) for the API to prevent accidental force-removal.
+
+**UI considerations:**
+- Add a "Force Remove Node" action in the cluster node list (next to the normal scale-down button).
+- Show a warning dialog: "This will bypass Kubernetes drain and forcefully remove the node. Running workloads will be disrupted."
+- Grey out the button for nodes that are already in `NotReady` state for > X minutes (suggest force-remove as an option).
+
+**Alternative: dedicated remove worker**
+Instead of extending `scaleKubernetesCluster`, create a new `KubernetesClusterForceRemoveNodeWorker` (similar to `KubernetesClusterRemoveWorker` but with the force path). This keeps the normal scale-down flow clean and adds the force-remove as a separate operation.
+
+**Related to:**
+- §23 (Node Pool Support) — force-remove would be essential for node pools where a single broken node shouldn't block pool management
+- §13 (Health checks) — health checks could detect stuck nodes and suggest force-remove
+
+---
+
+## 24. Node Pool Support
 
 ### Problem
 CKS currently supports a single flat set of worker nodes — all workers share the same service offering (CPU/RAM/disk), labels, and taints. This is insufficient for real-world workloads that require heterogeneous node types:
@@ -649,7 +731,8 @@ POST /cloudstack/api/scaleKubernetesCluster
 | 20 | Network isolation for cluster management traffic | 🔴 |
 | 21 | Implement kubeadm token cleanup after bootstrap | 🔴 |
 | 22 | Make dashboard deployment optional during bootstrap | 🔴 |
-| 23 | Node pool support | 🔴 |
+| 23 | Force-remove failed/unreachable nodes | 🔴 |
+| 24 | Node pool support | 🔴 |
 
 > Items #6–#21 sourced from [CKS Detailed Analysis — Bootstrap & Upgrade](../../architecture/cks-analysis.md).
 
