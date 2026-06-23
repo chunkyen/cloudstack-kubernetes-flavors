@@ -274,7 +274,7 @@ The `deploy-kube-system` systemd service restarts on failure, but `kubeadm init`
 
 ---
 
-## 13. Health Checks Between Cluster Lifecycle Phases
+## 13. Comprehensive Cluster Health: Pre-Lifecycle Gates, On-Demand API, and Periodic Monitoring
 
 ### Problem
 After bootstrap, there's no ongoing health monitoring. A cluster could degrade silently — nodes go NotReady, pods crash-loop, etcd loses quorum, certificates expire — and the management server has no visibility until the user notices something is broken.
