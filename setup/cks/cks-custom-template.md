@@ -4,7 +4,7 @@
 
 From CloudStack 4.21+, you can register custom VM templates for CKS cluster nodes instead of relying on the default SystemVM template. This lets you:
 
-> **⚠️ Known Bug (ACS 4.22.x):** Explicitly selecting a custom CKS template in Advanced Settings during cluster creation can cause nodes to get stuck in "Starting" state indefinitely, even though the VM is actually running on the KVM host. The default SystemVM template path works fine. See [issue #13471](https://github.com/apache/cloudstack/issues/13471) and [discussion #13147](https://github.com/apache/cloudstack/discussions/13147). Reported to affect 4.22.1.0; worked on 4.21. Workaround: use the default SystemVM template for cluster nodes, or deploy nodes manually from your custom template and manage them outside CKS provisioning.
+> **⚠️ Known Bug:** Explicitly selecting a custom CKS template in Advanced Settings during cluster creation can cause nodes to get stuck in "Starting" state indefinitely, even though the VM is actually running on the KVM host. The default SystemVM template path works fine. See [issue #13471](https://github.com/apache/cloudstack/issues/13471) and [discussion #13147](https://github.com/apache/cloudstack/discussions/13147). Confirmed on ACS 4.22.1.0 (worked on 4.21); may be fixed in later versions. Workaround: use the default SystemVM template for cluster nodes, or deploy nodes manually from your custom template and manage them outside CKS provisioning.
 
 - Use a modern Linux distro (Ubuntu 24.04, Rocky 9, etc.)
 - Pre-install tools and drivers (helm, GPU drivers, monitoring agents)
@@ -352,11 +352,11 @@ This Packer template can be run in GitHub Actions, GitLab CI, or Jenkins to auto
 
 ## 6. Known Issues
 
-### Custom Template Node Provisioning Bug (ACS 4.22.x)
+### Custom Template Node Provisioning Bug
 
 **Symptoms:** When creating a CKS cluster and explicitly selecting a custom template in Advanced Settings, the node Instance stays in "Starting" state indefinitely. The libvirt domain is actually running (VNC console reachable), but CKS never transitions it to Running.
 
-**Affected versions:** ACS 4.22.1.0 (worked on 4.21)
+**Confirmed versions:** ACS 4.22.1.0 (worked on 4.21; may be fixed in later versions)
 
 **Workaround:** Use the default SystemVM template (`systemvm-kvm-4.22.0-x86_64`) for cluster nodes. Custom templates work fine for plain VM deployment — the issue is specific to the CKS provisioning path.
 

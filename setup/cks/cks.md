@@ -100,7 +100,7 @@ cmk add kubernetessupportedversion name=v1.33.1 semanticversion=1.33.1 iso=<iso-
 
 From ACS 4.21+, you can register custom templates for CKS.
 
-> **⚠️ Known Bug (ACS 4.22.x):** Selecting a custom CKS template in Advanced Settings during cluster creation can cause nodes to get stuck in "Starting" state indefinitely ([issue #13471](https://github.com/apache/cloudstack/issues/13471)). Workaround: use the default SystemVM template for cluster nodes.
+> **⚠️ Known Bug:** Selecting a custom CKS template in Advanced Settings during cluster creation can cause nodes to get stuck in "Starting" state indefinitely ([issue #13471](https://github.com/apache/cloudstack/issues/13471)). Confirmed on ACS 4.22.1.0 (worked on 4.21); may be fixed in later versions. Workaround: use the default SystemVM template for cluster nodes.
 
 > **Note:** If no custom CKS template is registered, CloudStack will use the **SystemVM template** for all cluster nodes.
 
