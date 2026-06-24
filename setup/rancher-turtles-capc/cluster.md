@@ -80,110 +80,15 @@ cmk list publicipaddresses listall=true zoneid=<zone-id> forvirtualnetwork=true 
 
 ### 3.1 Minimal Cluster (1 Control + 2 Workers)
 
-```yaml
-# cluster-minimal.yaml
-apiVersion: cluster.x-k8s.io/v1beta1
-kind: Cluster
-metadata:
-  name: capc-cluster-1
-  namespace: default
-spec:
-  clusterNetwork:
-    pods:
-      cidrBlocks: ["10.244.0.0/16"]
-    serviceDomain: cluster.local
-  controlPlaneRef:
-    apiVersion: controlplane.cluster.x-k8s.io/v1beta1
-    kind: KubeadmControlPlane
-    name: capc-cluster-1-control-plane
-  infrastructureRef:
-    apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
-    kind: CloudStackCluster
-    name: capc-cluster-1
----
-apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
-kind: CloudStackCluster
-metadata:
-  name: capc-cluster-1
-  namespace: default
-spec:
-  controlPlaneEndpoint:
-    host: "<reserved-public-ip>"  # Reserved public IP from CloudStack network
-    port: 6443
-  network:
-    name: "<network-name-or-id>"
-  zone:
-    name: "<zone-name-or-id>"
----
-apiVersion: controlplane.cluster.x-k8s.io/v1beta1
-kind: KubeadmControlPlane
-metadata:
-  name: capc-cluster-1-control-plane
-  namespace: default
-spec:
-  replicas: 1
-  version: "v1.32.0"
-  machineTemplate:
-    infrastructureRef:
-      apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
-      kind: CloudStackMachine
-      name: capc-cluster-1-control-plane
-  kubeadmConfigSpec:
-    clusterConfiguration:
-      apiServer:
-        certSANs:
-          - "<reserved-public-ip>"  # Must match controlPlaneEndpoint.host
----
-apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
-kind: CloudStackMachine
-metadata:
-  name: capc-cluster-1-control-plane
-  namespace: default
-spec:
-  serviceOffering: "Medium"
-  template: "capc-ubuntu-2404-kube-v1.32.3"
-  diskOffering: "Large"
----
-apiVersion: cluster.x-k8s.io/v1beta1
-kind: MachineDeployment
-metadata:
-  name: capc-cluster-1-workers
-  namespace: default
-spec:
-  replicas: 2
-  clusterName: capc-cluster-1
-  selector:
-    matchLabels:
-      cluster.x-k8s.io/cluster-name: capc-cluster-1
-  template:
-    spec:
-      version: "v1.32.0"
-      bootstrap:
-        configRef:
-          apiVersion: bootstrap.cluster.x-k8s.io/v1beta1
-          kind: KubeadmConfig
-          name: capc-cluster-1-workers
-      infrastructureRef:
-        apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
-        kind: CloudStackMachine
-        name: capc-cluster-1-workers
----
-apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
-kind: CloudStackMachine
-metadata:
-  name: capc-cluster-1-workers
-  namespace: default
-spec:
-  serviceOffering: "Medium"
-  template: "capc-ubuntu-2404-kube-v1.32.3"
-  diskOffering: "Large"
----
-apiVersion: bootstrap.cluster.x-k8s.io/v1beta1
-kind: KubeadmConfig
-metadata:
-  name: capc-cluster-1-workers
-  namespace: default
-spec: {}
+The full cluster YAML is available in the manifests folder: [10-minimal-cluster.yaml](./manifests/10-minimal-cluster.yaml)
+
+Replace the placeholders before applying:
+- `<reserved-public-ip>` — a free public IP from CloudStack
+- `<network-name-or-id>` — CloudStack network name or ID
+- `<zone-name-or-id>` — CloudStack zone name or ID
+
+```bash
+kubectl apply -f manifests/10-minimal-cluster.yaml
 ```
 
 ### 3.2 Apply and Monitor
@@ -204,110 +109,15 @@ kubectl get events --sort-by='.lastTimestamp' -n default
 
 ### 3.3 HA Cluster (3 Control + 3 Workers)
 
-```yaml
-# cluster-ha.yaml
-apiVersion: cluster.x-k8s.io/v1beta1
-kind: Cluster
-metadata:
-  name: capc-cluster-ha
-  namespace: default
-spec:
-  clusterNetwork:
-    pods:
-      cidrBlocks: ["10.244.0.0/16"]
-    serviceDomain: cluster.local
-  controlPlaneRef:
-    apiVersion: controlplane.cluster.x-k8s.io/v1beta1
-    kind: KubeadmControlPlane
-    name: capc-cluster-ha-control-plane
-  infrastructureRef:
-    apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
-    kind: CloudStackCluster
-    name: capc-cluster-ha
----
-apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
-kind: CloudStackCluster
-metadata:
-  name: capc-cluster-ha
-  namespace: default
-spec:
-  controlPlaneEndpoint:
-    host: "<reserved-public-ip>"  # Reserved public IP from CloudStack network
-    port: 6443
-  network:
-    name: "<network-name-or-id>"
-  zone:
-    name: "<zone-name-or-id>"
----
-apiVersion: controlplane.cluster.x-k8s.io/v1beta1
-kind: KubeadmControlPlane
-metadata:
-  name: capc-cluster-ha-control-plane
-  namespace: default
-spec:
-  replicas: 3
-  version: "v1.32.0"
-  machineTemplate:
-    infrastructureRef:
-      apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
-      kind: CloudStackMachine
-      name: capc-cluster-ha-control-plane
-  kubeadmConfigSpec:
-    clusterConfiguration:
-      apiServer:
-        certSANs:
-          - "<reserved-public-ip>"  # Must match controlPlaneEndpoint.host
----
-apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
-kind: CloudStackMachine
-metadata:
-  name: capc-cluster-ha-control-plane
-  namespace: default
-spec:
-  serviceOffering: "Large"
-  template: "capc-ubuntu-2404-kube-v1.32.3"
-  diskOffering: "Large"
----
-apiVersion: cluster.x-k8s.io/v1beta1
-kind: MachineDeployment
-metadata:
-  name: capc-cluster-ha-workers
-  namespace: default
-spec:
-  replicas: 3
-  clusterName: capc-cluster-ha
-  selector:
-    matchLabels:
-      cluster.x-k8s.io/cluster-name: capc-cluster-ha
-  template:
-    spec:
-      version: "v1.32.0"
-      bootstrap:
-        configRef:
-          apiVersion: bootstrap.cluster.x-k8s.io/v1beta1
-          kind: KubeadmConfig
-          name: capc-cluster-ha-workers
-      infrastructureRef:
-        apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
-        kind: CloudStackMachine
-        name: capc-cluster-ha-workers
----
-apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
-kind: CloudStackMachine
-metadata:
-  name: capc-cluster-ha-workers
-  namespace: default
-spec:
-  serviceOffering: "Large"
-  template: "capc-ubuntu-2404-kube-v1.32.3"
-  diskOffering: "Large"
----
-apiVersion: bootstrap.cluster.x-k8s.io/v1beta1
-kind: KubeadmConfig
-metadata:
-  name: capc-cluster-ha-workers
-  namespace: default
-spec: {}
+The full cluster YAML is available in the manifests folder: [11-ha-cluster.yaml](./manifests/11-ha-cluster.yaml)
+
+Replace the placeholders before applying:
+- `<reserved-public-ip>` — a free public IP from CloudStack
+- `<network-name-or-id>` — CloudStack network name or ID
+- `<zone-name-or-id>` — CloudStack zone name or ID
+
+```bash
+kubectl apply -f manifests/11-ha-cluster.yaml
 ```
 
 ## 4. Access the Cluster

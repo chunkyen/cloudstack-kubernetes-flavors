@@ -1,0 +1,108 @@
+# HA CAPC cluster — 3 control planes + 3 workers
+# Replace placeholders before applying:
+#   <reserved-public-ip>   — a free public IP from CloudStack
+#   <network-name-or-id>   — CloudStack network name or ID
+#   <zone-name-or-id>      — CloudStack zone name or ID
+---
+apiVersion: cluster.x-k8s.io/v1beta1
+kind: Cluster
+metadata:
+  name: capc-cluster-ha
+  namespace: default
+spec:
+  clusterNetwork:
+    pods:
+      cidrBlocks: ["10.244.0.0/16"]
+    serviceDomain: cluster.local
+  controlPlaneRef:
+    apiVersion: controlplane.cluster.x-k8s.io/v1beta1
+    kind: KubeadmControlPlane
+    name: capc-cluster-ha-control-plane
+  infrastructureRef:
+    apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
+    kind: CloudStackCluster
+    name: capc-cluster-ha
+---
+apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
+kind: CloudStackCluster
+metadata:
+  name: capc-cluster-ha
+  namespace: default
+spec:
+  controlPlaneEndpoint:
+    host: "<reserved-public-ip>"  # Reserved public IP from CloudStack network
+    port: 6443
+  network:
+    name: "<network-name-or-id>"
+  zone:
+    name: "<zone-name-or-id>"
+---
+apiVersion: controlplane.cluster.x-k8s.io/v1beta1
+kind: KubeadmControlPlane
+metadata:
+  name: capc-cluster-ha-control-plane
+  namespace: default
+spec:
+  replicas: 3
+  version: "v1.32.0"
+  machineTemplate:
+    infrastructureRef:
+      apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
+      kind: CloudStackMachine
+      name: capc-cluster-ha-control-plane
+  kubeadmConfigSpec:
+    clusterConfiguration:
+      apiServer:
+        certSANs:
+          - "<reserved-public-ip>"  # Must match controlPlaneEndpoint.host
+---
+apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
+kind: CloudStackMachine
+metadata:
+  name: capc-cluster-ha-control-plane
+  namespace: default
+spec:
+  serviceOffering: "Large"
+  template: "capc-ubuntu-2404-kube-v1.32.3"
+  diskOffering: "Large"
+---
+apiVersion: cluster.x-k8s.io/v1beta1
+kind: MachineDeployment
+metadata:
+  name: capc-cluster-ha-workers
+  namespace: default
+spec:
+  replicas: 3
+  clusterName: capc-cluster-ha
+  selector:
+    matchLabels:
+      cluster.x-k8s.io/cluster-name: capc-cluster-ha
+  template:
+    spec:
+      version: "v1.32.0"
+      bootstrap:
+        configRef:
+          apiVersion: bootstrap.cluster.x-k8s.io/v1beta1
+          kind: KubeadmConfig
+          name: capc-cluster-ha-workers
+      infrastructureRef:
+        apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
+        kind: CloudStackMachine
+        name: capc-cluster-ha-workers
+---
+apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
+kind: CloudStackMachine
+metadata:
+  name: capc-cluster-ha-workers
+  namespace: default
+spec:
+  serviceOffering: "Large"
+  template: "capc-ubuntu-2404-kube-v1.32.3"
+  diskOffering: "Large"
+---
+apiVersion: bootstrap.cluster.x-k8s.io/v1beta1
+kind: KubeadmConfig
+metadata:
+  name: capc-cluster-ha-workers
+  namespace: default
+spec: {}
