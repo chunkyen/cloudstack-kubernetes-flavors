@@ -43,6 +43,24 @@ cmk register-template \
 
 > **Note:** CAPC images are different from CKS ISOs. CKS ISOs are used for bootstrapping CKS clusters via the CloudStack Kubernetes Provider. CAPC images are used directly by CAPC to provision VMs with Kubernetes pre-installed.
 
+### 2.3 Reserve a Public IP
+
+CAPC requires an **available public IP** for the cluster API endpoint. This IP is used as the load balancer endpoint for the Kubernetes API server. CAPC will automatically create firewall rules and load balancer rules for this IP, but **you must provide the IP address** — CAPC does not auto-allocate it.
+
+**To find available public IPs:**
+
+```bash
+# List free public IPs in a zone
+cmk list publicipaddresses listall=true zoneid=<zone-id> forvirtualnetwork=true allocatedonly=false
+
+# Filter for free IPs only
+cmk list publicipaddresses listall=true zoneid=<zone-id> forvirtualnetwork=true allocatedonly=false | jq '.publicipaddress[] | select(.state == "Free" or .state == "Reserved") | .ipaddress'
+```
+
+**Important:** The IP must be from the network's public IP pool. If the IP is already allocated, CAPC will fail to create the cluster. Reserve it before creating the cluster.
+
+> **Why is this required?** The Kubernetes API server needs a stable, externally accessible endpoint. CAPC uses CloudStack's built-in load balancer to expose the API server on this IP. Without a reserved public IP, the control plane cannot be reached from outside the management cluster.
+
 ## 3. Create a Cluster
 
 ### 3.1 Minimal Cluster (1 Control + 2 Workers)
@@ -75,7 +93,7 @@ metadata:
   namespace: default
 spec:
   controlPlaneEndpoint:
-    host: "<load-balancer-ip>"
+    host: "<reserved-public-ip>"  # Reserved public IP from CloudStack network
     port: 6443
   network:
     name: "<network-name-or-id>"
@@ -99,7 +117,7 @@ spec:
     clusterConfiguration:
       apiServer:
         certSANs:
-          - "<load-balancer-ip>"
+          - "<reserved-public-ip>"  # Must match controlPlaneEndpoint.host
 ---
 apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
 kind: CloudStackMachine
@@ -199,7 +217,7 @@ metadata:
   namespace: default
 spec:
   controlPlaneEndpoint:
-    host: "<load-balancer-ip>"
+    host: "<reserved-public-ip>"  # Reserved public IP from CloudStack network
     port: 6443
   network:
     name: "<network-name-or-id>"
@@ -223,7 +241,7 @@ spec:
     clusterConfiguration:
       apiServer:
         certSANs:
-          - "<load-balancer-ip>"
+          - "<reserved-public-ip>"  # Must match controlPlaneEndpoint.host
 ---
 apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
 kind: CloudStackMachine

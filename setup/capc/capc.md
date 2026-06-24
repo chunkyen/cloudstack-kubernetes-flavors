@@ -211,6 +211,47 @@ export CLOUDSTACK_TEMPLATE_NAME=kube-v1.32/ubuntu-2404
 export CLOUDSTACK_SSH_KEY_NAME=CAPCKeyPair
 ```
 
+### Public IP — Critical Requirement
+
+The `CLUSTER_ENDPOINT_IP` is the **most common cause of cluster creation failure**. Here's what you need to know:
+
+**Why it's required:** The Kubernetes API server needs a stable, externally accessible endpoint. CAPC uses CloudStack's built-in load balancer to expose the API server on this IP. Without a reserved public IP, the control plane cannot be reached from outside the management cluster.
+
+**CAPC does NOT auto-allocate the IP.** You must provide an IP that is already in the `Free` or `Reserved` state in CloudStack's public IP pool.
+
+**How to find available IPs:**
+
+```bash
+# List all public IPs in a zone
+cmk list publicipaddresses listall=true zoneid=<zone-id> forvirtualnetwork=true
+
+# Filter for free (unallocated) IPs only
+cmk list publicipaddresses listall=true zoneid=<zone-id> forvirtualnetwork=true allocatedonly=false | jq '.publicipaddress[] | select(.state == "Free" or .state == "Reserved") | .ipaddress'
+```
+
+**What happens if you use an allocated IP:** CAPC will fail to create the cluster. The CloudStackCluster will stay in `Provisioning` state and you'll see errors in the CAPC controller logs:
+
+```bash
+kubectl logs -n capc-system -l app=cloudstack -f | grep -i error
+```
+
+**Where it's used:** The IP appears in two places in the generated cluster spec:
+1. `CloudStackCluster.spec.controlPlaneEndpoint.host` — the load balancer endpoint
+2. `KubeadmControlPlane.spec.kubeadmConfigSpec.clusterConfiguration.apiServer.certSANs` — the API server certificate
+
+Both must use the same IP.
+
+**Shared networks:** If using a shared or routed network (not isolated), you must use [kube-vip](https://kube-vip.io/) as the VIP instead of CloudStack's load balancer. Generate with the `with-kube-vip` flavor:
+
+```bash
+clusterctl generate cluster capc-cluster \
+  --flavor with-kube-vip \
+  --kubernetes-version v1.32 \
+  --control-plane-machine-count=3 \
+  --worker-machine-count=2 \
+  > capc-cluster-spec.yaml
+```
+
 Generate the cluster spec YAML:
 
 ```bash
