@@ -97,7 +97,7 @@ The full cluster YAML is available in the manifests folder: [10-minimal-cluster.
 | Parameter | Description | How to Find |
 |-----------|-------------|-------------|
 | `<reserved-public-ip>` | Free public IP for API endpoint | `cmk list publicipaddresses listall=true zoneid=<zone-id> forvirtualnetwork=true allocatedonly=false` |
-| `<network-name-or-id>` | CloudStack network | `cmk list networks listall=true zoneid=<zone-id>` |
+| `<network-name-or-id>` | Network name/ID — CAPC creates it if it doesn't exist | Any name you choose (e.g. `capc-cluster-1-net`) |
 | `<zone-name-or-id>` | CloudStack zone | `cmk list zones` |
 | `capc-ubuntu-2404-kube-v1.32.3` | CAPI-compatible template name | Must be registered (see [Section 2.2](#22-register-the-template)) |
 | `Medium` / `Large` | Service offering names | `cmk list serviceofferings listall=true` (control plane needs ≥2GB RAM, 2 vCPU) |
