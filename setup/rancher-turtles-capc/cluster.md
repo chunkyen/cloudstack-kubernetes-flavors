@@ -11,8 +11,7 @@ This guide covers provisioning Kubernetes clusters on CloudStack using CAPI CRDs
 > **⚠️ What CAPC Creates Automatically**
 >
 > You do **not** need to pre-create the network. CAPC automatically provisions:
-> - **Network** — If the specified network doesn't exist, CAPC creates an isolated network
-> - **VPC** — If the network is part of a VPC, CAPC creates the VPC if needed
+> - **Network** — If the specified network doesn't exist, CAPC creates a new isolated network
 > - **Load Balancer** — For the Kubernetes API endpoint
 > - **Firewall Rules** — For API server access
 > - **Port Forwarding** — For SSH access to control plane nodes
