@@ -201,23 +201,23 @@ kubectl edit machinedeployment capc-cluster-1-workers
 # Change spec.template.spec.version
 ```
 
-### 6.2 Install CNI
+## 7. Install CNI
 
 CAPC clusters do **not** include a CNI by default. You must install one after the cluster is created. Without a CNI, pods cannot communicate with each other.
 
-### Calico (Recommended)
+### 7.1 Calico (Recommended)
 
 ```bash
 kubectl --kubeconfig=kubeconfig apply -f https://raw.githubusercontent.com/projectcalico/calico/master/manifests/calico.yaml
 ```
 
-### Cilium
+### 7.2 Cilium
 
 ```bash
 kubectl --kubeconfig=kubeconfig apply -f https://raw.githubusercontent.com/cilium/cilium/main/install/kubernetes/quickstep.yaml
 ```
 
-### Change CNI
+### 7.3 Change CNI
 
 If you installed the wrong CNI, uninstall it first, then install the correct one:
 
@@ -226,9 +226,9 @@ kubectl --kubeconfig=kubeconfig delete -f https://raw.githubusercontent.com/proj
 kubectl --kubeconfig=kubeconfig apply -f <new-cni-manifest>
 ```
 
-## 7. Troubleshooting
+## 8. Troubleshooting
 
-### 7.1 Cluster Stuck in "Provisioning"
+### 8.1 Cluster Stuck in "Provisioning"
 
 ```bash
 # Check CloudStackCluster status
@@ -241,7 +241,7 @@ kubectl describe cloudstackmachine capc-cluster-1-workers-xxxxx
 kubectl logs -n capc-system -l app=cloudstack -f
 ```
 
-### 7.2 Nodes Not Joining
+### 8.2 Nodes Not Joining
 
 ```bash
 # Check kubeadm logs on nodes
@@ -254,7 +254,7 @@ kubectl get secret | grep bootstrap
 kubectl --kubeconfig=kubeconfig get nodes
 ```
 
-### 7.3 CloudStack VM Creation Failed
+### 8.3 CloudStack VM Creation Failed
 
 ```bash
 # Check CAPC logs for CloudStack API errors
@@ -270,7 +270,7 @@ cmk list templates filter=featured id=<template-id>
 cmk list serviceofferings id=<offering-id>
 ```
 
-## 8. Next Steps
+## 9. Next Steps
 
 - [Fleet GitOps](./fleet.md) — Automate cluster management with Fleet
 - [CAPC Upgrade Guide](../capc/capc-upgrade.md) — Upgrading CAPC and clusters
