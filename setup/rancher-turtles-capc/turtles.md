@@ -11,7 +11,7 @@ This guide covers installing Rancher Turtles and configuring CAPC as a CAPI infr
 
 ## 2. Install Rancher Turtles
 
-### Via Helm (Recommended)
+### 2.1 Via Helm (Recommended)
 
 ```bash
 # Add the Turtles Helm repo
@@ -25,7 +25,7 @@ helm install turtles turtles/turtles \
   --set turtlesVersion=v0.24.0
 ```
 
-### Verify Turtles Installation
+### 2.2 Verify Turtles Installation
 
 ```bash
 kubectl get pods -n cattle-turtles-system
@@ -44,7 +44,7 @@ kubectl get crds | grep turtles
 
 Turtles uses the `CAPIProvider` custom resource to manage CAPI providers. All providers live in the `cattle-capi-system` namespace.
 
-### Core Provider
+### 3.1 Core Provider
 
 ```yaml
 # core-provider.yaml
@@ -58,7 +58,7 @@ spec:
   type: core
 ```
 
-### Bootstrap Provider (Kubeadm)
+### 3.2 Bootstrap Provider (Kubeadm)
 
 ```yaml
 # bootstrap-provider.yaml
@@ -72,7 +72,7 @@ spec:
   type: bootstrap
 ```
 
-### Control Plane Provider (Kubeadm)
+### 3.3 Control Plane Provider (Kubeadm)
 
 ```yaml
 # controlplane-provider.yaml
@@ -86,7 +86,7 @@ spec:
   type: controlPlane
 ```
 
-### Apply All Core Providers
+### 3.4 Apply All Core Providers
 
 ```bash
 kubectl apply -f core-provider.yaml
@@ -94,7 +94,7 @@ kubectl apply -f bootstrap-provider.yaml
 kubectl apply -f controlplane-provider.yaml
 ```
 
-### Verify Core Providers
+### 3.5 Verify Core Providers
 
 ```bash
 kubectl get capiprovider -n cattle-capi-system
@@ -107,7 +107,7 @@ kubectl get capiprovider -n cattle-capi-system
 
 ## 4. Configure CAPC Provider
 
-### CloudStack Config Secret
+### 4.1 CloudStack Config Secret
 
 Create the secret with CloudStack API credentials:
 
@@ -143,7 +143,7 @@ kubectl apply -f cloudstack-secret.yaml
 > 2. Click your account (top-right) → API Key
 > 3. Copy the API key and secret key
 
-### CAPIProvider for CloudStack
+### 4.2 CAPIProvider for CloudStack
 
 ```yaml
 # cloudstack-provider.yaml
@@ -163,7 +163,7 @@ spec:
 kubectl apply -f cloudstack-provider.yaml
 ```
 
-### Verify CAPC Installation
+### 4.3 Verify CAPC Installation
 
 ```bash
 # Check CAPIProvider status
@@ -188,7 +188,7 @@ kubectl logs -n capc-system -l app=cloudstack
 
 ## 5. All Providers Together
 
-### Combined Manifest
+### 5.1 Combined Manifest
 
 ```yaml
 # all-providers.yaml
@@ -238,7 +238,7 @@ kubectl get capiprovider -n cattle-capi-system
 
 ## 6. Provider Management
 
-### Update Provider Version
+### 6.1 Update Provider Version
 
 ```bash
 # Edit the CAPIProvider to change version
@@ -249,14 +249,14 @@ kubectl delete CAPIProvider cloudstack -n cattle-capi-system
 kubectl apply -f cloudstack-provider.yaml  # with updated version
 ```
 
-### Remove a Provider
+### 6.2 Remove a Provider
 
 ```bash
 kubectl delete CAPIProvider cloudstack -n cattle-capi-system
 # Turtles will garbage collect all generated provider resources
 ```
 
-### Check Provider Logs
+### 6.3 Check Provider Logs
 
 ```bash
 # CAPC controller logs
@@ -273,7 +273,7 @@ kubectl get pods -A | grep -E 'capi-controller|kubeadm|cloudstack'
 
 ## 7. Troubleshooting
 
-### Turtles Not Installing Providers
+### 7.1 Turtles Not Installing Providers
 
 ```bash
 # Check Turtles controller logs
@@ -286,7 +286,7 @@ kubectl describe CAPIProvider -n cattle-capi-system
 kubectl get crds | grep cluster-api
 ```
 
-### Provider Stuck in "Installing" State
+### 7.2 Provider Stuck in "Installing" State
 
 ```bash
 # Check the CAPIProvider status
@@ -299,7 +299,7 @@ kubectl get events -n cattle-capi-system --sort-by='.lastTimestamp'
 kubectl logs -n capc-system -l app=cloudstack -f
 ```
 
-### CloudStack API Connection Failed
+### 7.3 CloudStack API Connection Failed
 
 ```bash
 # Test connectivity from CAPC pod
@@ -313,7 +313,7 @@ kubectl get secret cloudstack-config -n cattle-capi-system -o yaml
 kubectl get networkpolicies -n cattle-capi-system
 ```
 
-### CRDs Not Created
+### 7.4 CRDs Not Created
 
 ```bash
 # Verify CAPC is running
@@ -326,7 +326,7 @@ kubectl logs -n capc-system -l app=cloudstack | tail -50
 kubectl get crds | grep cloudstack
 ```
 
-### CAPC Not Provisioning VMs
+### 7.5 CAPC Not Provisioning VMs
 
 ```bash
 # Verify CloudStack API access from CAPC pod

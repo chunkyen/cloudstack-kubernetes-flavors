@@ -35,7 +35,7 @@ This guide walks through deploying Rancher on a CKS cluster to serve as the mana
 
 ## 2. Prerequisites
 
-### CloudStack
+### 2.1 CloudStack
 
 | Resource | Details |
 |----------|--------|
@@ -46,7 +46,7 @@ This guide walks through deploying Rancher on a CKS cluster to serve as the mana
 | **Compute Offerings** | Control plane (2vCPU/2GB+), workers (as needed) |
 | **CKS Plugin** | Enabled via `cloud.kubernetes.service.enabled` |
 
-### Bootstrap Cluster
+### 2.2 Bootstrap Cluster
 
 A CKS cluster on CloudStack to host Rancher. See the [CKS Setup Guide](../cks/cks.md) for creating one.
 
@@ -55,7 +55,7 @@ Minimum sizing for Rancher:
 - **Worker nodes**: 2 nodes, 4vCPU/8GB each (for Rancher + Turtles + CAPC)
 - **Storage**: 100GB+ disk for container images and Rancher data
 
-### Local Machine
+### 2.3 Local Machine
 
 - `kubectl` configured with bootstrap cluster access
 - `helm` v3.12+
@@ -66,7 +66,7 @@ Minimum sizing for Rancher:
 
 **This is the key difference that trips people up.**
 
-### Traditional CAPC Setup
+### 3.1 Traditional CAPC Setup
 
 ```bash
 # 1. Bootstrap a management cluster (kind, k3s, etc.)
@@ -80,7 +80,7 @@ kubectl apply -f cluster.yaml
 
 `clusterctl init` fetches CAPC manifests, deploys the `capc-controller-manager`, and registers CRDs.
 
-### Rancher Turtles + CAPC Setup
+### 3.2 Rancher Turtles + CAPC Setup
 
 ```bash
 # 1. Install Rancher (Turtles is bundled in v2.13+)
@@ -94,7 +94,7 @@ kubectl apply -f cluster.yaml
 
 **Turtles replaces `clusterctl init`.** The `CAPIProvider` resource *is* the install command — Turtles watches it, fetches the provider manifests, and deploys them automatically.
 
-### Side-by-Side Comparison
+### 3.3 Side-by-Side Comparison
 
 | Step | Traditional CAPC | Rancher Turtles + CAPC |
 |------|-----------------|----------------------|
@@ -106,7 +106,7 @@ kubectl apply -f cluster.yaml
 | Cluster creation | `clusterctl generate cluster` + `kubectl apply` | Same (no change) |
 | Multi-provider | Manual `clusterctl init` for each | Single `CAPIProvider` per provider |
 
-### Why Turtles?
+### 3.4 Why Turtles?
 
 - **Declarative**: No imperative `clusterctl init` commands — providers are managed as Kubernetes resources
 - **Integrated**: Turtles is a Rancher system chart, no separate installation needed

@@ -19,14 +19,14 @@ Fleet enables:
 
 ## 3. Configure Fleet
 
-### Enable Fleet in Rancher
+### 3.1 Enable Fleet in Rancher
 
 Fleet is included with Rancher. Enable it:
 
 1. In Rancher UI: **Global → Fleet** — should show as Active
 2. If not active, check Fleet system charts in **Local Cluster → System Project**
 
-### Create a Cluster Group
+### 3.2 Create a Cluster Group
 
 ```yaml
 # fleet/cluster-group.yaml
@@ -48,7 +48,7 @@ kubectl apply -f fleet/cluster-group.yaml
 
 ## 4. GitOps Cluster Config
 
-### Repository Resource
+### 4.1 Repository Resource
 
 ```yaml
 # fleet/repo.yaml
@@ -69,7 +69,7 @@ spec:
   targetNamespace: cks-clusters
 ```
 
-### Cluster Config in Git
+### 4.2 Cluster Config in Git
 
 ```yaml
 # clusters/cks-cluster-1.yaml
@@ -107,7 +107,7 @@ spec:
     name: "<zone-name-or-id>"
 ```
 
-### Apply and Sync
+### 4.3 Apply and Sync
 
 ```bash
 # Push config to Git repo
@@ -120,7 +120,7 @@ kubectl get bundles -n fleet-default
 
 ## 5. Deploy Workloads via Fleet
 
-### Bundle Resource
+### 5.1 Bundle Resource
 
 ```yaml
 # fleet/bundle.yaml
@@ -164,7 +164,7 @@ spec:
                     - containerPort: 80
 ```
 
-### Deploy via GitRepo
+### 5.2 Deploy via GitRepo
 
 ```yaml
 # fleet/workload-repo.yaml
@@ -184,7 +184,7 @@ spec:
 
 ## 6. Multi-Cluster Management
 
-### Cluster Labels
+### 6.1 Cluster Labels
 
 Label clusters for targeted deployments:
 
@@ -194,7 +194,7 @@ kubectl label cluster cks-cluster-1 environment=production
 kubectl label cluster cks-cluster-1 region=us-east
 ```
 
-### Targeted Deployments
+### 6.2 Targeted Deployments
 
 ```yaml
 # fleet/prod-only.yaml
@@ -217,7 +217,7 @@ spec:
 
 ## 7. Drift Detection
 
-### Enable Drift Detection
+### 7.1 Enable Drift Detection
 
 ```yaml
 # Enable drift detection on a GitRepo
@@ -241,7 +241,7 @@ spec:
           - default
 ```
 
-### Check Drift Status
+### 7.2 Check Drift Status
 
 ```bash
 # See drifted resources
@@ -253,7 +253,7 @@ kubectl describe drift <name> -n fleet-default
 
 ## 8. Fleet + CAPI Integration
 
-### Auto-Import Clusters
+### 8.1 Auto-Import Clusters
 
 Fleet can auto-import CAPI-managed clusters:
 
@@ -275,7 +275,7 @@ spec:
         operator: Exists
 ```
 
-### Cluster API + Fleet Workflow
+### 8.2 Cluster API + Fleet Workflow
 
 ```
 1. Git push → Fleet detects CAPI Cluster CRD
@@ -287,7 +287,7 @@ spec:
 
 ## 9. Troubleshooting
 
-### Fleet Not Syncing
+### 9.1 Fleet Not Syncing
 
 ```bash
 # Check GitRepo status
@@ -300,7 +300,7 @@ kubectl logs -n cattle-fleet-system deployment/fleet-controller -f
 kubectl describe gitrepo cks-cluster-configs -n fleet-default
 ```
 
-### Cluster Not Imported
+### 9.2 Cluster Not Imported
 
 ```bash
 # Check Fleet cluster registration
@@ -313,7 +313,7 @@ kubectl get cluster -A --show-labels
 kubectl get pods -n cattle-fleet-system -A
 ```
 
-### Bundle Not Deploying
+### 9.3 Bundle Not Deploying
 
 ```bash
 # Check bundle status

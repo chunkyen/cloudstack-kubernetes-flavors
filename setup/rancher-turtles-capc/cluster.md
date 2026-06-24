@@ -30,7 +30,7 @@ cmk register-template \
 
 ## 3. Create a Cluster
 
-### Minimal Cluster (1 Control + 2 Workers)
+### 3.1 Minimal Cluster (1 Control + 2 Workers)
 
 ```yaml
 # cluster-minimal.yaml
@@ -138,7 +138,7 @@ metadata:
 spec: {}
 ```
 
-### Apply and Monitor
+### 3.2 Apply and Monitor
 
 ```bash
 kubectl apply -f cluster-minimal.yaml
@@ -154,7 +154,7 @@ kubectl get machinedeployments
 kubectl get events --sort-by='.lastTimestamp' -n default
 ```
 
-### HA Cluster (3 Control + 3 Workers + Etcd)
+### 3.3 HA Cluster (3 Control + 3 Workers + Etcd)
 
 ```yaml
 # cluster-ha.yaml
@@ -269,7 +269,7 @@ spec: {}
 
 ## 4. Access the Cluster
 
-### Get kubeconfig
+### 4.1 Get kubeconfig
 
 ```bash
 # The cluster creates a Secret with kubeconfig
@@ -280,7 +280,7 @@ kubectl --kubeconfig=kubeconfig get nodes
 kubectl --kubeconfig=kubeconfig get pods -n kube-system
 ```
 
-### SSH to Nodes
+### 4.2 SSH to Nodes
 
 ```bash
 # Control node (port 2222 + node_index)
@@ -292,7 +292,7 @@ ssh -i <key> -p 2223 cloud@<VR_PUBLIC_IP>
 
 ## 5. Scale the Cluster
 
-### Scale Workers
+### 5.1 Scale Workers
 
 ```bash
 # Via kubectl
@@ -302,7 +302,7 @@ kubectl scale machinedeployment cks-cluster-1-workers --replicas=5
 kubectl edit machinedeployment cks-cluster-1-workers
 ```
 
-### Scale Control Plane
+### 5.2 Scale Control Plane
 
 ```bash
 # Edit KubeadmControlPlane replicas
@@ -312,7 +312,7 @@ kubectl edit kubeadmcontrolplane cks-cluster-1-control-plane
 
 ## 6. Upgrade the Cluster
 
-### Upgrade Kubernetes Version
+### 6.1 Upgrade Kubernetes Version
 
 ```bash
 # Update KubeadmControlPlane version
@@ -324,7 +324,7 @@ kubectl edit machinedeployment cks-cluster-1-workers
 # Change spec.template.spec.version
 ```
 
-### Upgrade CNI
+### 6.2 Upgrade CNI
 
 The CNI is baked into the CKS ISO. To change CNI version:
 
@@ -334,7 +334,7 @@ The CNI is baked into the CKS ISO. To change CNI version:
 
 ## 7. Troubleshooting
 
-### Cluster Stuck in "Provisioning"
+### 7.1 Cluster Stuck in "Provisioning"
 
 ```bash
 # Check CloudStackCluster status
@@ -347,7 +347,7 @@ kubectl describe cloudstackmachine cks-cluster-1-workers-xxxxx
 kubectl logs -n capc-system -l app=cloudstack -f
 ```
 
-### Nodes Not Joining
+### 7.2 Nodes Not Joining
 
 ```bash
 # Check kubeadm logs on nodes
@@ -360,7 +360,7 @@ kubectl get secret | grep bootstrap
 kubectl --kubeconfig=kubeconfig get nodes
 ```
 
-### CloudStack VM Creation Failed
+### 7.3 CloudStack VM Creation Failed
 
 ```bash
 # Check CAPC logs for CloudStack API errors

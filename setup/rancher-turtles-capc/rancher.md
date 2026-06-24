@@ -14,7 +14,7 @@ This guide walks through deploying Rancher on a CKS cluster to serve as the mana
 
 Rancher needs persistent storage for etcd data. On CKS, you have two options:
 
-### Option A: CloudStack CSI Driver (Recommended)
+### 2.1 CloudStack CSI Driver (Recommended)
 
 ```bash
 # Enable CSI during CKS cluster creation
@@ -24,7 +24,7 @@ kubectl apply -f https://raw.githubusercontent.com/cloudstack/cluster-api-provid
 kubectl apply -f https://raw.githubusercontent.com/apache/cloudstack-kubernetes-csi-driver/main/deploy/kubernetes/csi/cloudstack-csi.yaml
 ```
 
-### Option B: Local Path Provisioner (Quick Start)
+### 2.2 Local Path Provisioner (Quick Start)
 
 ```bash
 kubectl apply -f https://raw.githubusercontent.com/rancher/local-path-provisioner/master/deploy/local-path-storage.yaml
@@ -33,7 +33,7 @@ kubectl patch storageclass local-path -p '{"metadata":{"annotations":{"storagecl
 
 ## 3. Install Rancher
 
-### Via Helm (Recommended)
+### 3.1 Via Helm (Recommended)
 
 ```bash
 # Add the Rancher Helm repo
@@ -54,7 +54,7 @@ helm install rancher rancher-stable/rancher \
 
 ## 4. Access Rancher
 
-### Get Admin Password
+### 4.1 Get Admin Password
 
 ```bash
 kubectl -n cattle-system get secret \
@@ -63,7 +63,7 @@ kubectl -n cattle-system get secret \
   -o jsonpath='{.data.bootstrapPassword}' | base64 -d
 ```
 
-### Access UI
+### 4.2 Access UI
 
 Rancher **must be accessed via the FQDN** set in the `--set hostname=` helm parameter — it will not function correctly when accessed by IP address.
 
@@ -97,7 +97,7 @@ Navigate to **`https://rancher.<your-domain>`** — this must match the hostname
 
 > **No port-forwarding needed** — the CloudStack Kubernetes Provider automatically creates a LoadBalancer service that exposes Rancher on a public VIP.
 
-### First Login
+### 4.3 First Login
 
 1. Navigate to **`https://rancher.<your-domain>`** (use the FQDN, not the IP)
 2. Enter the bootstrap password
@@ -117,7 +117,7 @@ kubectl cluster-info
 
 ## 6. Troubleshooting
 
-### Rancher Not Accessible
+### 6.1 Rancher Not Accessible
 
 ```bash
 # Verify LoadBalancer service was created by CloudStack Kubernetes Provider
@@ -131,7 +131,7 @@ kubectl logs -n cattle-system -l app=rancher | grep -i loadbalancer
 nslookup rancher.<your-domain>
 ```
 
-### Rancher Pods Not Starting
+### 6.2 Rancher Pods Not Starting
 
 ```bash
 # Check Rancher logs
