@@ -102,7 +102,7 @@ The full cluster YAML is available in the manifests folder: [10-minimal-cluster.
 | `capc-ubuntu-2404-kube-v1.32.3` | CAPI-compatible template name | Must be registered (see [Section 2.2](#22-register-the-template)) |
 | `Medium` / `Large` | Service offering names | `cmk list serviceofferings listall=true` (control plane needs ≥2GB RAM, 2 vCPU) |
 | `Large` (diskOffering) | Disk offering name | `cmk list diskofferings listall=true` |
-| `<YOUR_SSH_PUBLIC_KEY>` | SSH public key for node access | Paste your full key (e.g. `ssh-ed25519 AAAA...`) — embedded directly into KubeadmConfig |
+| `<YOUR_SSH_PUBLIC_KEY>` | SSH public key for node access | **Method 1:** Register in CloudStack (`cmk register-sshkeypair`), reference via `sshKey` in CloudStackMachine. **Method 2:** Paste full key — embedded directly into KubeadmConfig |
 
 > **Namespace note:** The YAML uses `namespace: default`, which means all CAPI resources (CloudStackCluster, KubeadmControlPlane, MachineDeployment, etc.) are created in the `default` namespace of the **management cluster** (your Rancher cluster). The workload cluster itself is just VMs on CloudStack — it has no namespace. To apply to a different namespace without editing the file: `kubectl apply -f manifests/10-minimal-cluster.yaml -n my-clusters`
 
@@ -160,16 +160,50 @@ kubectl --kubeconfig=kubeconfig get pods -n kube-system
 
 ### 4.2 SSH to Nodes
 
-Add your SSH public key to the cluster YAML before applying (see [Section 3.1](#31-minimal-cluster-1-control--2-workers) parameter table). The key is embedded directly into the KubeadmConfig — no CloudStack registration needed.
+Two methods for SSH access — both are configured in the cluster YAML before applying.
+
+#### Method 1: CloudStack SSH KeyPair (Recommended)
+
+Register your public key in CloudStack, then reference it via `sshKey` in `CloudStackMachine` resources:
 
 ```bash
-# After the cluster is created and CNI is installed
+# Register your SSH public key in CloudStack
+cmk register-sshkeypair --name=mykey --publickey="$(cat ~/.ssh/id_ed25519.pub)"
+```
+
+Then set `sshKey: "mykey"` in both `CloudStackMachine` resources in the YAML.
+
+To list existing keypairs: `cmk list sshkeypairs listall=true`
+
+#### Method 2: Inline SSH Key (No CloudStack Registration)
+
+Paste your full public key directly into the `KubeadmConfig` `users` section in the YAML:
+
+```yaml
+apiVersion: bootstrap.cluster.x-k8s.io/v1beta1
+kind: KubeadmConfig
+metadata:
+  name: capc-cluster-1-workers
+  namespace: default
+spec:
+  users:
+    - name: cloud
+      sshAuthorizedKeys:
+        - "ssh-ed25519 AAAA..."  # Your full public key
+      sudo: ALL=(ALL) NOPASSWD:ALL
+```
+
+#### Using SSH After Cluster Creation
+
+After the cluster is created and CNI is installed:
+
+```bash
 ssh -i <private-key> cloud@<node-ip>
 ```
 
 The `cloud` user is pre-created in CAPI-compatible images with passwordless sudo.
 
-> **Alternative: CloudStack SSH KeyPair** — You can also register a key in CloudStack and reference it via `CloudStackMachine.spec.sshKey` instead of embedding in KubeadmConfig. To list existing keys: `cmk list sshkeypairs listall=true`
+> **Note:** Method 1 and Method 2 are mutually exclusive — use one or the other, not both. Method 1 is recommended for production as it's managed in CloudStack and can be shared across clusters.
 
 ## 5. Install CNI
 

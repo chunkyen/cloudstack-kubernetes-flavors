@@ -19,8 +19,11 @@
 #    Control plane must have ≥2GB RAM, 2 vCPU
 #
 # 7. SSH_KEY_PUB  — Your SSH public key for node access
-#    Paste your full public key (e.g. ssh-ed25519 AAAA...) in place of <YOUR_SSH_PUBLIC_KEY>
-#    This is embedded directly into the KubeadmConfig — no CloudStack registration needed
+#    Method 1 (Recommended): Register in CloudStack, reference via sshKey field in CloudStackMachine
+#      cmk register-sshkeypair --name=mykey --publickey="$(cat ~/.ssh/id_ed25519.pub)"
+#      Then set: sshKey: mykey in CloudStackMachine resources below
+#    Method 2: Paste your full key (e.g. ssh-ed25519 AAAA...) in place of <YOUR_SSH_PUBLIC_KEY>
+#      This is embedded directly into the KubeadmConfig — no CloudStack registration needed
 #
 # Namespace: All CAPI resources are created in the namespace specified here
 # (default). This is the namespace on the management (Rancher) cluster where
@@ -95,6 +98,7 @@ spec:
   serviceOffering: "Medium"
   template: "capc-ubuntu-2404-kube-v1.32.3"
   diskOffering: "Large"
+  sshKey: "<YOUR_SSH_KEYPAIR_NAME>"  # Method 1: CloudStack SSH keypair name
 ---
 apiVersion: cluster.x-k8s.io/v1beta1
 kind: MachineDeployment
@@ -129,6 +133,7 @@ spec:
   serviceOffering: "Medium"
   template: "capc-ubuntu-2404-kube-v1.32.3"
   diskOffering: "Large"
+  sshKey: "<YOUR_SSH_KEYPAIR_NAME>"  # Method 1: CloudStack SSH keypair name
 ---
 apiVersion: bootstrap.cluster.x-k8s.io/v1beta1
 kind: KubeadmConfig
