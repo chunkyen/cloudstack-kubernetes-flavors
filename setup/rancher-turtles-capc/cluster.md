@@ -344,7 +344,7 @@ kubectl describe cloudstackcluster cks-cluster-1
 kubectl describe cloudstackmachine cks-cluster-1-workers-xxxxx
 
 # Check CAPC controller logs
-kubectl logs -n capi-system -l app=cloudstack -f
+kubectl logs -n capc-system -l app=cloudstack -f
 ```
 
 ### Nodes Not Joining
@@ -364,7 +364,7 @@ kubectl --kubeconfig=kubeconfig get nodes
 
 ```bash
 # Check CAPC logs for CloudStack API errors
-kubectl logs -n capi-system -l app=cloudstack | grep -i error
+kubectl logs -n capc-system -l app=cloudstack | grep -i error
 
 # Verify CloudStack resources
 # In CloudStack UI: Compute → VMs → check if VMs were created

@@ -1,0 +1,54 @@
+# All CAPI providers combined — apply all at once
+# Prerequisite: cloudstack-secret.yaml must be applied first
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: cloudstack-config
+  namespace: cattle-capi-system
+type: Opaque
+stringData:
+  CLOUDSTACK_ENDPOINT: "http://<management-server>:8080/client/api"
+  CLOUDSTACK_API_KEY: "<your-api-key>"
+  CLOUDSTACK_SECRET_KEY: "<your-secret-key>"
+  CLOUDSTACK_DEFAULT_ZONE: "<zone-id>"
+  CLOUDSTACK_DEFAULT_NETWORK: "<network-id>"
+  CLOUDSTACK_REGION: "<region-name>"
+---
+apiVersion: turtles-capi.cattle.io/v1alpha1
+kind: CAPIProvider
+metadata:
+  name: core
+  namespace: cattle-capi-system
+spec:
+  name: cluster-api
+  type: core
+---
+apiVersion: turtles-capi.cattle.io/v1alpha1
+kind: CAPIProvider
+metadata:
+  name: kubeadm-bootstrap
+  namespace: cattle-capi-system
+spec:
+  name: kubeadm
+  type: bootstrap
+---
+apiVersion: turtles-capi.cattle.io/v1alpha1
+kind: CAPIProvider
+metadata:
+  name: kubeadm-control-plane
+  namespace: cattle-capi-system
+spec:
+  name: kubeadm
+  type: controlPlane
+---
+apiVersion: turtles-capi.cattle.io/v1alpha1
+kind: CAPIProvider
+metadata:
+  name: cloudstack
+  namespace: cattle-capi-system
+spec:
+  name: cloudstack
+  type: infrastructure
+  configSecret:
+    name: cloudstack-config

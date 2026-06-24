@@ -1,0 +1,11 @@
+# CloudStack infrastructure provider (CAPC)
+apiVersion: turtles-capi.cattle.io/v1alpha1
+kind: CAPIProvider
+metadata:
+  name: cloudstack
+  namespace: cattle-capi-system
+spec:
+  name: cloudstack
+  type: infrastructure
+  configSecret:
+    name: cloudstack-config

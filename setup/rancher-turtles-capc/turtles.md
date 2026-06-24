@@ -20,26 +20,29 @@ helm repo update
 
 # Install Turtles
 helm install turtles turtles/turtles \
-  --namespace capi-system \
+  --namespace cattle-turtles-system \
   --create-namespace \
-  --set turtlesVersion=v0.20.0
+  --set turtlesVersion=v0.24.0
 ```
 
-### Verify Installation
+### Verify Turtles Installation
 
 ```bash
-kubectl get pods -n capi-system
+kubectl get pods -n cattle-turtles-system
 # Expected output:
-# NAME                                READY   STATUS
-# turtles-controller-xxxxx            1/1     Running
+# NAME                                         READY   STATUS
+# rancher-turtles-controller-manager-xxxxx     1/1     Running
 
 kubectl get crds | grep turtles
 # Expected: capiproviders.turtles-capi.cattle.io
+#           clusterctlconfigs.turtles-capi.cattle.io
 ```
+
+> **Note:** Rancher v2.13+ ships Turtles as a system chart, so it may already be installed. Check with `helm list -n cattle-turtles-system`.
 
 ## Step 2: Install Core CAPI Providers
 
-Turtles needs the core CAPI controllers before installing infrastructure providers.
+Turtles uses the `CAPIProvider` custom resource to manage CAPI providers. All providers live in the `cattle-capi-system` namespace.
 
 ### Core Provider
 
@@ -49,13 +52,10 @@ apiVersion: turtles-capi.cattle.io/v1alpha1
 kind: CAPIProvider
 metadata:
   name: core
-  namespace: capi-providers
+  namespace: cattle-capi-system
 spec:
   name: cluster-api
   type: core
-  config:
-    manager:
-      args: ["--leader-elect"]
 ```
 
 ### Bootstrap Provider (Kubeadm)
@@ -66,7 +66,7 @@ apiVersion: turtles-capi.cattle.io/v1alpha1
 kind: CAPIProvider
 metadata:
   name: kubeadm-bootstrap
-  namespace: capi-providers
+  namespace: cattle-capi-system
 spec:
   name: kubeadm
   type: bootstrap
@@ -80,7 +80,7 @@ apiVersion: turtles-capi.cattle.io/v1alpha1
 kind: CAPIProvider
 metadata:
   name: kubeadm-control-plane
-  namespace: capi-providers
+  namespace: cattle-capi-system
 spec:
   name: kubeadm
   type: controlPlane
@@ -97,15 +97,12 @@ kubectl apply -f controlplane-provider.yaml
 ### Verify Core Providers
 
 ```bash
-kubectl get CAPIProvider -n capi-providers
+kubectl get capiprovider -n cattle-capi-system
 # Expected:
-# NAME                  TYPE            STATE
-# core                  core            Deployed
-# kubeadm-bootstrap     bootstrap       Deployed
-# kubeadm-control-plane controlPlane    Deployed
-
-kubectl get pods -n capi-system | grep -E 'capi-controller|kubeadm'
-# Expected: capi-controller-manager, capi-kubeadm-bootstrap, capi-kubeadm-control-plane
+# NAME                  TYPE            PROVIDERNAME      INSTALLEDVERSION   PHASE
+# core                  core            cluster-api       v1.12.x            Ready
+# kubeadm-bootstrap     bootstrap       kubeadm           v1.13.x            Ready
+# kubeadm-control-plane controlPlane    kubeadm           v1.13.x            Ready
 ```
 
 ## Step 3: Configure CAPC Provider
@@ -120,7 +117,7 @@ apiVersion: v1
 kind: Secret
 metadata:
   name: cloudstack-config
-  namespace: capi-providers
+  namespace: cattle-capi-system
 type: Opaque
 stringData:
   # CloudStack API endpoint
@@ -138,9 +135,13 @@ stringData:
 ```
 
 ```bash
-kubectl create namespace capi-providers
 kubectl apply -f cloudstack-secret.yaml
 ```
+
+> **Where to find CloudStack API credentials:**
+> 1. Log into CloudStack UI
+> 2. Click your account (top-right) → API Key
+> 3. Copy the API key and secret key
 
 ### CAPIProvider for CloudStack
 
@@ -150,20 +151,12 @@ apiVersion: turtles-capi.cattle.io/v1alpha1
 kind: CAPIProvider
 metadata:
   name: cloudstack
-  namespace: capi-providers
+  namespace: cattle-capi-system
 spec:
   name: cloudstack
   type: infrastructure
-  # CAPC doesn't use Rancher cloud credentials
-  # Use configSecret for CloudStack API credentials
   configSecret:
     name: cloudstack-config
-  # Provider-specific configuration
-  config:
-    manager:
-      args:
-        - "--cloudstack-config-secret-name=cloudstack-config"
-        - "--cloudstack-config-secret-namespace=capi-providers"
 ```
 
 ```bash
@@ -174,36 +167,36 @@ kubectl apply -f cloudstack-provider.yaml
 
 ```bash
 # Check CAPIProvider status
-kubectl get CAPIProvider -n capi-providers
-# Expected: cloudstack  infrastructure  Deployed
+kubectl get capiprovider -n cattle-capi-system
+# Expected: cloudstack  infrastructure  cloudstack  v0.6.x  Ready
 
 # Check CAPC pods
-kubectl get pods -n capi-system | grep cloudstack
-# Expected: capc-controller-manager-xxxx running
+kubectl get pods -n capc-system
+# Expected: capc-controller-manager-xxxx  1/1  Running
 
 # Check CRDs
 kubectl get crds | grep cloudstack
 # cloudstackclusters.infrastructure.cluster.x-k8s.io
-# cloudstackclusters.infrastructure.cluster.x-k8s.io
+# cloudstackclusterresourcesets.infrastructure.cluster.x-k8s.io
 # cloudstackmachines.infrastructure.cluster.x-k8s.io
 # cloudstackmachinesets.infrastructure.cluster.x-k8s.io
 
 # Check CAPC logs
-kubectl logs -n capi-system -l app=cloudstack
+kubectl logs -n capc-system -l app=cloudstack
 # Should show successful CloudStack API connection
 ```
 
-## Step 4: Provider Status Reference
+## Step 4: All Providers Together
 
-### All Providers Together
+### Combined Manifest
 
 ```yaml
-# All CAPI providers (apply all at once)
+# all-providers.yaml
 apiVersion: turtles-capi.cattle.io/v1alpha1
 kind: CAPIProvider
 metadata:
   name: core
-  namespace: capi-providers
+  namespace: cattle-capi-system
 spec:
   name: cluster-api
   type: core
@@ -212,7 +205,7 @@ apiVersion: turtles-capi.cattle.io/v1alpha1
 kind: CAPIProvider
 metadata:
   name: kubeadm-bootstrap
-  namespace: capi-providers
+  namespace: cattle-capi-system
 spec:
   name: kubeadm
   type: bootstrap
@@ -221,7 +214,7 @@ apiVersion: turtles-capi.cattle.io/v1alpha1
 kind: CAPIProvider
 metadata:
   name: kubeadm-control-plane
-  namespace: capi-providers
+  namespace: cattle-capi-system
 spec:
   name: kubeadm
   type: controlPlane
@@ -230,7 +223,7 @@ apiVersion: turtles-capi.cattle.io/v1alpha1
 kind: CAPIProvider
 metadata:
   name: cloudstack
-  namespace: capi-providers
+  namespace: cattle-capi-system
 spec:
   name: cloudstack
   type: infrastructure
@@ -240,7 +233,7 @@ spec:
 
 ```bash
 kubectl apply -f all-providers.yaml
-kubectl get CAPIProvider -n capi-providers
+kubectl get capiprovider -n cattle-capi-system
 ```
 
 ## Step 5: Provider Management
@@ -249,17 +242,17 @@ kubectl get CAPIProvider -n capi-providers
 
 ```bash
 # Edit the CAPIProvider to change version
-kubectl edit CAPIProvider cloudstack -n capi-providers
+kubectl edit CAPIProvider cloudstack -n cattle-capi-system
 # Change the version in the spec (if supported)
 # Or delete and re-apply with new version
-kubectl delete CAPIProvider cloudstack -n capi-providers
+kubectl delete CAPIProvider cloudstack -n cattle-capi-system
 kubectl apply -f cloudstack-provider.yaml  # with updated version
 ```
 
 ### Remove a Provider
 
 ```bash
-kubectl delete CAPIProvider cloudstack -n capi-providers
+kubectl delete CAPIProvider cloudstack -n cattle-capi-system
 # Turtles will garbage collect all generated provider resources
 ```
 
@@ -267,11 +260,15 @@ kubectl delete CAPIProvider cloudstack -n capi-providers
 
 ```bash
 # CAPC controller logs
-kubectl logs -n capi-system -l app=cloudstack -f
+kubectl logs -n capc-system -l app=cloudstack -f
 
 # All CAPI provider logs
-kubectl get pods -n capi-system -o wide
-kubectl logs -n capi-system <pod-name> -f
+# Turtles installs providers into separate namespaces:
+#   cattle-capi-system              — core CAPI controller
+#   capi-kubeadm-bootstrap-system   — kubeadm bootstrap
+#   capi-kubeadm-control-plane-system — kubeadm control-plane
+#   capc-system                     — CloudStack infrastructure
+kubectl get pods -A | grep -E 'capi-controller|kubeadm|cloudstack'
 ```
 
 ## Troubleshooting
@@ -280,10 +277,10 @@ kubectl logs -n capi-system <pod-name> -f
 
 ```bash
 # Check Turtles controller logs
-kubectl logs -n capi-system deployment/turtles-controller -f
+kubectl logs -n cattle-turtles-system deployment/rancher-turtles-controller-manager -f
 
 # Check CAPIProvider status
-kubectl describe CAPIProvider -n capi-providers
+kubectl describe CAPIProvider -n cattle-capi-system
 
 # Check for CRD conflicts
 kubectl get crds | grep cluster-api
@@ -293,37 +290,37 @@ kubectl get crds | grep cluster-api
 
 ```bash
 # Check the CAPIProvider status
-kubectl describe CAPIProvider cloudstack -n capi-providers
+kubectl describe CAPIProvider cloudstack -n cattle-capi-system
 
 # Check for events
-kubectl get events -n capi-providers --sort-by='.lastTimestamp'
+kubectl get events -n cattle-capi-system --sort-by='.lastTimestamp'
 
 # Check CAPC controller logs
-kubectl logs -n capi-system -l app=cloudstack -f
+kubectl logs -n capc-system -l app=cloudstack -f
 ```
 
 ### CloudStack API Connection Failed
 
 ```bash
 # Test connectivity from CAPC pod
-kubectl exec -it -n capi-system deploy/capc-controller-manager -- \
+kubectl exec -it -n capc-system deploy/capc-controller-manager -- \
   curl -v http://<management-server>:8080/client/api?command=listZones&apikey=<api-key>
 
 # Verify secret is correct
-kubectl get secret cloudstack-config -n capi-providers -o yaml
+kubectl get secret cloudstack-config -n cattle-capi-system -o yaml
 
 # Check for network policies blocking API access
-kubectl get networkpolicies -n capi-providers
+kubectl get networkpolicies -n cattle-capi-system
 ```
 
 ### CRDs Not Created
 
 ```bash
 # Verify CAPC is running
-kubectl get pods -n capi-system | grep cloudstack
+kubectl get pods -n capc-system
 
 # Check CAPC logs for errors
-kubectl logs -n capi-system -l app=cloudstack | tail -50
+kubectl logs -n capc-system -l app=cloudstack | tail -50
 
 # Manually verify CRDs exist
 kubectl get crds | grep cloudstack
@@ -333,14 +330,14 @@ kubectl get crds | grep cloudstack
 
 ```bash
 # Verify CloudStack API access from CAPC pod
-kubectl exec -it -n capi-system deploy/capc-controller-manager -- \
+kubectl exec -it -n capc-system deploy/capc-controller-manager -- \
   /bin/sh -c "echo test"
 
 # Check CAPC logs
-kubectl logs -n capi-system -l app=cloudstack -f
+kubectl logs -n capc-system -l app=cloudstack -f
 
 # Verify config secret
-kubectl get secret cloudstack-config -n capi-providers -o yaml
+kubectl get secret cloudstack-config -n cattle-capi-system -o yaml
 ```
 
 ## Next Steps

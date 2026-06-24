@@ -1,0 +1,9 @@
+# Kubeadm bootstrap provider
+apiVersion: turtles-capi.cattle.io/v1alpha1
+kind: CAPIProvider
+metadata:
+  name: kubeadm-bootstrap
+  namespace: cattle-capi-system
+spec:
+  name: kubeadm
+  type: bootstrap

@@ -1,0 +1,9 @@
+# Core Cluster API controller
+apiVersion: turtles-capi.cattle.io/v1alpha1
+kind: CAPIProvider
+metadata:
+  name: core
+  namespace: cattle-capi-system
+spec:
+  name: cluster-api
+  type: core
