@@ -8,13 +8,24 @@ This guide walks through deploying a Kubernetes cluster on Apache CloudStack usi
 
 ### CloudStack Resources
 
+> **⚠️ Important: What CAPC Creates Automatically**
+>
+> CAPC does **not** require you to pre-create everything. It automatically provisions:
+> - **Network** — If the specified network doesn't exist, CAPC creates an isolated network
+> - **VPC** — If the network is part of a VPC, CAPC creates the VPC if needed
+> - **Load Balancer** — For the Kubernetes API endpoint
+> - **Firewall Rules** — For API server access
+> - **Port Forwarding** — For SSH access to control plane nodes
+>
+> You only need to pre-create the items listed below. Everything else is handled by CAPC.
+
 Ensure these exist in your CloudStack environment:
 
 | Resource | Details |
 |----------|---------|
 | **Zone** | A zone with available compute resources |
 | **Cluster/Pod** | Within the zone, with KVM/XenServer/VMware hypervisor |
-| **Network** | Isolated (recommended) or VPC network |
+| **Network** | Specify name/ID — CAPC creates it if it doesn't exist |
 | **Public IP** | An unused public IP for the cluster API endpoint load balancer |
 | **SSH Key Pair** | Optional — for SSH access to VMs (used with `--flavor managed-ssh`) |
 | **Compute Offerings** | At least two: control plane (>2GB RAM, 2vCPU) and worker nodes |

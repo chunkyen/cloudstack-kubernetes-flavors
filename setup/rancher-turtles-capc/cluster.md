@@ -8,6 +8,17 @@ This guide covers provisioning Kubernetes clusters on CloudStack using CAPI CRDs
 - CAPI-compatible images registered in CloudStack as templates
 - `kubectl` configured with the management cluster
 
+> **⚠️ What CAPC Creates Automatically**
+>
+> You do **not** need to pre-create the network. CAPC automatically provisions:
+> - **Network** — If the specified network doesn't exist, CAPC creates an isolated network
+> - **VPC** — If the network is part of a VPC, CAPC creates the VPC if needed
+> - **Load Balancer** — For the Kubernetes API endpoint
+> - **Firewall Rules** — For API server access
+> - **Port Forwarding** — For SSH access to control plane nodes
+>
+> You only need to pre-create: **CAPI-compatible template**, **service offerings**, **disk offerings**, and a **reserved public IP**.
+
 ## 2. Prepare CAPI-Compatible Images
 
 CAPC requires pre-built images with container runtime + kubelet + kubeadm already installed. These are registered as templates in CloudStack.
