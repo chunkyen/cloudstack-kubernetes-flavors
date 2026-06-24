@@ -44,16 +44,13 @@ CloudStack's `register-template` API requires a URL that the management server c
 
 **Option B — HTTP URL registration (no UI needed)**
 
-If your management server can reach a web server, upload the file there and use the URL:
+If your management server can reach the image URL directly, register it without downloading locally:
 
 ```bash
-# Download the image
-curl -L http://packages.shapeblue.com/cluster-api-provider-cloudstack/images/kvm/ubuntu-2404-kube-v1.32.3-kvm.qcow2.bz2 -o ubuntu-2404-kube-v1.32.3-kvm.qcow2.bz2
-
-# Register via CloudMonkey (management server downloads from this URL)
+# Register via CloudMonkey (management server downloads from shapeblue URL)
 cmk register-template \
   name=capc-ubuntu-2404-kube-v1.32.3 \
-  url=http://<web-server>/ubuntu-2404-kube-v1.32.3-kvm.qcow2.bz2 \
+  url=http://packages.shapeblue.com/cluster-api-provider-cloudstack/images/kvm/ubuntu-2404-kube-v1.32.3-kvm.qcow2.bz2 \
   hypervisor=KVM \
   ostypeid=<os-type-id> \
   ispublic=true
