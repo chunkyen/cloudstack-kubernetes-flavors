@@ -1,32 +1,47 @@
-# Create Clusters via CAPI
+# Create Clusters via CAPI + CAPC
 
-This guide covers provisioning CKS clusters on CloudStack using CAPI CRDs managed by Turtles + CAPC.
+This guide covers provisioning Kubernetes clusters on CloudStack using CAPI CRDs managed by Rancher Turtles + CAPC.
 
 ## 1. Prerequisites
 
 - Rancher + Turtles + CAPC deployed (see [Rancher](./rancher.md) and [Turtles](./turtles.md))
-- CKS-compatible templates registered in CloudStack
-- CKS binaries ISO registered in CloudStack
+- CAPI-compatible images registered in CloudStack as templates
 - `kubectl` configured with the management cluster
 
-## 2. Prepare Templates
+## 2. Prepare CAPI-Compatible Images
 
-CAPC requires CKS-compatible templates. Register them in CloudStack:
+CAPC requires pre-built images with container runtime + kubelet + kubeadm already installed. These are registered as templates in CloudStack.
+
+### Pre-built Images
+
+Pre-built CAPI-compatible images are available for multiple hypervisors and Kubernetes versions:
+
+| Hypervisor | Format | Ubuntu 24.04 | Rocky Linux 9 |
+|------------|--------|--------------|---------------|
+| KVM | qcow2 | [v1.32.3](http://packages.shapeblue.com/cluster-api-provider-cloudstack/images/kvm/ubuntu-2404-kube-v1.32.3-kvm.qcow2.bz2) | [v1.32.3](http://packages.shapeblue.com/cluster-api-provider-cloudstack/images/kvm/rockylinux-9-kube-v1.32.3-kvm.qcow2.bz2) |
+| VMware | ova | [v1.32.3](http://packages.shapeblue.com/cluster-api-provider-cloudstack/images/vmware/ubuntu-2404-kube-v1.32.3-vmware.ova) | [v1.32.3](http://packages.shapeblue.com/cluster-api-provider-cloudstack/images/vmware/rockylinux-9-kube-v1.32.3-vmware.ova) |
+| XenServer | vhd | [v1.32.3](http://packages.shapeblue.com/cluster-api-provider-cloudstack/images/xen/ubuntu-2404-kube-v1.32.3-xen.vhd.bz2) | [v1.32.3](http://packages.shapeblue.com/cluster-api-provider-cloudstack/images/xen/rockylinux-9-kube-v1.32.3-xen.vhd.bz2) |
+
+Full image list: [CAPC Images](http://packages.shapeblue.com/cluster-api-provider-cloudstack/images/)
+
+### Register the Template
+
+Download and register the image as a CloudStack template:
 
 ```bash
-# Via cmk
-# Register the CKS ISO as a template (if not already done)
-cmk register-iso \
-  url=http://download.cloudstack.org/cks/setup-v1.32.0-calico.iso \
-  name=cks-v1.32.0-calico \
-  hypervisor=KVM \
-  ostype=Generic
+# Download the image
+curl -L http://packages.shapeblue.com/cluster-api-provider-cloudstack/images/kvm/ubuntu-2404-kube-v1.32.3-kvm.qcow2.bz2 -o ubuntu-2404-kube-v1.32.3-kvm.qcow2.bz2
+
+# Register as a template in CloudStack
 cmk register-template \
-  url=http://download.cloudstack.org/cks/setup-v1.32.0-calico.iso \
-  name=cks-v1.32.0-calico \
+  url=http://<your-server>/ubuntu-2404-kube-v1.32.3-kvm.qcow2.bz2 \
+  name=capc-ubuntu-2404-kube-v1.32.3 \
   ispublic=true \
+  hypervisor=KVM \
   ostypeid=<os-type-id>
 ```
+
+> **Note:** CAPC images are different from CKS ISOs. CKS ISOs are used for bootstrapping CKS clusters via the CloudStack Kubernetes Provider. CAPC images are used directly by CAPC to provision VMs with Kubernetes pre-installed.
 
 ## 3. Create a Cluster
 
@@ -37,7 +52,7 @@ cmk register-template \
 apiVersion: cluster.x-k8s.io/v1beta1
 kind: Cluster
 metadata:
-  name: cks-cluster-1
+  name: capc-cluster-1
   namespace: default
 spec:
   clusterNetwork:
@@ -47,16 +62,16 @@ spec:
   controlPlaneRef:
     apiVersion: controlplane.cluster.x-k8s.io/v1beta1
     kind: KubeadmControlPlane
-    name: cks-cluster-1-control-plane
+    name: capc-cluster-1-control-plane
   infrastructureRef:
     apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
     kind: CloudStackCluster
-    name: cks-cluster-1
+    name: capc-cluster-1
 ---
 apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
 kind: CloudStackCluster
 metadata:
-  name: cks-cluster-1
+  name: capc-cluster-1
   namespace: default
 spec:
   controlPlaneEndpoint:
@@ -70,7 +85,7 @@ spec:
 apiVersion: controlplane.cluster.x-k8s.io/v1beta1
 kind: KubeadmControlPlane
 metadata:
-  name: cks-cluster-1-control-plane
+  name: capc-cluster-1-control-plane
   namespace: default
 spec:
   replicas: 1
@@ -79,7 +94,7 @@ spec:
     infrastructureRef:
       apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
       kind: CloudStackMachine
-      name: cks-cluster-1-control-plane
+      name: capc-cluster-1-control-plane
   kubeadmConfigSpec:
     clusterConfiguration:
       apiServer:
@@ -89,24 +104,24 @@ spec:
 apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
 kind: CloudStackMachine
 metadata:
-  name: cks-cluster-1-control-plane
+  name: capc-cluster-1-control-plane
   namespace: default
 spec:
   serviceOffering: "Medium"
-  template: "cks-v1.32.0-calico"
+  template: "capc-ubuntu-2404-kube-v1.32.3"
   diskOffering: "Large"
 ---
 apiVersion: cluster.x-k8s.io/v1beta1
 kind: MachineDeployment
 metadata:
-  name: cks-cluster-1-workers
+  name: capc-cluster-1-workers
   namespace: default
 spec:
   replicas: 2
-  clusterName: cks-cluster-1
+  clusterName: capc-cluster-1
   selector:
     matchLabels:
-      cluster.x-k8s.io/cluster-name: cks-cluster-1
+      cluster.x-k8s.io/cluster-name: capc-cluster-1
   template:
     spec:
       version: "v1.32.0"
@@ -114,26 +129,26 @@ spec:
         configRef:
           apiVersion: bootstrap.cluster.x-k8s.io/v1beta1
           kind: KubeadmConfig
-          name: cks-cluster-1-workers
+          name: capc-cluster-1-workers
       infrastructureRef:
         apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
         kind: CloudStackMachine
-        name: cks-cluster-1-workers
+        name: capc-cluster-1-workers
 ---
 apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
 kind: CloudStackMachine
 metadata:
-  name: cks-cluster-1-workers
+  name: capc-cluster-1-workers
   namespace: default
 spec:
   serviceOffering: "Medium"
-  template: "cks-v1.32.0-calico"
+  template: "capc-ubuntu-2404-kube-v1.32.3"
   diskOffering: "Large"
 ---
 apiVersion: bootstrap.cluster.x-k8s.io/v1beta1
 kind: KubeadmConfig
 metadata:
-  name: cks-cluster-1-workers
+  name: capc-cluster-1-workers
   namespace: default
 spec: {}
 ```
@@ -154,14 +169,14 @@ kubectl get machinedeployments
 kubectl get events --sort-by='.lastTimestamp' -n default
 ```
 
-### 3.3 HA Cluster (3 Control + 3 Workers + Etcd)
+### 3.3 HA Cluster (3 Control + 3 Workers)
 
 ```yaml
 # cluster-ha.yaml
 apiVersion: cluster.x-k8s.io/v1beta1
 kind: Cluster
 metadata:
-  name: cks-cluster-ha
+  name: capc-cluster-ha
   namespace: default
 spec:
   clusterNetwork:
@@ -171,16 +186,16 @@ spec:
   controlPlaneRef:
     apiVersion: controlplane.cluster.x-k8s.io/v1beta1
     kind: KubeadmControlPlane
-    name: cks-cluster-ha-control-plane
+    name: capc-cluster-ha-control-plane
   infrastructureRef:
     apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
     kind: CloudStackCluster
-    name: cks-cluster-ha
+    name: capc-cluster-ha
 ---
 apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
 kind: CloudStackCluster
 metadata:
-  name: cks-cluster-ha
+  name: capc-cluster-ha
   namespace: default
 spec:
   controlPlaneEndpoint:
@@ -190,16 +205,11 @@ spec:
     name: "<network-name-or-id>"
   zone:
     name: "<zone-name-or-id>"
-  # Dedicated etcd nodes
-  etcd:
-    replicas: 3
-    serviceOffering: "Medium"
-    template: "cks-etcd-template"
 ---
 apiVersion: controlplane.cluster.x-k8s.io/v1beta1
 kind: KubeadmControlPlane
 metadata:
-  name: cks-cluster-ha-control-plane
+  name: capc-cluster-ha-control-plane
   namespace: default
 spec:
   replicas: 3
@@ -208,7 +218,7 @@ spec:
     infrastructureRef:
       apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
       kind: CloudStackMachine
-      name: cks-cluster-ha-control-plane
+      name: capc-cluster-ha-control-plane
   kubeadmConfigSpec:
     clusterConfiguration:
       apiServer:
@@ -218,24 +228,24 @@ spec:
 apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
 kind: CloudStackMachine
 metadata:
-  name: cks-cluster-ha-control-plane
+  name: capc-cluster-ha-control-plane
   namespace: default
 spec:
   serviceOffering: "Large"
-  template: "cks-v1.32.0-calico"
+  template: "capc-ubuntu-2404-kube-v1.32.3"
   diskOffering: "Large"
 ---
 apiVersion: cluster.x-k8s.io/v1beta1
 kind: MachineDeployment
 metadata:
-  name: cks-cluster-ha-workers
+  name: capc-cluster-ha-workers
   namespace: default
 spec:
   replicas: 3
-  clusterName: cks-cluster-ha
+  clusterName: capc-cluster-ha
   selector:
     matchLabels:
-      cluster.x-k8s.io/cluster-name: cks-cluster-ha
+      cluster.x-k8s.io/cluster-name: capc-cluster-ha
   template:
     spec:
       version: "v1.32.0"
@@ -243,26 +253,26 @@ spec:
         configRef:
           apiVersion: bootstrap.cluster.x-k8s.io/v1beta1
           kind: KubeadmConfig
-          name: cks-cluster-ha-workers
+          name: capc-cluster-ha-workers
       infrastructureRef:
         apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
         kind: CloudStackMachine
-        name: cks-cluster-ha-workers
+        name: capc-cluster-ha-workers
 ---
 apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
 kind: CloudStackMachine
 metadata:
-  name: cks-cluster-ha-workers
+  name: capc-cluster-ha-workers
   namespace: default
 spec:
   serviceOffering: "Large"
-  template: "cks-v1.32.0-calico"
+  template: "capc-ubuntu-2404-kube-v1.32.3"
   diskOffering: "Large"
 ---
 apiVersion: bootstrap.cluster.x-k8s.io/v1beta1
 kind: KubeadmConfig
 metadata:
-  name: cks-cluster-ha-workers
+  name: capc-cluster-ha-workers
   namespace: default
 spec: {}
 ```
@@ -273,7 +283,7 @@ spec: {}
 
 ```bash
 # The cluster creates a Secret with kubeconfig
-kubectl get secret cks-cluster-1-kubeconfig -o jsonpath='{.data.value}' | base64 -d > kubeconfig
+kubectl get secret capc-cluster-1-kubeconfig -o jsonpath='{.data.value}' | base64 -d > kubeconfig
 
 # Use it
 kubectl --kubeconfig=kubeconfig get nodes
@@ -296,17 +306,17 @@ ssh -i <key> -p 2223 cloud@<VR_PUBLIC_IP>
 
 ```bash
 # Via kubectl
-kubectl scale machinedeployment cks-cluster-1-workers --replicas=5
+kubectl scale machinedeployment capc-cluster-1-workers --replicas=5
 
 # Or edit the MachineDeployment
-kubectl edit machinedeployment cks-cluster-1-workers
+kubectl edit machinedeployment capc-cluster-1-workers
 ```
 
 ### 5.2 Scale Control Plane
 
 ```bash
 # Edit KubeadmControlPlane replicas
-kubectl edit kubeadmcontrolplane cks-cluster-1-control-plane
+kubectl edit kubeadmcontrolplane capc-cluster-1-control-plane
 # Change spec.replicas from 1 to 3
 ```
 
@@ -316,21 +326,23 @@ kubectl edit kubeadmcontrolplane cks-cluster-1-control-plane
 
 ```bash
 # Update KubeadmControlPlane version
-kubectl edit kubeadmcontrolplane cks-cluster-1-control-plane
+kubectl edit kubeadmcontrolplane capc-cluster-1-control-plane
 # Change spec.version from "v1.32.0" to "v1.33.0"
 
 # Update MachineDeployment version
-kubectl edit machinedeployment cks-cluster-1-workers
+kubectl edit machinedeployment capc-cluster-1-workers
 # Change spec.template.spec.version
 ```
 
 ### 6.2 Upgrade CNI
 
-The CNI is baked into the CKS ISO. To change CNI version:
+CAPC clusters use kubeadm to bootstrap Kubernetes, which installs a default CNI (usually Calico). To change the CNI:
 
-1. Build a new CKS ISO with the desired CNI version
-2. Register the new ISO as a template
-3. Update the template reference in CloudStackMachine resources
+1. Install a different CNI after cluster creation:
+   ```bash
+   kubectl --kubeconfig=kubeconfig apply -f https://raw.githubusercontent.com/projectcalico/calico/master/manifests/calico.yaml
+   ```
+2. Or customize the kubeadmConfigSpec in the cluster YAML to install a different CNI during bootstrap
 
 ## 7. Troubleshooting
 
@@ -338,10 +350,10 @@ The CNI is baked into the CKS ISO. To change CNI version:
 
 ```bash
 # Check CloudStackCluster status
-kubectl describe cloudstackcluster cks-cluster-1
+kubectl describe cloudstackcluster capc-cluster-1
 
 # Check CloudStackMachine events
-kubectl describe cloudstackmachine cks-cluster-1-workers-xxxxx
+kubectl describe cloudstackmachine capc-cluster-1-workers-xxxxx
 
 # Check CAPC controller logs
 kubectl logs -n capc-system -l app=cloudstack -f
@@ -379,4 +391,4 @@ cmk list serviceofferings id=<offering-id>
 ## 8. Next Steps
 
 - [Fleet GitOps](./fleet.md) — Automate cluster management with Fleet
-- [CKS Upgrade Guide](../cks/cks-upgrade.md) — Upgrading CKS clusters
+- [CAPC Upgrade Guide](../capc/capc-upgrade.md) — Upgrading CAPC and clusters
