@@ -14,7 +14,8 @@ This guide covers provisioning Kubernetes clusters on CloudStack using CAPI CRDs
 > - **Network** — If the specified network doesn't exist, CAPC creates a new isolated network
 > - **Load Balancer** — For the Kubernetes API endpoint
 > - **Firewall Rules** — For API server access
-> - **Port Forwarding** — For SSH access to control plane nodes
+>
+> **Not auto-created:** SSH port forwarding rules must be configured manually in the CloudStack UI (see [Section 4.2](#42-ssh-to-nodes)).
 >
 > You only need to pre-create: **CAPI-compatible template**, **service offerings**, **disk offerings**, and a **reserved public IP**.
 
@@ -193,12 +194,28 @@ spec:
       sudo: ALL=(ALL) NOPASSWD:ALL
 ```
 
+#### Configure Network Access for SSH
+
+CAPC auto-creates firewall rules and load balancer rules for the **API endpoint IP** (the public IP you specified in `controlPlaneEndpoint.host`), but **SSH access to individual nodes requires manual configuration**.
+
+For each node you want to SSH into, configure these in the CloudStack UI:
+
+1. **Select the Public IP** belonging to the cluster's network (either the API endpoint IP or a dedicated IP)
+2. **Add a firewall rule** to allow access on the desired port (e.g. TCP port 22)
+3. **Add a port forwarding rule** from the public IP to the VM's private IP on the desired port
+
+> **Isolated networks only:** SSH port forwarding and firewall rules only work on isolated networks. For shared/routed networks, configure routes on the external network's management plane instead.
+
 #### Using SSH After Cluster Creation
 
-After the cluster is created and CNI is installed:
+After the cluster is created, CNI is installed, and firewall/port-forwarding rules are configured:
 
 ```bash
-ssh -i <private-key> cloud@<node-ip>
+# Control plane nodes (use the API endpoint IP or forwarded port)
+ssh -i <private-key> cloud@<public-ip>
+
+# Worker nodes (use the forwarded public IP)
+ssh -i <private-key> cloud@<public-ip>
 ```
 
 The `cloud` user is pre-created in CAPI-compatible images with passwordless sudo.

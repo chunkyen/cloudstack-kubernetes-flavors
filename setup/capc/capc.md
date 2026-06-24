@@ -14,7 +14,8 @@ This guide walks through deploying a Kubernetes cluster on Apache CloudStack usi
 > - **Network** — If the specified network doesn't exist, CAPC creates a new isolated network
 > - **Load Balancer** — For the Kubernetes API endpoint
 > - **Firewall Rules** — For API server access
-> - **Port Forwarding** — For SSH access to control plane nodes
+>
+> **Not auto-created:** SSH port forwarding rules must be configured manually in the CloudStack UI (see [Section 4.2](../rancher-turtles-capc/cluster.md#42-ssh-to-nodes)).
 >
 > You only need to pre-create the items listed below. Everything else is handled by CAPC.
 
