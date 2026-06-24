@@ -62,6 +62,57 @@ Minimum sizing for Rancher:
 - `clusterctl` v1.1.5+
 - Access to CloudStack management server API
 
+## Rancher Turtles vs Traditional CAPC Setup
+
+**This is the key difference that trips people up.**
+
+### Traditional CAPC Setup
+
+```bash
+# 1. Bootstrap a management cluster (kind, k3s, etc.)
+# 2. Install CAPC via clusterctl
+clusterctl init --infrastructure cloudstack
+# 3. Generate cluster spec
+clusterctl generate cluster my-cluster --kubernetes-version v1.28.0 > cluster.yaml
+# 4. Apply cluster spec
+kubectl apply -f cluster.yaml
+```
+
+`clusterctl init` fetches CAPC manifests, deploys the `capc-controller-manager`, and registers CRDs.
+
+### Rancher Turtles + CAPC Setup
+
+```bash
+# 1. Install Rancher (Turtles is bundled in v2.13+)
+# 2. Deploy providers declaratively via CAPIProvider resources
+kubectl apply -f cloudstack-provider.yaml
+# 3. Generate cluster spec (same as traditional)
+clusterctl generate cluster my-cluster --kubernetes-version v1.28.0 > cluster.yaml
+# 4. Apply cluster spec
+kubectl apply -f cluster.yaml
+```
+
+**Turtles replaces `clusterctl init`.** The `CAPIProvider` resource *is* the install command — Turtles watches it, fetches the provider manifests, and deploys them automatically.
+
+### Side-by-Side Comparison
+
+| Step | Traditional CAPC | Rancher Turtles + CAPC |
+|------|-----------------|----------------------|
+| Management cluster | kind / k3s / existing cluster | Rancher on CKS cluster |
+| Install CAPC | `clusterctl init --infrastructure cloudstack` | Apply `CAPIProvider` YAML |
+| Provider lifecycle | `clusterctl` manages it | Turtles controller manages it |
+| Provider namespace | `capi-system`, `capc-system` | `cattle-capi-system`, `capc-system` |
+| Core CAPI | Installed by `clusterctl init` | Installed by Turtles automatically |
+| Cluster creation | `clusterctl generate cluster` + `kubectl apply` | Same (no change) |
+| Multi-provider | Manual `clusterctl init` for each | Single `CAPIProvider` per provider |
+
+### Why Turtles?
+
+- **Declarative**: No imperative `clusterctl init` commands — providers are managed as Kubernetes resources
+- **Integrated**: Turtles is a Rancher system chart, no separate installation needed
+- **Multi-provider**: Add providers by applying YAML, not running commands
+- **GitOps-friendly**: Provider manifests are version-controlled YAML, easy to track in Git
+
 ## Overview
 
 This guide covers:
