@@ -2,7 +2,7 @@
 
 This guide walks through deploying Rancher on a CKS cluster to serve as the management plane, then using Rancher Turtles to manage CAPC for declarative Kubernetes cluster provisioning on CloudStack.
 
-## Architecture
+## 1. Architecture
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
@@ -33,7 +33,7 @@ This guide walks through deploying Rancher on a CKS cluster to serve as the mana
 └─────────────────────────────────────────────────────────────────┘
 ```
 
-## Prerequisites
+## 2. Prerequisites
 
 ### CloudStack
 
@@ -62,7 +62,7 @@ Minimum sizing for Rancher:
 - `clusterctl` v1.1.5+
 - Access to CloudStack management server API
 
-## Rancher Turtles vs Traditional CAPC Setup
+## 3. Rancher Turtles vs Traditional CAPC Setup
 
 **This is the key difference that trips people up.**
 
@@ -113,7 +113,7 @@ kubectl apply -f cluster.yaml
 - **Multi-provider**: Add providers by applying YAML, not running commands
 - **GitOps-friendly**: Provider manifests are version-controlled YAML, easy to track in Git
 
-## Overview
+## 4. Overview
 
 This guide covers:
 
@@ -122,7 +122,7 @@ This guide covers:
 3. **[Create Clusters](./cluster.md)** — Provision CKS clusters via CAPI CRDs
 4. **[Fleet GitOps](./fleet.md)** — Automate cluster management with Fleet
 
-## References
+## 5. References
 
 - [Architecture](../../architecture/rancher-turtles-capc.md)
 - [CAPC Architecture](../../architecture/capc.md)

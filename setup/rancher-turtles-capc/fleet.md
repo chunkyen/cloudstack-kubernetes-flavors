@@ -2,7 +2,7 @@
 
 This guide covers using Rancher Fleet to manage CKS clusters provisioned via CAPC in a GitOps workflow.
 
-## Overview
+## 1. Overview
 
 Fleet enables:
 - **GitOps cluster management** — cluster configs stored in Git, auto-synced
@@ -10,14 +10,14 @@ Fleet enables:
 - **Drift detection** — detect and remediate config drift
 - **Bundle tracking** — track which clusters have which workloads
 
-## Prerequisites
+## 2. Prerequisites
 
 - Rancher + Turtles + CAPC deployed
 - At least one CKS cluster provisioned via CAPI
 - Git repository with cluster configs and workload manifests
 - `kubectl` configured with the Rancher local cluster
 
-## Step 1: Configure Fleet
+## 3. Configure Fleet
 
 ### Enable Fleet in Rancher
 
@@ -46,7 +46,7 @@ spec:
 kubectl apply -f fleet/cluster-group.yaml
 ```
 
-## Step 2: GitOps Cluster Config
+## 4. GitOps Cluster Config
 
 ### Repository Resource
 
@@ -118,7 +118,7 @@ kubectl get gitrepo cks-cluster-configs -n fleet-default
 kubectl get bundles -n fleet-default
 ```
 
-## Step 3: Deploy Workloads via Fleet
+## 5. Deploy Workloads via Fleet
 
 ### Bundle Resource
 
@@ -182,7 +182,7 @@ spec:
   targetNamespace: apps
 ```
 
-## Step 4: Multi-Cluster Management
+## 6. Multi-Cluster Management
 
 ### Cluster Labels
 
@@ -215,7 +215,7 @@ spec:
         values: [production]
 ```
 
-## Step 5: Drift Detection
+## 7. Drift Detection
 
 ### Enable Drift Detection
 
@@ -251,7 +251,7 @@ kubectl get drift -n fleet-default
 kubectl describe drift <name> -n fleet-default
 ```
 
-## Step 6: Fleet + CAPI Integration
+## 8. Fleet + CAPI Integration
 
 ### Auto-Import Clusters
 
@@ -285,7 +285,7 @@ spec:
 5. Workloads deploy via Fleet Bundles
 ```
 
-## Troubleshooting
+## 9. Troubleshooting
 
 ### Fleet Not Syncing
 
@@ -326,7 +326,7 @@ kubectl get bundlenamespacemapping -n fleet-default
 kubectl get events -n apps --sort-by='.lastTimestamp'
 ```
 
-## Best Practices
+## 10. Best Practices
 
 1. **One repo per concern** — separate cluster configs from workload manifests
 2. **Label clusters** — use labels for targeting (environment, region, team)
@@ -336,7 +336,7 @@ kubectl get events -n apps --sort-by='.lastTimestamp'
 6. **Review before merge** — use PR reviews for cluster config changes
 7. **Backup before bulk changes** — snapshot clusters before mass updates
 
-## Next Steps
+## 11. Next Steps
 
 - [CKS Upgrade Guide](../cks/cks-upgrade.md) — Upgrading CKS clusters
 - [CAPC Upgrade Guide](../capc/capc-upgrade.md) — Upgrading CAPC and clusters

@@ -2,7 +2,7 @@
 
 This guide walks through deploying Rancher on a CKS cluster to serve as the management plane for Turtles + CAPC.
 
-## Prerequisites
+## 1. Prerequisites
 
 - A CKS cluster running on CloudStack (see [CKS Setup Guide](../cks/cks.md))
 - `kubectl` configured with cluster access
@@ -10,7 +10,7 @@ This guide walks through deploying Rancher on a CKS cluster to serve as the mana
 - Sufficient cluster resources (minimum 3 control plane + 2 workers, 4vCPU/8GB each)
 - **FQDN + DNS**: Rancher requires FQDN access. The CloudStack Kubernetes Provider will create a LoadBalancer service — map its VIP to your FQDN via DNS.
 
-## Step 1: Prepare Storage
+## 2. Prepare Storage
 
 Rancher needs persistent storage for etcd data. On CKS, you have two options:
 
@@ -31,7 +31,7 @@ kubectl apply -f https://raw.githubusercontent.com/rancher/local-path-provisione
 kubectl patch storageclass local-path -p '{"metadata":{"annotations":{"storageclass.kubernetes.io/is-default-class":"true"}}}'
 ```
 
-## Step 2: Install Rancher
+## 3. Install Rancher
 
 ### Via Helm (Recommended)
 
@@ -52,7 +52,7 @@ helm install rancher rancher-stable/rancher \
 
 > **Note:** The CloudStack Kubernetes Provider automatically provisions a LoadBalancer service for Rancher. No ingress controller or port-forwarding needed.
 
-## Step 3: Access Rancher
+## 4. Access Rancher
 
 ### Get Admin Password
 
@@ -104,7 +104,7 @@ Navigate to **`https://rancher.<your-domain>`** — this must match the hostname
 3. Set a new admin password
 4. Set the Rancher server URL to your FQDN (`https://rancher.<your-domain>`)
 
-## Step 4: Configure Local Cluster
+## 5. Configure Local Cluster
 
 Rancher automatically imports the bootstrap cluster as the "local" cluster. Verify:
 
@@ -115,7 +115,7 @@ kubectl cluster-info
 # Should show Rancher API server
 ```
 
-## Troubleshooting
+## 6. Troubleshooting
 
 ### Rancher Not Accessible
 
@@ -142,7 +142,7 @@ kubectl get pvc -n cattle-system
 kubectl get storageclass
 ```
 
-## Next Steps
+## 7. Next Steps
 
 - [Install Turtles + CAPC](./turtles.md) — Core CAPI providers, CAPC configuration, and management
 - [Create Clusters](./cluster.md) — Provision CKS clusters via CAPI

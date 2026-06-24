@@ -2,14 +2,14 @@
 
 This guide covers provisioning CKS clusters on CloudStack using CAPI CRDs managed by Turtles + CAPC.
 
-## Prerequisites
+## 1. Prerequisites
 
 - Rancher + Turtles + CAPC deployed (see [Rancher](./rancher.md) and [Turtles](./turtles.md))
 - CKS-compatible templates registered in CloudStack
 - CKS binaries ISO registered in CloudStack
 - `kubectl` configured with the management cluster
 
-## Step 1: Prepare Templates
+## 2. Prepare Templates
 
 CAPC requires CKS-compatible templates. Register them in CloudStack:
 
@@ -28,7 +28,7 @@ cmk register-template \
   ostypeid=<os-type-id>
 ```
 
-## Step 2: Create a Cluster
+## 3. Create a Cluster
 
 ### Minimal Cluster (1 Control + 2 Workers)
 
@@ -267,7 +267,7 @@ metadata:
 spec: {}
 ```
 
-## Step 3: Access the Cluster
+## 4. Access the Cluster
 
 ### Get kubeconfig
 
@@ -290,7 +290,7 @@ ssh -i <key> -p 2222 cloud@<VR_PUBLIC_IP>
 ssh -i <key> -p 2223 cloud@<VR_PUBLIC_IP>
 ```
 
-## Step 4: Scale the Cluster
+## 5. Scale the Cluster
 
 ### Scale Workers
 
@@ -310,7 +310,7 @@ kubectl edit kubeadmcontrolplane cks-cluster-1-control-plane
 # Change spec.replicas from 1 to 3
 ```
 
-## Step 5: Upgrade the Cluster
+## 6. Upgrade the Cluster
 
 ### Upgrade Kubernetes Version
 
@@ -332,7 +332,7 @@ The CNI is baked into the CKS ISO. To change CNI version:
 2. Register the new ISO as a template
 3. Update the template reference in CloudStackMachine resources
 
-## Troubleshooting
+## 7. Troubleshooting
 
 ### Cluster Stuck in "Provisioning"
 
@@ -376,7 +376,7 @@ cmk list templates filter=featured id=<template-id>
 cmk list serviceofferings id=<offering-id>
 ```
 
-## Next Steps
+## 8. Next Steps
 
 - [Fleet GitOps](./fleet.md) — Automate cluster management with Fleet
 - [CKS Upgrade Guide](../cks/cks-upgrade.md) — Upgrading CKS clusters

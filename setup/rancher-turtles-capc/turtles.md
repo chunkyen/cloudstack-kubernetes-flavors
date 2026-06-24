@@ -2,14 +2,14 @@
 
 This guide covers installing Rancher Turtles and configuring CAPC as a CAPI infrastructure provider on your Rancher-managed cluster.
 
-## Prerequisites
+## 1. Prerequisites
 
 - Rancher deployed on a CKS cluster (see [Rancher Deployment](./rancher.md))
 - `kubectl` configured with cluster access
 - Helm v3.12+
 - CloudStack management server accessible from the cluster
 
-## Step 1: Install Rancher Turtles
+## 2. Install Rancher Turtles
 
 ### Via Helm (Recommended)
 
@@ -40,7 +40,7 @@ kubectl get crds | grep turtles
 
 > **Note:** Rancher v2.13+ ships Turtles as a system chart, so it may already be installed. Check with `helm list -n cattle-turtles-system`.
 
-## Step 2: Install Core CAPI Providers
+## 3. Install Core CAPI Providers
 
 Turtles uses the `CAPIProvider` custom resource to manage CAPI providers. All providers live in the `cattle-capi-system` namespace.
 
@@ -105,7 +105,7 @@ kubectl get capiprovider -n cattle-capi-system
 # kubeadm-control-plane controlPlane    kubeadm           v1.13.x            Ready
 ```
 
-## Step 3: Configure CAPC Provider
+## 4. Configure CAPC Provider
 
 ### CloudStack Config Secret
 
@@ -186,7 +186,7 @@ kubectl logs -n capc-system -l app=cloudstack
 # Should show successful CloudStack API connection
 ```
 
-## Step 4: All Providers Together
+## 5. All Providers Together
 
 ### Combined Manifest
 
@@ -236,7 +236,7 @@ kubectl apply -f all-providers.yaml
 kubectl get capiprovider -n cattle-capi-system
 ```
 
-## Step 5: Provider Management
+## 6. Provider Management
 
 ### Update Provider Version
 
@@ -271,7 +271,7 @@ kubectl logs -n capc-system -l app=cloudstack -f
 kubectl get pods -A | grep -E 'capi-controller|kubeadm|cloudstack'
 ```
 
-## Troubleshooting
+## 7. Troubleshooting
 
 ### Turtles Not Installing Providers
 
@@ -340,7 +340,7 @@ kubectl logs -n capc-system -l app=cloudstack -f
 kubectl get secret cloudstack-config -n cattle-capi-system -o yaml
 ```
 
-## Next Steps
+## 8. Next Steps
 
 - [Create Clusters](./cluster.md) — Provision CKS clusters via CAPI CRDs
 - [Fleet GitOps](./fleet.md) — Automate cluster management with Fleet
