@@ -112,7 +112,7 @@ kubectl apply -f manifests/10-minimal-cluster.yaml
 ### 3.2 Apply and Monitor
 
 ```bash
-kubectl apply -f cluster-minimal.yaml
+kubectl apply -f manifests/10-minimal-cluster.yaml
 
 # Watch cluster creation
 kubectl get clusters
@@ -124,6 +124,8 @@ kubectl get machinedeployments
 # Check events
 kubectl get events --sort-by='.lastTimestamp' -n default
 ```
+
+> **⚠️ CNI Required:** After the cluster is created, you **must** install a CNI plugin before pods can communicate. See [Section 6.2](#62-install-cni) for installation instructions. Without a CNI, nodes will be `Ready` but pods will not be able to communicate.
 
 ### 3.3 HA Cluster (3 Control + 3 Workers)
 
@@ -199,15 +201,30 @@ kubectl edit machinedeployment capc-cluster-1-workers
 # Change spec.template.spec.version
 ```
 
-### 6.2 Upgrade CNI
+### 6.2 Install CNI
 
-CAPC clusters use kubeadm to bootstrap Kubernetes, which installs a default CNI (usually Calico). To change the CNI:
+CAPC clusters do **not** include a CNI by default. You must install one after the cluster is created. Without a CNI, pods cannot communicate with each other.
 
-1. Install a different CNI after cluster creation:
-   ```bash
-   kubectl --kubeconfig=kubeconfig apply -f https://raw.githubusercontent.com/projectcalico/calico/master/manifests/calico.yaml
-   ```
-2. Or customize the kubeadmConfigSpec in the cluster YAML to install a different CNI during bootstrap
+### Calico (Recommended)
+
+```bash
+kubectl --kubeconfig=kubeconfig apply -f https://raw.githubusercontent.com/projectcalico/calico/master/manifests/calico.yaml
+```
+
+### Cilium
+
+```bash
+kubectl --kubeconfig=kubeconfig apply -f https://raw.githubusercontent.com/cilium/cilium/main/install/kubernetes/quickstep.yaml
+```
+
+### Change CNI
+
+If you installed the wrong CNI, uninstall it first, then install the correct one:
+
+```bash
+kubectl --kubeconfig=kubeconfig delete -f https://raw.githubusercontent.com/projectcalico/calico/master/manifests/calico.yaml
+kubectl --kubeconfig=kubeconfig apply -f <new-cni-manifest>
+```
 
 ## 7. Troubleshooting
 
