@@ -26,20 +26,22 @@ Full image list: [CAPC Images](http://packages.shapeblue.com/cluster-api-provide
 
 ### 2.2 Register the Template
 
-Download and register the image as a CloudStack template:
+Download the image locally, then upload and register it as a CloudStack template:
 
 ```bash
 # Download the image
 curl -L http://packages.shapeblue.com/cluster-api-provider-cloudstack/images/kvm/ubuntu-2404-kube-v1.32.3-kvm.qcow2.bz2 -o ubuntu-2404-kube-v1.32.3-kvm.qcow2.bz2
 
-# Register as a template in CloudStack
+# Register as a template in CloudStack (uploads the local file)
 cmk register-template \
-  url=http://<your-server>/ubuntu-2404-kube-v1.32.3-kvm.qcow2.bz2 \
+  url=file:///absolute/path/to/ubuntu-2404-kube-v1.32.3-kvm.qcow2.bz2 \
   name=capc-ubuntu-2404-kube-v1.32.3 \
   ispublic=true \
   hypervisor=KVM \
   ostypeid=<os-type-id>
 ```
+
+> **Note:** Use `file://` prefix to upload a local file. If your CloudStack management server can reach a remote URL, you can also use `http://` or `https://` directly — but `file://` is the reliable approach since the file is already downloaded locally.
 
 > **Note:** CAPC images are different from CKS ISOs. CKS ISOs are used for bootstrapping CKS clusters via the CloudStack Kubernetes Provider. CAPC images are used directly by CAPC to provision VMs with Kubernetes pre-installed.
 
