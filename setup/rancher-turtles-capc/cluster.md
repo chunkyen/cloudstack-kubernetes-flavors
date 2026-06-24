@@ -82,10 +82,16 @@ cmk list publicipaddresses listall=true zoneid=<zone-id> forvirtualnetwork=true 
 
 The full cluster YAML is available in the manifests folder: [10-minimal-cluster.yaml](./manifests/10-minimal-cluster.yaml)
 
-Replace the placeholders before applying:
-- `<reserved-public-ip>` — a free public IP from CloudStack
-- `<network-name-or-id>` — CloudStack network name or ID
-- `<zone-name-or-id>` — CloudStack zone name or ID
+### Required Parameters — Replace All Before Applying
+
+| Parameter | Description | How to Find |
+|-----------|-------------|-------------|
+| `<reserved-public-ip>` | Free public IP for API endpoint | `cmk list publicipaddresses listall=true zoneid=<zone-id> forvirtualnetwork=true allocatedonly=false` |
+| `<network-name-or-id>` | CloudStack network | `cmk list networks listall=true zoneid=<zone-id>` |
+| `<zone-name-or-id>` | CloudStack zone | `cmk list zones` |
+| `capc-ubuntu-2404-kube-v1.32.3` | CAPI-compatible template name | Must be registered (see [Section 2.2](#22-register-the-template)) |
+| `Medium` / `Large` | Service offering names | `cmk list serviceofferings listall=true` (control plane needs ≥2GB RAM, 2 vCPU) |
+| `Large` (diskOffering) | Disk offering name | `cmk list diskofferings listall=true` |
 
 > **Namespace note:** The YAML uses `namespace: default`, which means all CAPI resources (CloudStackCluster, KubeadmControlPlane, MachineDeployment, etc.) are created in the `default` namespace of the **management cluster** (your Rancher cluster). The workload cluster itself is just VMs on CloudStack — it has no namespace. To apply to a different namespace without editing the file: `kubectl apply -f manifests/10-minimal-cluster.yaml -n my-clusters`
 
@@ -113,10 +119,12 @@ kubectl get events --sort-by='.lastTimestamp' -n default
 
 The full cluster YAML is available in the manifests folder: [11-ha-cluster.yaml](./manifests/11-ha-cluster.yaml)
 
-Replace the placeholders before applying:
-- `<reserved-public-ip>` — a free public IP from CloudStack
-- `<network-name-or-id>` — CloudStack network name or ID
-- `<zone-name-or-id>` — CloudStack zone name or ID
+### Required Parameters — Replace All Before Applying
+
+Same parameters as the minimal cluster (see table above). The HA cluster uses:
+- **Control plane:** `Large` service offering (recommended for HA)
+- **Workers:** `Large` service offering
+- **Disk:** `Large` disk offering
 
 > **Namespace note:** Same as above — resources are created in the `default` namespace of the management cluster. To apply elsewhere: `kubectl apply -f manifests/11-ha-cluster.yaml -n my-clusters`
 

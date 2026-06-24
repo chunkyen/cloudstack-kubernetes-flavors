@@ -1,8 +1,25 @@
 # HA CAPC cluster — 3 control planes + 3 workers
-# Replace placeholders before applying:
-#   <reserved-public-ip>   — a free public IP from CloudStack
-#   <network-name-or-id>   — CloudStack network name or ID
-#   <zone-name-or-id>      — CloudStack zone name or ID
+#
+# IMPORTANT: Replace ALL of the following before applying:
+#
+# 1. <reserved-public-ip>   — A free public IP from CloudStack network
+#    Find free IPs: cmk list publicipaddresses listall=true zoneid=<zone-id> forvirtualnetwork=true allocatedonly=false
+#
+# 2. <network-name-or-id>   — CloudStack network name or ID
+#    List networks: cmk list networks listall=true zoneid=<zone-id>
+#
+# 3. <zone-name-or-id>      — CloudStack zone name or ID
+#    List zones: cmk list zones
+#
+# 4. capc-ubuntu-2404-kube-v1.32.3  — CAPI-compatible template name
+#    Must be registered in CloudStack. Prebuilt images: http://packages.shapeblue.com/cluster-api-provider-cloudstack/images/
+#
+# 5. Medium / Large  — CloudStack service offering names
+#    List offerings: cmk list serviceofferings listall=true
+#    Control plane must have ≥2GB RAM, 2 vCPU
+#
+# 6. Large (diskOffering)  — CloudStack disk offering name
+#    List disk offerings: cmk list diskofferings listall=true
 #
 # Namespace: All CAPI resources are created in the namespace specified here
 # (default). This is the namespace on the management (Rancher) cluster where
