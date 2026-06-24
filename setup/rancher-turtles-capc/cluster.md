@@ -102,6 +102,7 @@ The full cluster YAML is available in the manifests folder: [10-minimal-cluster.
 | `capc-ubuntu-2404-kube-v1.32.3` | CAPI-compatible template name | Must be registered (see [Section 2.2](#22-register-the-template)) |
 | `Medium` / `Large` | Service offering names | `cmk list serviceofferings listall=true` (control plane needs ≥2GB RAM, 2 vCPU) |
 | `Large` (diskOffering) | Disk offering name | `cmk list diskofferings listall=true` |
+| `<YOUR_SSH_PUBLIC_KEY>` | SSH public key for node access | Paste your full key (e.g. `ssh-ed25519 AAAA...`) — embedded directly into KubeadmConfig |
 
 > **Namespace note:** The YAML uses `namespace: default`, which means all CAPI resources (CloudStackCluster, KubeadmControlPlane, MachineDeployment, etc.) are created in the `default` namespace of the **management cluster** (your Rancher cluster). The workload cluster itself is just VMs on CloudStack — it has no namespace. To apply to a different namespace without editing the file: `kubectl apply -f manifests/10-minimal-cluster.yaml -n my-clusters`
 
@@ -159,13 +160,16 @@ kubectl --kubeconfig=kubeconfig get pods -n kube-system
 
 ### 4.2 SSH to Nodes
 
-```bash
-# Control node (port 2222 + node_index)
-ssh -i <key> -p 2222 cloud@<VR_PUBLIC_IP>
+Add your SSH public key to the cluster YAML before applying (see [Section 3.1](#31-minimal-cluster-1-control--2-workers) parameter table). The key is embedded directly into the KubeadmConfig — no CloudStack registration needed.
 
-# Worker node
-ssh -i <key> -p 2223 cloud@<VR_PUBLIC_IP>
+```bash
+# After the cluster is created and CNI is installed
+ssh -i <private-key> cloud@<node-ip>
 ```
+
+The `cloud` user is pre-created in CAPI-compatible images with passwordless sudo.
+
+> **Alternative: CloudStack SSH KeyPair** — You can also register a key in CloudStack and reference it via `CloudStackMachine.spec.sshKey` instead of embedding in KubeadmConfig. To list existing keys: `cmk list sshkeypairs listall=true`
 
 ## 5. Install CNI
 

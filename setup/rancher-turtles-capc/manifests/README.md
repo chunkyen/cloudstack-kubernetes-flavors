@@ -58,8 +58,9 @@ Replace these before applying cluster manifests:
 | Placeholder | Description |
 |-------------|-------------|
 | `<reserved-public-ip>` | A free public IP from CloudStack network |
-| `<network-name-or-id>` | CloudStack network name or ID |
+| `<network-name-or-id>` | CloudStack network name or ID — CAPC creates it if it doesn't exist |
 | `<zone-name-or-id>` | CloudStack zone name or ID |
 | `capc-ubuntu-2404-kube-v1.32.3` | Your registered CAPI-compatible template name |
 | `Medium` / `Large` | Your CloudStack service offering names |
 | `Large` (diskOffering) | Your CloudStack disk offering name |
+| `<YOUR_SSH_PUBLIC_KEY>` | Your SSH public key — embedded directly into KubeadmConfig, no CloudStack registration needed |

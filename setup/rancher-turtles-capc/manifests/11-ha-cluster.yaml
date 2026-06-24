@@ -18,8 +18,9 @@
 #    List offerings: cmk list serviceofferings listall=true
 #    Control plane must have ≥2GB RAM, 2 vCPU
 #
-# 6. Large (diskOffering)  — CloudStack disk offering name
-#    List disk offerings: cmk list diskofferings listall=true
+# 7. SSH_KEY_PUB  — Your SSH public key for node access
+#    Paste your full public key (e.g. ssh-ed25519 AAAA...) in place of <YOUR_SSH_PUBLIC_KEY>
+#    This is embedded directly into the KubeadmConfig — no CloudStack registration needed
 #
 # Namespace: All CAPI resources are created in the namespace specified here
 # (default). This is the namespace on the management (Rancher) cluster where
@@ -79,6 +80,11 @@ spec:
       apiServer:
         certSANs:
           - "<reserved-public-ip>"  # Must match controlPlaneEndpoint.host
+    users:
+      - name: cloud
+        sshAuthorizedKeys:
+          - "<YOUR_SSH_PUBLIC_KEY>"  # Your SSH public key for node access
+        sudo: ALL=(ALL) NOPASSWD:ALL
 ---
 apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
 kind: CloudStackMachine
@@ -129,4 +135,9 @@ kind: KubeadmConfig
 metadata:
   name: capc-cluster-ha-workers
   namespace: default
-spec: {}
+spec:
+  users:
+    - name: cloud
+      sshAuthorizedKeys:
+        - "<YOUR_SSH_PUBLIC_KEY>"  # Your SSH public key for node access
+      sudo: ALL=(ALL) NOPASSWD:ALL
