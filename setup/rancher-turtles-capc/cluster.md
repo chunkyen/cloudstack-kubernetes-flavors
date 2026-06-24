@@ -87,6 +87,8 @@ Replace the placeholders before applying:
 - `<network-name-or-id>` — CloudStack network name or ID
 - `<zone-name-or-id>` — CloudStack zone name or ID
 
+> **Namespace note:** The YAML uses `namespace: default`, which means all CAPI resources (CloudStackCluster, KubeadmControlPlane, MachineDeployment, etc.) are created in the `default` namespace of the **management cluster** (your Rancher cluster). The workload cluster itself is just VMs on CloudStack — it has no namespace. To apply to a different namespace without editing the file: `kubectl apply -f manifests/10-minimal-cluster.yaml -n my-clusters`
+
 ```bash
 kubectl apply -f manifests/10-minimal-cluster.yaml
 ```
@@ -115,6 +117,8 @@ Replace the placeholders before applying:
 - `<reserved-public-ip>` — a free public IP from CloudStack
 - `<network-name-or-id>` — CloudStack network name or ID
 - `<zone-name-or-id>` — CloudStack zone name or ID
+
+> **Namespace note:** Same as above — resources are created in the `default` namespace of the management cluster. To apply elsewhere: `kubectl apply -f manifests/11-ha-cluster.yaml -n my-clusters`
 
 ```bash
 kubectl apply -f manifests/11-ha-cluster.yaml

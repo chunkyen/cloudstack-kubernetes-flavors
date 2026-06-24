@@ -3,6 +3,13 @@
 #   <reserved-public-ip>   — a free public IP from CloudStack
 #   <network-name-or-id>   — CloudStack network name or ID
 #   <zone-name-or-id>      — CloudStack zone name or ID
+#
+# Namespace: All CAPI resources are created in the namespace specified here
+# (default). This is the namespace on the management (Rancher) cluster where
+# CloudStackCluster, KubeadmControlPlane, MachineDeployment, etc. live.
+# The workload cluster itself is just VMs on CloudStack — it has no namespace.
+# To apply to a different namespace without editing the file:
+#   kubectl apply -f 10-minimal-cluster.yaml -n my-clusters
 ---
 apiVersion: cluster.x-k8s.io/v1beta1
 kind: Cluster
