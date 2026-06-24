@@ -167,9 +167,42 @@ ssh -i <key> -p 2222 cloud@<VR_PUBLIC_IP>
 ssh -i <key> -p 2223 cloud@<VR_PUBLIC_IP>
 ```
 
-## 5. Scale the Cluster
+## 5. Install CNI
 
-### 5.1 Scale Workers
+CAPC clusters do **not** include a CNI by default. You must install one after the cluster is created. Without a CNI, pods cannot communicate with each other.
+
+### 5.1 Calico (Recommended)
+
+```bash
+kubectl --kubeconfig=kubeconfig apply -f https://raw.githubusercontent.com/projectcalico/calico/master/manifests/calico.yaml
+```
+
+### 5.2 Cilium
+
+Install Cilium using Helm:
+
+```bash
+# Add the Cilium Helm repo
+helm repo add cilium https://helm.cilium.io/
+helm repo update
+
+# Install Cilium in kube-system namespace
+helm install cilium cilium/cilium --namespace kube-system \
+  --set ipam.mode=kubernetes
+```
+
+### 5.3 Change CNI
+
+If you installed the wrong CNI, uninstall it first, then install the correct one:
+
+```bash
+kubectl --kubeconfig=kubeconfig delete -f https://raw.githubusercontent.com/projectcalico/calico/master/manifests/calico.yaml
+kubectl --kubeconfig=kubeconfig apply -f <new-cni-manifest>
+```
+
+## 6. Scale the Cluster
+
+### 6.1 Scale Workers
 
 ```bash
 # Via kubectl
@@ -179,7 +212,7 @@ kubectl scale machinedeployment capc-cluster-1-workers --replicas=5
 kubectl edit machinedeployment capc-cluster-1-workers
 ```
 
-### 5.2 Scale Control Plane
+### 6.2 Scale Control Plane
 
 ```bash
 # Edit KubeadmControlPlane replicas
@@ -187,9 +220,9 @@ kubectl edit kubeadmcontrolplane capc-cluster-1-control-plane
 # Change spec.replicas from 1 to 3
 ```
 
-## 6. Upgrade the Cluster
+## 7. Upgrade the Cluster
 
-### 6.1 Upgrade Kubernetes Version
+### 7.1 Upgrade Kubernetes Version
 
 ```bash
 # Update KubeadmControlPlane version
@@ -199,31 +232,6 @@ kubectl edit kubeadmcontrolplane capc-cluster-1-control-plane
 # Update MachineDeployment version
 kubectl edit machinedeployment capc-cluster-1-workers
 # Change spec.template.spec.version
-```
-
-## 7. Install CNI
-
-CAPC clusters do **not** include a CNI by default. You must install one after the cluster is created. Without a CNI, pods cannot communicate with each other.
-
-### 7.1 Calico (Recommended)
-
-```bash
-kubectl --kubeconfig=kubeconfig apply -f https://raw.githubusercontent.com/projectcalico/calico/master/manifests/calico.yaml
-```
-
-### 7.2 Cilium
-
-```bash
-kubectl --kubeconfig=kubeconfig apply -f https://raw.githubusercontent.com/cilium/cilium/main/install/kubernetes/quickstep.yaml
-```
-
-### 7.3 Change CNI
-
-If you installed the wrong CNI, uninstall it first, then install the correct one:
-
-```bash
-kubectl --kubeconfig=kubeconfig delete -f https://raw.githubusercontent.com/projectcalico/calico/master/manifests/calico.yaml
-kubectl --kubeconfig=kubeconfig apply -f <new-cni-manifest>
 ```
 
 ## 8. Troubleshooting
