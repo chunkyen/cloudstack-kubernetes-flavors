@@ -11,15 +11,15 @@
 # 3. <zone-name-or-id>      — CloudStack zone name or ID
 #    List zones: cmk list zones
 #
-# 4. capc-ubuntu-2404-kube-v1.32.3  — CAPI-compatible template name
+# 4. capc-ubuntu24-1.35     — CAPI-compatible template name
 #    Must be registered in CloudStack. Prebuilt images: http://packages.shapeblue.com/cluster-api-provider-cloudstack/images/
 #
-# 5. Medium / Large  — CloudStack service offering names
+# 5. kube control / kube worker1  — CloudStack service offering names
 #    List offerings: cmk list serviceofferings listall=true
-#    Control plane must have ≥2GB RAM, 2 vCPU
+#    Control plane needs ≥2GB RAM, 2 vCPU
 #
-# 6. my-ssh-key  — CloudStack SSH keypair name (registered via cmk)
-#    cmk register-sshkeypair --name=my-ssh-key --publickey="$(cat ~/.ssh/id_ed25519.pub)"
+# 6. cylabnb-k1  — CloudStack SSH keypair name (registered via cmk)
+#    cmk register-sshkeypair --name=cylabnb-k1 --publickey="$(cat ~/.ssh/id_ed25519.pub)"
 #
 # Namespace: All CAPI resources are created in the namespace specified here
 # (default). This is the namespace on the management (Rancher) cluster where
@@ -28,119 +28,143 @@
 # To apply to a different namespace without editing the file:
 #   kubectl apply -f 10-minimal-cluster.yaml -n my-clusters
 ---
-apiVersion: cluster.x-k8s.io/v1beta2
+apiVersion: cluster.x-k8s.io/v1beta1
 kind: Cluster
 metadata:
   name: capc-cluster-1
-  namespace: default
+  namespace: capc-cluster-1
+  labels:
+    turtles.cattle.io/bootstrap: "true"
+    cluster-api.cattle.io/rancher-auto-import: "true"
 spec:
   clusterNetwork:
     pods:
-      cidrBlocks: ["10.244.0.0/16"]
+      cidrBlocks:
+        - "10.168.0.0/16"
     serviceDomain: cluster.local
   controlPlaneRef:
-    apiGroup: controlplane.cluster.x-k8s.io
+    apiVersion: controlplane.cluster.x-k8s.io/v1beta1
     kind: KubeadmControlPlane
     name: capc-cluster-1-control-plane
   infrastructureRef:
-    apiGroup: infrastructure.cluster.x-k8s.io
+    apiVersion: infrastructure.cluster.x-k8s.io/v1beta3
     kind: CloudStackCluster
     name: capc-cluster-1
 ---
-apiVersion: infrastructure.cluster.x-k8s.io/v1beta2
+apiVersion: infrastructure.cluster.x-k8s.io/v1beta3
 kind: CloudStackCluster
 metadata:
   name: capc-cluster-1
-  namespace: default
+  namespace: capc-cluster-1
 spec:
   controlPlaneEndpoint:
     host: "<reserved-public-ip>"  # Reserved public IP from CloudStack network
     port: 6443
   failureDomains:
-    - name: fd-1
+    - name: "<zone-name-or-id>"
       zone:
         name: "<zone-name-or-id>"
         network:
           name: "<network-name-or-id>"
       acsEndpoint:
         name: cloudstack-config
-        namespace: cattle-capi-system
+        namespace: capc-cluster-1
+      offering: DefaultNetworkOfferingforKubernetesService
+      syncWithACS: true
 ---
-apiVersion: controlplane.cluster.x-k8s.io/v1beta2
+apiVersion: controlplane.cluster.x-k8s.io/v1beta1
 kind: KubeadmControlPlane
 metadata:
   name: capc-cluster-1-control-plane
-  namespace: default
+  namespace: capc-cluster-1
 spec:
   replicas: 1
-  version: "v1.32.0"
-  machineTemplate:
-    spec:
-      infrastructureRef:
-        apiGroup: infrastructure.cluster.x-k8s.io
-        kind: CloudStackMachine
-        name: capc-cluster-1-control-plane
+  version: v1.35.0
   kubeadmConfigSpec:
-    clusterConfiguration:
-      apiServer:
-        certSANs:
-          - "<reserved-public-ip>"  # Must match controlPlaneEndpoint.host
+    initConfiguration:
+      nodeRegistration:
+        kubeletExtraArgs:
+          provider-id: "cloudstack:///'{{ ds.meta_data.instance_id }}'"
+        name: "{{ local_hostname }}"
+    joinConfiguration:
+      nodeRegistration:
+        kubeletExtraArgs:
+          provider-id: "cloudstack:///'{{ ds.meta_data.instance_id }}'"
+        name: "{{ local_hostname }}"
+    preKubeadmCommands:
+      - swapoff -a
+    postKubeadmCommands:
+      - echo "Control plane setup complete"
+  machineTemplate:
+    infrastructureRef:
+      apiVersion: infrastructure.cluster.x-k8s.io/v1beta3
+      kind: CloudStackMachineTemplate
+      name: capc-cluster-1-control-plane
 ---
-apiVersion: infrastructure.cluster.x-k8s.io/v1beta2
-kind: CloudStackMachine
+apiVersion: infrastructure.cluster.x-k8s.io/v1beta3
+kind: CloudStackMachineTemplate
 metadata:
   name: capc-cluster-1-control-plane
-  namespace: default
+  namespace: capc-cluster-1
 spec:
-  offering:
-    name: "Medium"
-  template:
-    name: "capc-ubuntu-2404-kube-v1.32.3"
-  sshKey: "my-ssh-key"  # CloudStack SSH keypair name (registered via cmk register-sshkeypair)
----
-apiVersion: cluster.x-k8s.io/v1beta2
-kind: MachineDeployment
-metadata:
-  name: capc-cluster-1-workers
-  namespace: default
-spec:
-  replicas: 2
-  clusterName: capc-cluster-1
-  selector:
-    matchLabels:
-      cluster.x-k8s.io/cluster-name: capc-cluster-1
   template:
     spec:
-      clusterName: capc-cluster-1
-      version: "v1.32.0"
+      offering:
+        name: "kube control"
+      sshKey: "cylabnb-k1"  # CloudStack SSH keypair name
+      template:
+        name: "capc-ubuntu24-1.35"
+---
+apiVersion: cluster.x-k8s.io/v1beta1
+kind: MachineDeployment
+metadata:
+  name: capc-cluster-1-md-0
+  namespace: capc-cluster-1
+spec:
+  clusterName: capc-cluster-1
+  replicas: 2
+  selector:
+    matchLabels: null
+  template:
+    spec:
       bootstrap:
         configRef:
-          apiGroup: bootstrap.cluster.x-k8s.io
-          kind: KubeadmConfig
-          name: capc-cluster-1-workers
+          apiVersion: bootstrap.cluster.x-k8s.io/v1beta1
+          kind: KubeadmConfigTemplate
+          name: capc-cluster-1-md-0
+      clusterName: capc-cluster-1
       infrastructureRef:
-        apiGroup: infrastructure.cluster.x-k8s.io
-        kind: CloudStackMachine
-        name: capc-cluster-1-workers
+        apiVersion: infrastructure.cluster.x-k8s.io/v1beta3
+        kind: CloudStackMachineTemplate
+        name: capc-cluster-1-md-0
+      version: v1.35.0
 ---
-apiVersion: infrastructure.cluster.x-k8s.io/v1beta2
-kind: CloudStackMachine
+apiVersion: infrastructure.cluster.x-k8s.io/v1beta3
+kind: CloudStackMachineTemplate
 metadata:
-  name: capc-cluster-1-workers
-  namespace: default
+  name: capc-cluster-1-md-0
+  namespace: capc-cluster-1
 spec:
-  offering:
-    name: "Medium"
   template:
-    name: "capc-ubuntu-2404-kube-v1.32.3"
-  sshKey: "my-ssh-key"  # CloudStack SSH keypair name (registered via cmk register-sshkeypair)
+    spec:
+      offering:
+        name: "kube worker1"
+      sshKey: "cylabnb-k1"  # CloudStack SSH keypair name
+      template:
+        name: "capc-ubuntu24-1.35"
 ---
-apiVersion: bootstrap.cluster.x-k8s.io/v1beta2
-kind: KubeadmConfig
+apiVersion: bootstrap.cluster.x-k8s.io/v1beta1
+kind: KubeadmConfigTemplate
 metadata:
-  name: capc-cluster-1-workers
-  namespace: default
+  name: capc-cluster-1-md-0
+  namespace: capc-cluster-1
 spec:
-  joinConfiguration:
-    nodeRegistration:
-      name: "{{ ds.meta_data.local_hostname }}"
+  template:
+    spec:
+      joinConfiguration:
+        nodeRegistration:
+          kubeletExtraArgs:
+            provider-id: "cloudstack:///'{{ ds.meta_data.instance_id }}'"
+          name: "{{ local_hostname }}"
+      preKubeadmCommands:
+        - swapoff -a
