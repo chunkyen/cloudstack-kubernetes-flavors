@@ -25,6 +25,9 @@ kubectl apply -f 10-minimal-cluster.yaml
 
 # HA (3 control + 3 workers)
 kubectl apply -f 11-ha-cluster.yaml
+
+# Custom image setup with inline cloud-init (advanced)
+kubectl apply -f 12-custom-image-cluster.yaml
 ```
 
 ## Files
@@ -44,8 +47,9 @@ kubectl apply -f 11-ha-cluster.yaml
 
 | File | Description |
 |------|-------------|
-| `10-minimal-cluster.yaml` | Minimal cluster — 1 control plane + 2 workers |
-| `11-ha-cluster.yaml` | HA cluster — 3 control planes + 3 workers |
+| `10-minimal-cluster.yaml` | Minimal cluster — 1 control plane + 2 workers (Method 1: CloudStack SSH KeyPair) |
+| `11-ha-cluster.yaml` | HA cluster — 3 control planes + 3 workers (Method 1: CloudStack SSH KeyPair) |
+| `12-custom-image-cluster.yaml` | Custom image setup — inline cloud-init for packages, kernel modules, etc. (Method 2) |
 
 ## Namespace
 
@@ -63,4 +67,12 @@ Replace these before applying cluster manifests:
 | `capc-ubuntu-2404-kube-v1.32.3` | Your registered CAPI-compatible template name |
 | `Medium` / `Large` | Your CloudStack service offering names |
 | `Large` (diskOffering) | Your CloudStack disk offering name |
-| `<YOUR_SSH_PUBLIC_KEY>` | Your SSH public key — embedded directly into KubeadmConfig, no CloudStack registration needed |
+| `my-ssh-key` | Your CloudStack SSH keypair name — register via `cmk register-sshkeypair` |
+| `<YOUR_SSH_PUBLIC_KEY>` | Your SSH public key — for Method 2 only (12-custom-image-cluster.yaml), embedded via cloud-init |
+
+## SSH Key Methods
+
+- **Method 1** (default, 10-minimal / 11-ha): Register SSH keypair in CloudStack via `cmk register-sshkeypair`, reference via `sshKey` field on `CloudStackMachine`. CloudStack injects the key into the image's default user.
+- **Method 2** (advanced, 12-custom): Define user and SSH key inline in `KubeadmConfig.users` + cloud-init commands. Use for custom image setup beyond SSH (packages, kernel modules, systemd, etc.).
+
+See [cluster.md](../cluster.md#34-advanced-inline-cloudinit) for full comparison.
