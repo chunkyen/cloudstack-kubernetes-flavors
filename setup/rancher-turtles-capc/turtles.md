@@ -1,35 +1,23 @@
 # Install Turtles + CAPC
 
-This guide covers installing Rancher Turtles and configuring CAPC as a CAPI infrastructure provider on your Rancher-managed cluster.
+This guide covers configuring CAPC as a CAPI infrastructure provider on a Rancher-managed cluster.
 
 ## 1. Prerequisites
 
-- Rancher deployed on a CKS cluster (see [Rancher Deployment](./rancher.md))
+- Rancher v2.13+ deployed on a CKS cluster (see [Rancher Deployment](./rancher.md))
 - `kubectl` configured with cluster access
 - Helm v3.12+
 - CloudStack management server accessible from the cluster
 
-## 2. Install Rancher Turtles
+## 2. Turtles — Pre-installed with Rancher v2.13+
 
-### 2.1 Via Helm (Recommended)
+Starting with Rancher v2.13, **Rancher Turtles is bundled as a system chart** and is automatically deployed when Rancher starts. There is no separate Turtles installation step.
 
-```bash
-# Add the Turtles Helm repo
-helm repo add turtles https://rancher.github.io/turtles-helm-chart/
-helm repo update
-
-# Install Turtles
-helm install turtles turtles/turtles \
-  --namespace cattle-turtles-system \
-  --create-namespace \
-  --set turtlesVersion=v0.24.0
-```
-
-### 2.2 Verify Turtles Installation
+### 2.1 Verify Turtles is Running
 
 ```bash
 kubectl get pods -n cattle-turtles-system
-# Expected output:
+# Expected:
 # NAME                                         READY   STATUS
 # rancher-turtles-controller-manager-xxxxx     1/1     Running
 
@@ -38,7 +26,11 @@ kubectl get crds | grep turtles
 #           clusterctlconfigs.turtles-capi.cattle.io
 ```
 
-> **Note:** Rancher v2.13+ ships Turtles as a system chart, so it may already be installed. Check with `helm list -n cattle-turtles-system`.
+The core CAPI controller and CRDs are also deployed automatically as part of the system chart.
+
+### 2.2 Migrating from Rancher < v2.13
+
+If your Rancher installation is **older than v2.13**, Turtles was previously a standalone Helm chart or Rancher extension. See the official [Rancher Turtles migration guide](https://turtles.docs.rancher.com/turtles/stable/en/tutorials/migration.html) for upgrade instructions.
 
 ## 3. Install Core CAPI Providers
 
