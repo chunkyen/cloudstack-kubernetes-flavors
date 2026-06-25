@@ -124,7 +124,7 @@ CAPC runs inside the management cluster and:
 | Aspect | Standalone CAPC | Rancher Turtles + CAPC |
 |--------|----------------|------------------------|
 | **Management** | `clusterctl` CLI | Rancher UI + Fleet GitOps |
-| **Provider lifecycle** | Manual install | Declarative `CAPIProvider` CRD |
+| **Provider lifecycle** | Manual install | Declarative `CAPIProvider` CRD (all providers deployed into `cattle-capi-system` by Turtles v0.6.1) |
 | **Multi-cluster** | Manual kubeconfig management | CAPI creates clusters via CAPC, Rancher Turtles imports them into Rancher for management |
 | **RBAC** | K8s RBAC only | Rancher RBAC + projects |
 | **GitOps** | Manual (argocd etc.) | Fleet built-in |
@@ -132,6 +132,17 @@ CAPC runs inside the management cluster and:
 | **Cert management** | Manual | Rancher cert-manager integration |
 | **Upgrade path** | Manual provider + cluster | Helm upgrade + CAPI rolling update |
 | **Cluster templates** | Manual YAML | ClusterClass (topology templates) |
+
+## Namespace Layout
+
+Turtles v0.6.1 deploys all CAPI providers into a single namespace:
+
+| Component | Namespace |
+|---|---|
+| Turtles controller | `cattle-turtles-system` |
+| Core CAPI + all providers (kubeadm, cloudstack) | `cattle-capi-system` |
+
+Each provider runs as a separate deployment within `cattle-capi-system` (e.g., `capc-controller-manager`, `capi-kubeadm-bootstrap-controller-manager`). CRDs are cluster-scoped.
 
 ## Credential Model
 
@@ -143,7 +154,7 @@ apiVersion: turtles-capi.cattle.io/v1alpha1
 kind: CAPIProvider
 metadata:
   name: cloudstack
-  namespace: capi-providers
+  namespace: cattle-capi-system
 spec:
   name: cloudstack
   type: infrastructure

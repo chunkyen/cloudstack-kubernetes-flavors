@@ -163,7 +163,7 @@ kubectl get capiprovider -n cattle-capi-system
 # Expected: cloudstack  infrastructure  cloudstack  v0.6.x  Ready
 
 # Check CAPC pods
-kubectl get pods -n capc-system
+kubectl get pods -n cattle-capi-system | grep capc
 # Expected: capc-controller-manager-xxxx  1/1  Running
 
 # Check CRDs
@@ -255,12 +255,9 @@ kubectl delete CAPIProvider cloudstack -n cattle-capi-system
 kubectl logs -n capc-system -l app=cloudstack -f
 
 # All CAPI provider logs
-# Turtles installs providers into separate namespaces:
-#   cattle-capi-system              — core CAPI controller
-#   capi-kubeadm-bootstrap-system   — kubeadm bootstrap
-#   capi-kubeadm-control-plane-system — kubeadm control-plane
-#   capc-system                     — CloudStack infrastructure
-kubectl get pods -A | grep -E 'capi-controller|kubeadm|cloudstack'
+# Turtles deploys all providers into cattle-capi-system (v0.6.1):
+#   cattle-capi-system              — core CAPI + kubeadm bootstrap + kubeadm control-plane + CAPC
+kubectl get pods -n cattle-capi-system | grep -E 'capi-controller|kubeadm|cloudstack|capc'
 ```
 
 ## 7. Troubleshooting
