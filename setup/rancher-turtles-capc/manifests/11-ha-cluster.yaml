@@ -14,16 +14,12 @@
 # 4. capc-ubuntu-2404-kube-v1.32.3  — CAPI-compatible template name
 #    Must be registered in CloudStack. Prebuilt images: http://packages.shapeblue.com/cluster-api-provider-cloudstack/images/
 #
-# 5. Medium / Large  — CloudStack service offering names
+# 5. Large  — CloudStack service offering names
 #    List offerings: cmk list serviceofferings listall=true
-#    Control plane must have ≥2GB RAM, 2 vCPU
+#    Control plane needs ≥2GB RAM, 2 vCPU
 #
-# 7. SSH_KEY_PUB  — Your SSH public key for node access
-#    Method 1 (Recommended): Register in CloudStack, reference via sshKey field in CloudStackMachine
-#      cmk register-sshkeypair --name=mykey --publickey="$(cat ~/.ssh/id_ed25519.pub)"
-#      Then set: sshKey: mykey in CloudStackMachine resources below
-#    Method 2: Paste your full key (e.g. ssh-ed25519 AAAA...) in place of <YOUR_SSH_PUBLIC_KEY>
-#      This is embedded directly into the KubeadmConfig — no CloudStack registration needed
+# 6. my-ssh-key  — CloudStack SSH keypair name (registered via cmk)
+#    cmk register-sshkeypair --name=my-ssh-key --publickey="$(cat ~/.ssh/id_ed25519.pub)"
 #
 # Namespace: All CAPI resources are created in the namespace specified here
 # (default). This is the namespace on the management (Rancher) cluster where
@@ -83,11 +79,6 @@ spec:
       apiServer:
         certSANs:
           - "<reserved-public-ip>"  # Must match controlPlaneEndpoint.host
-    users:
-      - name: cloud
-        sshAuthorizedKeys:
-          - "<YOUR_SSH_PUBLIC_KEY>"  # Your SSH public key for node access
-        sudo: ALL=(ALL) NOPASSWD:ALL
 ---
 apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
 kind: CloudStackMachine
@@ -98,7 +89,7 @@ spec:
   serviceOffering: "Large"
   template: "capc-ubuntu-2404-kube-v1.32.3"
   diskOffering: "Large"
-  sshKey: "<YOUR_SSH_KEYPAIR_NAME>"  # Method 1: CloudStack SSH keypair name
+  sshKey: "my-ssh-key"  # CloudStack SSH keypair name (registered via cmk register-sshkeypair)
 ---
 apiVersion: cluster.x-k8s.io/v1beta1
 kind: MachineDeployment
@@ -133,7 +124,7 @@ spec:
   serviceOffering: "Large"
   template: "capc-ubuntu-2404-kube-v1.32.3"
   diskOffering: "Large"
-  sshKey: "<YOUR_SSH_KEYPAIR_NAME>"  # Method 1: CloudStack SSH keypair name
+  sshKey: "my-ssh-key"  # CloudStack SSH keypair name (registered via cmk register-sshkeypair)
 ---
 apiVersion: bootstrap.cluster.x-k8s.io/v1beta1
 kind: KubeadmConfig
@@ -141,8 +132,5 @@ metadata:
   name: capc-cluster-ha-workers
   namespace: default
 spec:
-  users:
-    - name: cloud
-      sshAuthorizedKeys:
-        - "<YOUR_SSH_PUBLIC_KEY>"  # Your SSH public key for node access
-      sudo: ALL=(ALL) NOPASSWD:ALL
+  joinConfiguration:
+    controlPlane: null

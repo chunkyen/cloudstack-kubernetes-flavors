@@ -1,37 +1,30 @@
-# Minimal CAPC cluster — 1 control plane + 2 workers
+# Advanced CAPC cluster — inline cloud-init for image customization
+#
+# This example demonstrates Method 2: defining users and cloud-init scripts
+# directly in KubeadmConfig. Use this when you need more than just SSH keys:
+#
+# - Custom users with specific sudo rules
+# - Package installation (e.g., nvidia-container-toolkit, docker)
+# - Kernel module loading
+# - Systemd service configuration
+# - File provisioning
 #
 # IMPORTANT: Replace ALL of the following before applying:
 #
 # 1. <reserved-public-ip>   — A free public IP from CloudStack network
-#    Find free IPs: cmk list publicipaddresses listall=true zoneid=<zone-id> forvirtualnetwork=true allocatedonly=false
-#
 # 2. <network-name-or-id>   — CloudStack network name or ID
-#    List networks: cmk list networks listall=true zoneid=<zone-id>
-#
 # 3. <zone-name-or-id>      — CloudStack zone name or ID
-#    List zones: cmk list zones
-#
-# 4. capc-ubuntu-2404-kube-v1.32.3  — CAPI-compatible template name
-#    Must be registered in CloudStack. Prebuilt images: http://packages.shapeblue.com/cluster-api-provider-cloudstack/images/
-#
-# 5. Medium / Large  — CloudStack service offering names
-#    List offerings: cmk list serviceofferings listall=true
-#    Control plane must have ≥2GB RAM, 2 vCPU
-#
-# 6. my-ssh-key  — CloudStack SSH keypair name (registered via cmk)
-#    cmk register-sshkeypair --name=my-ssh-key --publickey="$(cat ~/.ssh/id_ed25519.pub)"
+# 4. <YOUR_SSH_PUBLIC_KEY>  — Your full SSH public key (e.g. ssh-ed25519 AAAA...)
 #
 # Namespace: All CAPI resources are created in the namespace specified here
-# (default). This is the namespace on the management (Rancher) cluster where
-# CloudStackCluster, KubeadmControlPlane, MachineDeployment, etc. live.
-# The workload cluster itself is just VMs on CloudStack — it has no namespace.
+# (default). This is the namespace on the management (Rancher) cluster.
 # To apply to a different namespace without editing the file:
-#   kubectl apply -f 10-minimal-cluster.yaml -n my-clusters
+#   kubectl apply -f 12-custom-image-cluster.yaml -n my-clusters
 ---
 apiVersion: cluster.x-k8s.io/v1beta1
 kind: Cluster
 metadata:
-  name: capc-cluster-1
+  name: capc-cluster-custom
   namespace: default
 spec:
   clusterNetwork:
@@ -41,16 +34,16 @@ spec:
   controlPlaneRef:
     apiVersion: controlplane.cluster.x-k8s.io/v1beta1
     kind: KubeadmControlPlane
-    name: capc-cluster-1-control-plane
+    name: capc-cluster-custom-control-plane
   infrastructureRef:
     apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
     kind: CloudStackCluster
-    name: capc-cluster-1
+    name: capc-cluster-custom
 ---
 apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
 kind: CloudStackCluster
 metadata:
-  name: capc-cluster-1
+  name: capc-cluster-custom
   namespace: default
 spec:
   controlPlaneEndpoint:
@@ -64,7 +57,7 @@ spec:
 apiVersion: controlplane.cluster.x-k8s.io/v1beta1
 kind: KubeadmControlPlane
 metadata:
-  name: capc-cluster-1-control-plane
+  name: capc-cluster-custom-control-plane
   namespace: default
 spec:
   replicas: 1
@@ -73,35 +66,45 @@ spec:
     infrastructureRef:
       apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
       kind: CloudStackMachine
-      name: capc-cluster-1-control-plane
+      name: capc-cluster-custom-control-plane
   kubeadmConfigSpec:
     clusterConfiguration:
       apiServer:
         certSANs:
           - "<reserved-public-ip>"  # Must match controlPlaneEndpoint.host
+    users:
+      - name: ubuntu
+        sshAuthorizedKeys:
+          - "<YOUR_SSH_PUBLIC_KEY>"  # Your full SSH public key
+        sudo: ALL=(ALL) NOPASSWD:ALL
+        home: /home/ubuntu
+    preKubeadmCommands:
+      - echo "Custom pre-kubeadm setup for control plane"
+    postKubeadmCommands:
+      - echo "Custom post-kubeadm setup for control plane"
 ---
 apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
 kind: CloudStackMachine
 metadata:
-  name: capc-cluster-1-control-plane
+  name: capc-cluster-custom-control-plane
   namespace: default
 spec:
   serviceOffering: "Medium"
   template: "capc-ubuntu-2404-kube-v1.32.3"
   diskOffering: "Large"
-  sshKey: "my-ssh-key"  # CloudStack SSH keypair name (registered via cmk register-sshkeypair)
+  # No sshKey field — SSH is handled via cloud-init in KubeadmConfig
 ---
 apiVersion: cluster.x-k8s.io/v1beta1
 kind: MachineDeployment
 metadata:
-  name: capc-cluster-1-workers
+  name: capc-cluster-custom-workers
   namespace: default
 spec:
   replicas: 2
-  clusterName: capc-cluster-1
+  clusterName: capc-cluster-custom
   selector:
     matchLabels:
-      cluster.x-k8s.io/cluster-name: capc-cluster-1
+      cluster.x-k8s.io/cluster-name: capc-cluster-custom
   template:
     spec:
       version: "v1.32.0"
@@ -109,28 +112,38 @@ spec:
         configRef:
           apiVersion: bootstrap.cluster.x-k8s.io/v1beta1
           kind: KubeadmConfig
-          name: capc-cluster-1-workers
+          name: capc-cluster-custom-workers
       infrastructureRef:
         apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
         kind: CloudStackMachine
-        name: capc-cluster-1-workers
+        name: capc-cluster-custom-workers
 ---
 apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
 kind: CloudStackMachine
 metadata:
-  name: capc-cluster-1-workers
+  name: capc-cluster-custom-workers
   namespace: default
 spec:
   serviceOffering: "Medium"
   template: "capc-ubuntu-2404-kube-v1.32.3"
   diskOffering: "Large"
-  sshKey: "my-ssh-key"  # CloudStack SSH keypair name (registered via cmk register-sshkeypair)
+  # No sshKey field — SSH is handled via cloud-init in KubeadmConfig
 ---
 apiVersion: bootstrap.cluster.x-k8s.io/v1beta1
 kind: KubeadmConfig
 metadata:
-  name: capc-cluster-1-workers
+  name: capc-cluster-custom-workers
   namespace: default
 spec:
+  users:
+    - name: ubuntu
+      sshAuthorizedKeys:
+        - "<YOUR_SSH_PUBLIC_KEY>"  # Your full SSH public key
+      sudo: ALL=(ALL) NOPASSWD:ALL
+      home: /home/ubuntu
+  preKubeadmCommands:
+    - echo "Custom pre-kubeadm setup for workers"
+  postKubeadmCommands:
+    - echo "Custom post-kubeadm setup for workers"
   joinConfiguration:
     controlPlane: null

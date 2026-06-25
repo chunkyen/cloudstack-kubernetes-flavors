@@ -103,8 +103,9 @@ The full cluster YAML is available in the manifests folder: [10-minimal-cluster.
 | `capc-ubuntu-2404-kube-v1.32.3` | CAPI-compatible template name | Must be registered (see [Section 2.2](#22-register-the-template)) |
 | `Medium` / `Large` | Service offering names | `cmk list serviceofferings listall=true` (control plane needs ≥2GB RAM, 2 vCPU) |
 | `Large` (diskOffering) | Disk offering name | `cmk list diskofferings listall=true` |
-| `<YOUR_SSH_KEYPAIR_NAME>` | CloudStack SSH keypair name (Method 1) | `cmk register-sshkeypair --name=mykey --publickey="$(cat ~/.ssh/id_ed25519.pub)"` |
-| `<YOUR_SSH_PUBLIC_KEY>` | Inline SSH public key (Method 2) | Paste your full key — embedded directly into KubeadmConfig |
+| `my-ssh-key` | CloudStack SSH keypair name | `cmk register-sshkeypair --name=my-ssh-key --publickey="$(cat ~/.ssh/id_ed25519.pub)"` |
+
+> **SSH Key Method:** This example uses **Method 1** (CloudStack SSH KeyPair) — the recommended approach. Register your key via `cmk register-sshkeypair`, then reference it via the `sshKey` field on `CloudStackMachine` resources. CloudStack injects the key into the default user (`ubuntu` for Ubuntu images, `cloud-user` for Rocky). See [Section 3.4](#34-advanced-inline-cloudinit) for Method 2 (inline cloud-init for custom image setup).
 
 > **Namespace note:** The YAML uses `namespace: default`, which means all CAPI resources (CloudStackCluster, KubeadmControlPlane, MachineDeployment, etc.) are created in the `default` namespace of the **management cluster** (your Rancher cluster). The workload cluster itself is just VMs on CloudStack — it has no namespace. To apply to a different namespace without editing the file: `kubectl apply -f manifests/10-minimal-cluster.yaml -n my-clusters`
 
@@ -147,6 +148,41 @@ Same parameters as the minimal cluster (see table above). The HA cluster uses:
 kubectl apply -f manifests/11-ha-cluster.yaml
 ```
 
+### 3.4 Advanced — Inline Cloud-Init (Custom Image Setup)
+
+For cases where you need more than just SSH key injection — custom users, package installation, kernel modules, systemd services, file provisioning — use **Method 2**: define everything inline in `KubeadmConfig`.
+
+The full cluster YAML is available in the manifests folder: [12-custom-image-cluster.yaml](./manifests/12-custom-image-cluster.yaml)
+
+This approach uses `KubeadmConfig.users` to create users and inject SSH keys via cloud-init, plus `preKubeadmCommands` and `postKubeadmCommands` for arbitrary setup. The `CloudStackMachine` resources omit the `sshKey` field — SSH is handled entirely by cloud-init.
+
+**When to use Method 2:**
+- Need to install packages (e.g., `nvidia-container-toolkit`, `docker`, `gpu-driver`)
+- Need to load kernel modules or set sysctl parameters
+- Need custom systemd services or file provisioning
+- Need per-cluster SSH keys not registered in CloudStack
+- Using a custom image where the default user differs from what CloudStack expects
+
+**Key differences from Method 1:**
+
+| | Method 1 (CloudStack SSH KeyPair) | Method 2 (Inline Cloud-Init) |
+|---|---|---|
+| SSH injection | CloudStack native (`deployVirtualMachine` API) | cloud-init via `KubeadmConfig` |
+| User setup | CloudStack uses image default user | Explicitly defined in `KubeadmConfig.users` |
+| Custom commands | No | `preKubeadmCommands` / `postKubeadmCommands` |
+| Package install | No | Yes |
+| File provisioning | No | Yes (via cloud-init `write_files`) |
+| Portability | CloudStack-specific | Standard CAPI (works on any provider) |
+
+> **⚠️ User name must match your image:** With Method 2, you explicitly define the user in `KubeadmConfig.users`. Make sure it matches the default user in your CAPI-compatible image:
+> - **Ubuntu images** → `ubuntu`
+> - **Rocky Linux images** → `cloud-user`
+> - **Custom images** → whatever user is embedded in the image
+
+```bash
+kubectl apply -f manifests/12-custom-image-cluster.yaml
+```
+
 ## 4. Access the Cluster
 
 ### 4.1 Get kubeconfig
@@ -162,10 +198,11 @@ kubectl --kubeconfig=kubeconfig get pods -n kube-system
 
 ### 4.2 SSH to Nodes
 
-SSH key configuration is done in the cluster YAML before applying (see [Section 3.1](#31-minimal-cluster-1-control--2-workers) parameter table). Two methods are available:
+SSH access is configured when you create the cluster (see [Section 3.1](#31-minimal-cluster-1-control--2-workers) for Method 1, or [Section 3.4](#34-advanced-inline-cloudinit) for Method 2).
 
-- **Method 1 — CloudStack SSH KeyPair (Recommended):** Register via `cmk register-sshkeypair`, then set `sshKey: "mykey"` in `CloudStackMachine` resources
-- **Method 2 — Inline SSH Key:** Paste your full public key into `KubeadmConfig.users.sshAuthorizedKeys`
+**Method 1 (default)** — CloudStack SSH KeyPair: Register via `cmk register-sshkeypair`, then CloudStack injects the key into the default image user automatically.
+
+**Method 2 (advanced)** — Inline cloud-init: Define the user and SSH key directly in `KubeadmConfig.users`. You must specify the correct user name for your image.
 
 > **⚠️ User name depends on the image:**
 > - **Ubuntu images** → `ubuntu`
