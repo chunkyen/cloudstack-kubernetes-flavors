@@ -159,14 +159,13 @@ spec:
   name: cloudstack
   type: infrastructure
   configSecret:
-    name: cloudstack-config  # custom secret, not Rancher cloud credential
+    name: cloudstack-credentials  # custom secret, not Rancher cloud credential
 ```
 
 The secret contains CloudStack API credentials and configuration:
-- `CLOUDSTACK_ENDPOINT` — management server URL
-- `CLOUDSTACK_API_KEY` / `CLOUDSTACK_SECRET_KEY` — API credentials
-- `CLOUDSTACK_DEFAULT_ZONE` — default zone (optional)
-- `CLOUDSTACK_DEFAULT_NETWORK` — default network (optional)
+- `api-url` — management server URL (full URL with scheme)
+- `api-key` / `secret-key` — API credentials
+- `verify-ssl` — set to `"false"` for self-signed certificates
 
 ## Node Drivers vs CAPI Infrastructure Providers
 

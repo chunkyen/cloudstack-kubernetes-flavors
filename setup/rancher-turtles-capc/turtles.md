@@ -104,26 +104,23 @@ kubectl get capiprovider -n cattle-capi-system
 Create the secret with CloudStack API credentials:
 
 ```yaml
-# cloudstack-secret.yaml
+# cloudstack-secret.yaml — CAPC v1beta3
+# Deploy in the same namespace as your cluster (not cattle-capi-system)
 apiVersion: v1
 kind: Secret
 metadata:
-  name: cloudstack-config
-  namespace: cattle-capi-system
+  name: cloudstack-credentials
+  namespace: <cluster-namespace>  # e.g., capc-cluster2
 type: Opaque
 stringData:
-  # CloudStack API endpoint
-  CLOUDSTACK_ENDPOINT: "http://<management-server>:8080/client/api"
+  # CloudStack management server endpoint (full URL with scheme)
+  api-url: "http://<management-server>:8080/client/api"
   # API key (from CloudStack UI → Account → API Key)
-  CLOUDSTACK_API_KEY: "<your-api-key>"
+  api-key: "<your-api-key>"
   # Secret key
-  CLOUDSTACK_SECRET_KEY: "<your-secret-key>"
-  # Zone ID (optional — can be specified per-cluster)
-  CLOUDSTACK_DEFAULT_ZONE: "<zone-id>"
-  # Network ID (optional — can be specified per-cluster)
-  CLOUDSTACK_DEFAULT_NETWORK: "<network-id>"
-  # Region (optional — for multi-region setups)
-  CLOUDSTACK_REGION: "<region-name>"
+  secret-key: "<your-secret-key>"
+  # Verify SSL certificate (set to "false" for self-signed)
+  verify-ssl: "false"
 ```
 
 ```bash
@@ -148,7 +145,7 @@ spec:
   name: cloudstack
   type: infrastructure
   configSecret:
-    name: cloudstack-config
+    name: cloudstack-credentials
 ```
 
 ```bash
@@ -220,7 +217,7 @@ spec:
   name: cloudstack
   type: infrastructure
   configSecret:
-    name: cloudstack-config
+    name: cloudstack-credentials
 ```
 
 ```bash
@@ -296,7 +293,7 @@ kubectl exec -it -n capc-system deploy/capc-controller-manager -- \
   curl -v http://<management-server>:8080/client/api?command=listZones&apikey=<api-key>
 
 # Verify secret is correct
-kubectl get secret cloudstack-config -n cattle-capi-system -o yaml
+kubectl get secret cloudstack-credentials -n <cluster-namespace> -o yaml
 
 # Check for network policies blocking API access
 kubectl get networkpolicies -n cattle-capi-system
@@ -326,7 +323,7 @@ kubectl exec -it -n capc-system deploy/capc-controller-manager -- \
 kubectl logs -n capc-system -l app=cloudstack -f
 
 # Verify config secret
-kubectl get secret cloudstack-config -n cattle-capi-system -o yaml
+kubectl get secret cloudstack-credentials -n <cluster-namespace> -o yaml
 ```
 
 ## 8. Next Steps

@@ -67,7 +67,7 @@ spec:
         network:
           name: "<network-name-or-id>"
       acsEndpoint:
-        name: cloudstack-config
+        name: cloudstack-credentials
         namespace: capc-cluster-1
       offering: DefaultNetworkOfferingforKubernetesService
       syncWithACS: true

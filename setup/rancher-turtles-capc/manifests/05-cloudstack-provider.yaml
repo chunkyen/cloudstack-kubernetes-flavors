@@ -8,4 +8,4 @@ spec:
   name: cloudstack
   type: infrastructure
   configSecret:
-    name: cloudstack-config
+    name: cloudstack-credentials

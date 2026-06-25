@@ -56,7 +56,7 @@ spec:
         network:
           name: "<network-name-or-id>"
       acsEndpoint:
-        name: cloudstack-config
+        name: cloudstack-credentials
         namespace: cattle-capi-system
 ---
 apiVersion: controlplane.cluster.x-k8s.io/v1beta2
