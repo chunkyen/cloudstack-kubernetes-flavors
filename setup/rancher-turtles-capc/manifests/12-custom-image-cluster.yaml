@@ -32,11 +32,11 @@ spec:
       cidrBlocks: ["10.244.0.0/16"]
     serviceDomain: cluster.local
   controlPlaneRef:
-    apiVersion: controlplane.cluster.x-k8s.io/v1beta2
+    apiGroup: controlplane.cluster.x-k8s.io
     kind: KubeadmControlPlane
     name: capc-cluster-custom-control-plane
   infrastructureRef:
-    apiVersion: infrastructure.cluster.x-k8s.io/v1beta2
+    apiGroup: infrastructure.cluster.x-k8s.io
     kind: CloudStackCluster
     name: capc-cluster-custom
 ---
@@ -68,10 +68,11 @@ spec:
   replicas: 1
   version: "v1.32.0"
   machineTemplate:
-    infrastructureRef:
-      apiVersion: infrastructure.cluster.x-k8s.io/v1beta2
-      kind: CloudStackMachine
-      name: capc-cluster-custom-control-plane
+    spec:
+      infrastructureRef:
+        apiGroup: infrastructure.cluster.x-k8s.io
+        kind: CloudStackMachine
+        name: capc-cluster-custom-control-plane
   kubeadmConfigSpec:
     clusterConfiguration:
       apiServer:
@@ -81,7 +82,7 @@ spec:
       - name: ubuntu
         sshAuthorizedKeys:
           - "<YOUR_SSH_PUBLIC_KEY>"  # Your full SSH public key
-        sudo: ALL=(ALL) NOPASSWD:ALL
+        sudo: ALL=(ALL) NOPASSWD:***
         home: /home/ubuntu
     preKubeadmCommands:
       - echo "Custom pre-kubeadm setup for control plane"
@@ -117,11 +118,11 @@ spec:
       version: "v1.32.0"
       bootstrap:
         configRef:
-          apiVersion: bootstrap.cluster.x-k8s.io/v1beta2
+          apiGroup: bootstrap.cluster.x-k8s.io
           kind: KubeadmConfig
           name: capc-cluster-custom-workers
       infrastructureRef:
-        apiVersion: infrastructure.cluster.x-k8s.io/v1beta2
+        apiGroup: infrastructure.cluster.x-k8s.io
         kind: CloudStackMachine
         name: capc-cluster-custom-workers
 ---
@@ -147,11 +148,12 @@ spec:
     - name: ubuntu
       sshAuthorizedKeys:
         - "<YOUR_SSH_PUBLIC_KEY>"  # Your full SSH public key
-      sudo: ALL=(ALL) NOPASSWD:ALL
+      sudo: ALL=(ALL) NOPASSWD:***
       home: /home/ubuntu
   preKubeadmCommands:
     - echo "Custom pre-kubeadm setup for workers"
   postKubeadmCommands:
     - echo "Custom post-kubeadm setup for workers"
   joinConfiguration:
-    controlPlane: null
+    nodeRegistration:
+      name: "{{ ds.meta_data.local_hostname }}"

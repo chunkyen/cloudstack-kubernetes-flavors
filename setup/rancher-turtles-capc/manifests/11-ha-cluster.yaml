@@ -39,11 +39,11 @@ spec:
       cidrBlocks: ["10.244.0.0/16"]
     serviceDomain: cluster.local
   controlPlaneRef:
-    apiVersion: controlplane.cluster.x-k8s.io/v1beta2
+    apiGroup: controlplane.cluster.x-k8s.io
     kind: KubeadmControlPlane
     name: capc-cluster-ha-control-plane
   infrastructureRef:
-    apiVersion: infrastructure.cluster.x-k8s.io/v1beta2
+    apiGroup: infrastructure.cluster.x-k8s.io
     kind: CloudStackCluster
     name: capc-cluster-ha
 ---
@@ -75,10 +75,11 @@ spec:
   replicas: 3
   version: "v1.32.0"
   machineTemplate:
-    infrastructureRef:
-      apiVersion: infrastructure.cluster.x-k8s.io/v1beta2
-      kind: CloudStackMachine
-      name: capc-cluster-ha-control-plane
+    spec:
+      infrastructureRef:
+        apiGroup: infrastructure.cluster.x-k8s.io
+        kind: CloudStackMachine
+        name: capc-cluster-ha-control-plane
   kubeadmConfigSpec:
     clusterConfiguration:
       apiServer:
@@ -114,11 +115,11 @@ spec:
       version: "v1.32.0"
       bootstrap:
         configRef:
-          apiVersion: bootstrap.cluster.x-k8s.io/v1beta2
+          apiGroup: bootstrap.cluster.x-k8s.io
           kind: KubeadmConfig
           name: capc-cluster-ha-workers
       infrastructureRef:
-        apiVersion: infrastructure.cluster.x-k8s.io/v1beta2
+        apiGroup: infrastructure.cluster.x-k8s.io
         kind: CloudStackMachine
         name: capc-cluster-ha-workers
 ---
@@ -141,4 +142,5 @@ metadata:
   namespace: default
 spec:
   joinConfiguration:
-    controlPlane: null
+    nodeRegistration:
+      name: "{{ ds.meta_data.local_hostname }}"
