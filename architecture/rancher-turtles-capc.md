@@ -157,6 +157,40 @@ The secret contains CloudStack API credentials and configuration:
 - `CLOUDSTACK_DEFAULT_ZONE` — default zone (optional)
 - `CLOUDSTACK_DEFAULT_NETWORK` — default network (optional)
 
+## Node Drivers vs CAPI Infrastructure Providers
+
+Rancher supports two different cluster provisioning models that are often confused:
+
+### Node Drivers (Legacy)
+
+Node drivers use the Docker Machine interface to provision infrastructure hosts. They are used by Rancher's node driver cluster provisioning path (the old v2prov model for K3s/RKE2):
+
+- **Built-in drivers** (AWS, DigitalOcean, Azure, etc.) — still work in v2.13
+- **Custom drivers** — **broken in v2.13** due to the Rancher Provisioning → Turtles migration ([known issue](https://forums.suse.com/t/rancher-release-v2-13-0/46038))
+- **Direction** — deprecated; Rancher is moving away from Docker Machine
+
+### CAPI Infrastructure Providers (Modern)
+
+CAPI providers like CAPC use the Cluster API framework — a completely separate provisioning path:
+
+- **CAPC** — CloudStack infrastructure provider for Cluster API
+- **Not a node driver** — uses its own CRDs (`CloudStackCluster`, `CloudStackMachine`, etc.)
+- **Independent of node drivers** — runs in the `capc-system` namespace, managed by Turtles via `CAPIProvider` CRD
+- **Direction** — actively developed, officially supported
+
+### Side-by-Side
+
+| | Node Drivers | CAPC (CAPI Provider) |
+|---|---|---|
+| **Provisioning model** | Docker Machine | Cluster API |
+| **Built-in drivers** | ✅ still work | N/A |
+| **Custom drivers** | ⚠️ broken in v2.13 | N/A |
+| **Rancher UI** | Cluster Management → Node Pools | Cluster Management → Machines/MachineSets/MachineDeployments |
+| **Status** | Legacy | Active |
+| **CAPC relevance** | ❌ not applicable | ✅ works independently |
+
+Node drivers and Turtles/CAPC are parallel, non-competing systems. Turtles replaced the Rancher Provisioning component (K3s/RKE2 v2prov engine), not node drivers. CAPC does not go through the node driver mechanism — it's a full CAPI infrastructure provider with its own lifecycle managed by Turtles.
+
 ## References
 
 - [CAPC Architecture](./capc.md)
