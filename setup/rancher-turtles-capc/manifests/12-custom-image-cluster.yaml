@@ -21,7 +21,7 @@
 # To apply to a different namespace without editing the file:
 #   kubectl apply -f 12-custom-image-cluster.yaml -n my-clusters
 ---
-apiVersion: cluster.x-k8s.io/v1beta1
+apiVersion: cluster.x-k8s.io/v1beta2
 kind: Cluster
 metadata:
   name: capc-cluster-custom
@@ -32,15 +32,15 @@ spec:
       cidrBlocks: ["10.244.0.0/16"]
     serviceDomain: cluster.local
   controlPlaneRef:
-    apiVersion: controlplane.cluster.x-k8s.io/v1beta1
+    apiVersion: controlplane.cluster.x-k8s.io/v1beta2
     kind: KubeadmControlPlane
     name: capc-cluster-custom-control-plane
   infrastructureRef:
-    apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
+    apiVersion: infrastructure.cluster.x-k8s.io/v1beta2
     kind: CloudStackCluster
     name: capc-cluster-custom
 ---
-apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
+apiVersion: infrastructure.cluster.x-k8s.io/v1beta2
 kind: CloudStackCluster
 metadata:
   name: capc-cluster-custom
@@ -49,12 +49,17 @@ spec:
   controlPlaneEndpoint:
     host: "<reserved-public-ip>"  # Reserved public IP from CloudStack network
     port: 6443
-  network:
-    name: "<network-name-or-id>"
-  zone:
-    name: "<zone-name-or-id>"
+  failureDomains:
+    - name: fd-1
+      zone:
+        name: "<zone-name-or-id>"
+        network:
+          name: "<network-name-or-id>"
+      acsEndpoint:
+        name: cloudstack-config
+        namespace: cattle-capi-system
 ---
-apiVersion: controlplane.cluster.x-k8s.io/v1beta1
+apiVersion: controlplane.cluster.x-k8s.io/v1beta2
 kind: KubeadmControlPlane
 metadata:
   name: capc-cluster-custom-control-plane
@@ -64,7 +69,7 @@ spec:
   version: "v1.32.0"
   machineTemplate:
     infrastructureRef:
-      apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
+      apiVersion: infrastructure.cluster.x-k8s.io/v1beta2
       kind: CloudStackMachine
       name: capc-cluster-custom-control-plane
   kubeadmConfigSpec:
@@ -83,17 +88,19 @@ spec:
     postKubeadmCommands:
       - echo "Custom post-kubeadm setup for control plane"
 ---
-apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
+apiVersion: infrastructure.cluster.x-k8s.io/v1beta2
 kind: CloudStackMachine
 metadata:
   name: capc-cluster-custom-control-plane
   namespace: default
 spec:
-  serviceOffering: "Medium"
-  template: "capc-ubuntu-2404-kube-v1.32.3"
+  offering:
+    name: "Medium"
+  template:
+    name: "capc-ubuntu-2404-kube-v1.32.3"
   # No sshKey field — SSH is handled via cloud-init in KubeadmConfig
 ---
-apiVersion: cluster.x-k8s.io/v1beta1
+apiVersion: cluster.x-k8s.io/v1beta2
 kind: MachineDeployment
 metadata:
   name: capc-cluster-custom-workers
@@ -106,28 +113,31 @@ spec:
       cluster.x-k8s.io/cluster-name: capc-cluster-custom
   template:
     spec:
+      clusterName: capc-cluster-custom
       version: "v1.32.0"
       bootstrap:
         configRef:
-          apiVersion: bootstrap.cluster.x-k8s.io/v1beta1
+          apiVersion: bootstrap.cluster.x-k8s.io/v1beta2
           kind: KubeadmConfig
           name: capc-cluster-custom-workers
       infrastructureRef:
-        apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
+        apiVersion: infrastructure.cluster.x-k8s.io/v1beta2
         kind: CloudStackMachine
         name: capc-cluster-custom-workers
 ---
-apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
+apiVersion: infrastructure.cluster.x-k8s.io/v1beta2
 kind: CloudStackMachine
 metadata:
   name: capc-cluster-custom-workers
   namespace: default
 spec:
-  serviceOffering: "Medium"
-  template: "capc-ubuntu-2404-kube-v1.32.3"
+  offering:
+    name: "Medium"
+  template:
+    name: "capc-ubuntu-2404-kube-v1.32.3"
   # No sshKey field — SSH is handled via cloud-init in KubeadmConfig
 ---
-apiVersion: bootstrap.cluster.x-k8s.io/v1beta1
+apiVersion: bootstrap.cluster.x-k8s.io/v1beta2
 kind: KubeadmConfig
 metadata:
   name: capc-cluster-custom-workers
