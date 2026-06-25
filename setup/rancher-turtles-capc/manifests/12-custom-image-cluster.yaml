@@ -91,7 +91,6 @@ metadata:
 spec:
   serviceOffering: "Medium"
   template: "capc-ubuntu-2404-kube-v1.32.3"
-  diskOffering: "Large"
   # No sshKey field — SSH is handled via cloud-init in KubeadmConfig
 ---
 apiVersion: cluster.x-k8s.io/v1beta1
@@ -126,7 +125,6 @@ metadata:
 spec:
   serviceOffering: "Medium"
   template: "capc-ubuntu-2404-kube-v1.32.3"
-  diskOffering: "Large"
   # No sshKey field — SSH is handled via cloud-init in KubeadmConfig
 ---
 apiVersion: bootstrap.cluster.x-k8s.io/v1beta1

@@ -17,7 +17,7 @@ This guide covers provisioning Kubernetes clusters on CloudStack using CAPI CRDs
 >
 > **Not auto-created:** SSH port forwarding rules must be configured manually in the CloudStack UI (see [Section 4.2](#42-ssh-to-nodes)).
 >
-> You only need to pre-create: **CAPI-compatible template**, **service offerings**, **disk offerings**, and a **reserved public IP**.
+> You only need to pre-create: **CAPI-compatible template**, **service offerings**, and a **reserved public IP**.
 
 ## 2. Prepare CAPI-Compatible Images
 
@@ -102,7 +102,7 @@ The full cluster YAML is available in the manifests folder: [10-minimal-cluster.
 | `<zone-name-or-id>` | CloudStack zone | `cmk list zones` |
 | `capc-ubuntu-2404-kube-v1.32.3` | CAPI-compatible template name | Must be registered (see [Section 2.2](#22-register-the-template)) |
 | `Medium` / `Large` | Service offering names | `cmk list serviceofferings listall=true` (control plane needs ≥2GB RAM, 2 vCPU) |
-| `Large` (diskOffering) | Disk offering name | `cmk list diskofferings listall=true` |
+
 | `my-ssh-key` | CloudStack SSH keypair name | `cmk register-sshkeypair --name=my-ssh-key --publickey="$(cat ~/.ssh/id_ed25519.pub)"` |
 
 > **SSH Key Method:** This example uses **Method 1** (CloudStack SSH KeyPair) — the recommended approach. Register your key via `cmk register-sshkeypair`, then reference it via the `sshKey` field on `CloudStackMachine` resources. CloudStack injects the key into the default user (`ubuntu` for Ubuntu images, `cloud-user` for Rocky). See [Section 3.4](#34-advanced-inline-cloudinit) for Method 2 (inline cloud-init for custom image setup).
@@ -140,7 +140,7 @@ The full cluster YAML is available in the manifests folder: [11-ha-cluster.yaml]
 Same parameters as the minimal cluster (see table above). The HA cluster uses:
 - **Control plane:** `Large` service offering (recommended for HA)
 - **Workers:** `Large` service offering
-- **Disk:** `Large` disk offering
+
 
 > **Namespace note:** Same as above — resources are created in the `default` namespace of the management cluster. To apply elsewhere: `kubectl apply -f manifests/11-ha-cluster.yaml -n my-clusters`
 

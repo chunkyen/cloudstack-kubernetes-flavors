@@ -66,7 +66,6 @@ Replace these before applying cluster manifests:
 | `<zone-name-or-id>` | CloudStack zone name or ID |
 | `capc-ubuntu-2404-kube-v1.32.3` | Your registered CAPI-compatible template name |
 | `Medium` / `Large` | Your CloudStack service offering names |
-| `Large` (diskOffering) | Your CloudStack disk offering name |
 | `my-ssh-key` | Your CloudStack SSH keypair name — register via `cmk register-sshkeypair` |
 | `<YOUR_SSH_PUBLIC_KEY>` | Your SSH public key — for Method 2 only (12-custom-image-cluster.yaml), embedded via cloud-init |
 
