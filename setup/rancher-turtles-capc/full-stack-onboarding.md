@@ -1,8 +1,8 @@
-# Post-Deployment Automation — CNI + CCM + CSI in One Shot
+# Full-Stack Onboarding — CNI + CCM + CSI in One Shot
 
-After deploying a CAPC cluster, you must manually install three components: **CNI** (networking), **CCM** (CloudStack Kubernetes Provider for LoadBalancer services and node labels), and **CSI** (persistent storage). This is the biggest pain point compared to CKS, which ships all of these baked into the ISO.
+Deploy a CAPC cluster and get **CNI** (networking), **CCM** (CloudStack Kubernetes Provider for LoadBalancer services and node labels), and **CSI** (persistent storage) all installed automatically — no manual follow-up steps. This is the CAPC equivalent of CKS's "one ISO, everything works" experience.
 
-This guide shows how to automate the entire stack deployment using **ClusterResourceSet**, a CAPI-native mechanism that applies resources to a workload cluster after it's provisioned — effectively giving you the "one-shot" CKS experience.
+This uses **ClusterResourceSet**, a CAPI-native mechanism that applies resources to a workload cluster after it's provisioned.
 
 ## Architecture
 
@@ -11,7 +11,7 @@ Management Cluster (Rancher + Turtles)
 │
 ├── ClusterResourceSet CRD — deployed by Turtles/core CAPI
 │
-├── ConfigMap: post-deploy-manifests
+├── ConfigMap: full-stack-manifests
 │   ├── cni/calico.yaml          # CNI networking
 │   ├── ccm/cloudstack-secret    # CloudStack credentials secret
 │   ├── ccm/cloudstack-ccm.yaml  # CloudStack Kubernetes Provider
@@ -63,20 +63,20 @@ stringData:
 kubectl apply -f cloudstack-secret.yaml -n capc-cluster-1
 ```
 
-## Step 2: Create the Post-Deploy ConfigMap
+## Step 2: Create the Full-Stack ConfigMap
 
 Package all three components (CNI + CCM + CSI) into a single ConfigMap. Each manifest is stored as a separate key so ClusterResourceSet can apply them in order.
 
 ```yaml
-# post-deploy-manifests.yaml
+# full-stack-manifests.yaml
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: post-deploy-manifests
+  name: full-stack-manifests
   namespace: capc-cluster-1
   labels:
     cluster.x-k8s.io/cluster-name: capc-cluster-1
-    post-deploy: "true"
+    full-stack: "true"
 data:
   # ─── CNI: Calico ──────────────────────────────────────────────
   cni/calico.yaml: |
@@ -189,7 +189,7 @@ data:
 > **⚠️ For production use:** Don't inline full manifests in a ConfigMap. Instead, download the real manifests and store them as separate files, then create the ConfigMap with `kubectl create configmap`:
 >
 > ```bash
-> kubectl create configmap post-deploy-manifests \
+> kubectl create configmap full-stack-manifests \
 >   --from-file=cni/calico.yaml=./calico.yaml \
 >   --from-file=ccm/cloudstack-secret.yaml=./ccm-secret.yaml \
 >   --from-file=ccm/cloudstack-ccm.yaml=./ccm-deployment.yaml \
@@ -205,7 +205,7 @@ data:
 The ClusterResourceSet ties everything together — it watches for clusters with matching labels and applies all manifests from the ConfigMap.
 
 ```yaml
-# post-deploy-resource-set.yaml
+# full-stack-resource-set.yaml
 apiVersion: cluster.x-k8s.io/v1beta1
 kind: ClusterResourceSet
 metadata:
@@ -218,11 +218,11 @@ spec:
       cluster.x-k8s.io/cluster-name: capc-cluster-1
   resourceSelector:
     matchLabels:
-      post-deploy: "true"
+      full-stack: "true"
 ```
 
 ```bash
-kubectl apply -f post-deploy-resource-set.yaml
+kubectl apply -f full-stack-resource-set.yaml
 ```
 
 ## Step 4: Label the Cluster
@@ -402,7 +402,7 @@ echo "✅ All components deployed successfully!"
 kubectl describe clustersetresource capc-cluster-1-full-stack -n capc-cluster-1
 
 # Check if the ConfigMap is readable by the controller
-kubectl get configmap post-deploy-manifests -n capc-cluster-1 -o yaml
+kubectl get configmap full-stack-manifests -n capc-cluster-1 -o yaml
 ```
 
 ### CCM not creating LoadBalancer services
@@ -434,7 +434,7 @@ kubectl --kubeconfig=$KUBECONFIG get nodes -o wide
 kubectl --kubeconfig=$KUBECONFIG get pods -A | grep calico
 ```
 
-## Comparison: CKS vs CAPC Post-Deployment
+## Comparison: CKS vs CAPC Full-Stack Onboarding
 
 | Component | CKS | CAPC (manual) | CAPC + ClusterResourceSet |
 |-----------|-----|---------------|--------------------------|
