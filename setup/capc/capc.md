@@ -550,7 +550,55 @@ echo "=== System Pods ===" && \
 kubectl --kubeconfig=$(clusterctl get kubeconfig capc-cluster) get pods -n kube-system | grep -v Running || echo "All system pods running"
 ```
 
-## Managing the Cluster
+## Troubleshooting
+
+### VM Deleted from CloudStack — Node Not Recreated
+
+If you delete a VM directly from CloudStack (UI, cmk, API), CAPC **will not automatically recreate it**. Here's why and how to fix it:
+
+**Why it doesn't work:** When the VM is deleted, the `CloudStackMachine` CR still exists with its `InstanceID` set. CAPC's controller looks up that InstanceID in CloudStack, gets "not found," and **doesn't automatically create a replacement** — it just requeues and waits. The CAPI MachineDeployment sees its replica count is met (the Machine CR still exists), so it doesn't generate a new one either.
+
+**Fix — delete the stale CAPI objects:**
+
+```bash
+# 1. Find the machines that are stuck
+kubectl get machines -A
+
+# 2. Remove the finalizer from the CloudStackMachine (VM is already gone, so cleanup will hang)
+kubectl patch cloudstackmachine <name> -n <namespace> \
+  --type merge -p '{"metadata":{"finalizers":null}}'
+
+# 3. Also remove the finalizer from the Machine CR if it's stuck
+kubectl patch machine <name> -n <namespace> \
+  --type merge -p '{"metadata":{"finalizers":null}}'
+
+# 4. Delete both CRs
+kubectl delete cloudstackmachine <name> -n <namespace>
+kubectl delete machine <name> -n <namespace>
+```
+
+Once the Machine CR is deleted, the `MachineDeployment` notices the replica count is below desired and creates a **new Machine + CloudStackMachine**, which CAPC provisions as a fresh VM.
+
+**After the new node joins:** The old Kubernetes node object (orphaned) will still exist with taints. Clean it up:
+
+```bash
+# Drain the old node
+kubectl drain <old-node-name> --ignore-daemonsets --delete-emptydir-data
+
+# Remove it from the cluster
+kubectl delete node <old-node-name>
+```
+
+**Alternative — scale down and back up:**
+
+```bash
+kubectl scale machinedeployment <name> --replicas=0 -n <namespace>
+kubectl scale machinedeployment <name> --replicas=<desired-count> -n <namespace>
+```
+
+This forces the MachineSet to recreate all machines from scratch.
+
+**Root cause:** CAPC's `GetOrCreateVMInstance()` only creates a VM if the CloudStackMachine has no InstanceID. Once the CR exists with an InstanceID (even pointing to a deleted VM), it won't recreate. This is a known gap in drift detection — manual cleanup of stale CAPI objects is required.
 
 ### Scaling Workers
 
