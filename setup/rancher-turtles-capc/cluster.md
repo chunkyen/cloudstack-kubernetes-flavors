@@ -140,6 +140,8 @@ The full cluster YAML is available in the manifests folder: [10-minimal-cluster.
 
 > **Namespace note:** The YAML uses `namespace: default`, which means all CAPI resources (CloudStackCluster, KubeadmControlPlane, MachineDeployment, etc.) are created in the `default` namespace of the **management cluster** (your Rancher cluster). The workload cluster itself is just VMs on CloudStack — it has no namespace. To apply to a different namespace without editing the file: `kubectl apply -f manifests/10-minimal-cluster.yaml -n my-clusters`
 
+> **`syncWithACS: true`** — This setting (on the `CloudStackCluster` spec) makes the CAPC cluster appear in CloudStack's Kubernetes UI alongside native CKS clusters. Your cluster is still fully managed by CAPC/Rancher Turtles, but operators can see it in the ACS web console under **Kubernetes → Clusters**. Set to `false` or remove it if you don't want this visibility.
+
 ```bash
 kubectl apply -f manifests/10-minimal-cluster.yaml
 ```

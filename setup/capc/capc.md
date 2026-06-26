@@ -283,6 +283,8 @@ Apply the generated spec to your management cluster:
 kubectl apply -f capc-cluster-spec.yaml
 ```
 
+> **`syncWithACS: true`** — The generated YAML includes this setting (on the `CloudStackCluster` spec). It makes the CAPC cluster appear in CloudStack's Kubernetes UI alongside native CKS clusters. Your cluster is still fully managed by CAPC, but operators can see it in the ACS web console under **Kubernetes → Clusters**. Set to `false` or remove it if you don't want this visibility.
+
 Monitor progress:
 
 ```bash
