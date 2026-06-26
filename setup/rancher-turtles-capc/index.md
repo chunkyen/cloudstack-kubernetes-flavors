@@ -115,12 +115,20 @@ kubectl apply -f cluster.yaml
 
 ## 4. Overview
 
-This guide covers:
+This guide covers two distinct phases:
+
+### Phase 1 — Deploy Management Plane (Rancher + Turtles + CAPC)
 
 1. **[Deploy Rancher on CKS](./rancher.md)** — Install Rancher server on the bootstrap CKS cluster
-2. **[Install Turtles + CAPC](./turtles.md)** — Deploy Rancher Turtles and configure CAPC as a CAPI provider
-3. **[Create Clusters](./cluster.md)** — Provision CKS clusters via CAPI CRDs
-4. **[Fleet GitOps](./fleet.md)** — Automate cluster management with Fleet
+2. **[Install CAPI Providers](./turtles.md)** — Deploy Rancher Turtles and configure CAPC as a CAPI provider via `CAPIProvider` resources
+3. **[Verify Provider Setup](./turtles.md#35-verify-core-providers)** — Confirm all providers are installed and healthy
+
+### Phase 2 — Create Workload Clusters
+
+4. **[Create Clusters](./cluster.md)** — Provision Kubernetes clusters on CloudStack via CAPI CRDs
+5. **[Fleet GitOps](./fleet.md)** — Automate cluster management with Fleet
+
+> **⚠️ Order matters:** You must complete Phase 1 (providers installed and healthy) before attempting Phase 2 (cluster creation). CAPC cannot provision VMs until the `CAPIProvider` resources are deployed and reconciling.
 
 ## 5. References
 
