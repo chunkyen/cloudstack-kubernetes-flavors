@@ -414,6 +414,41 @@ kubectl edit machinedeployment capc-cluster-md-0
 # Change .spec.replicas, save — CAPC rolls out new nodes
 ```
 
+### Scaling Control Plane
+
+Control plane scaling uses the `KubeadmControlPlane` resource — a separate CR from worker `MachineDeployment`:
+
+```bash
+# Find your KubeadmControlPlane
+kubectl get kubeadmcontrolplane -A
+
+# Scale up (or down) by changing replicas
+kubectl edit kubeadmcontrolplane capc-cluster-control-plane
+```
+
+In the editor, find `.spec.replicas` and change it:
+
+```yaml
+spec:
+  replicas: 3    # ← change this (use odd number for HA: 1, 3, 5...)
+```
+
+**Key differences from worker scaling:**
+
+| | Control Plane (`KubeadmControlPlane`) | Workers (`MachineDeployment`) |
+|---|---|---|
+| Resource | `kubectl edit kubeadmcontrolplane <name>` | `kubectl edit machinedeployment <name>` |
+| Field | `.spec.replicas` | `.spec.replicas` |
+| Safety | CAPC enforces odd ≥ 3 for etcd quorum | Any number (including 0) |
+| Rolling | Yes — old VMs terminate, new ones provision | Same rolling update pattern |
+
+**Important notes:**
+
+- **Always use odd numbers** for control plane (1, 3, 5) — etcd needs quorum
+- CAPC will do a **rolling update** — old control plane VMs are terminated and new ones provisioned from the same template
+- If you're scaling down from 3 to 1, make sure your cluster can survive losing 2 control plane nodes (etcd quorum)
+- Monitor progress: `kubectl get machines -A` and `kubectl get kubeadmcontrolplane <name> -o wide`
+
 ### Upgrading Kubernetes Version
 
 > **Full stack upgrade guide:** For a complete end-to-end upgrade covering CAPC controller, K8s version, CNI, CSI, and CCM, see the [CAPC Upgrade Guide](./capc-upgrade.md).
