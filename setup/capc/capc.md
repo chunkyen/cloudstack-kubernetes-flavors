@@ -404,6 +404,152 @@ KUBECONFIG=capc-cluster.kubeconfig kubectl apply -f \
 
 See [CloudStack Kubernetes Provider](../architecture/cloudstack-kubernetes-provider.md) and [CloudStack CSI Driver](../setup/cloudstack-csi-driver.md) for detailed deployment instructions.
 
+## Verification Checklist
+
+After deploying a CAPC cluster, run these commands to verify each layer is healthy. Work from top (management plane) down (workload cluster).
+
+### Management Plane — CAPC Controllers
+
+```bash
+# CAPC controller running?
+kubectl get pods -n capc-system
+# Expected: capc-controller-manager-xxx 1/1 Running
+
+# CAPC CRDs registered?
+kubectl api-resources | grep cloudstack
+# Expected: cloudstackclusters, cloudstackmachineconfigs, cloudstackmachinetemplates, etc.
+```
+
+### Cluster Resources — All CAPI CRDs
+
+```bash
+# List all cluster resources
+kubectl get clusters -A
+kubectl get cloudstackclusters -A
+kubectl get kubeadmcontrolplanes -A
+kubectl get machines -A
+kubectl get machinesets -A
+kubectl get machinedeployments -A
+```
+
+**Expected state:**
+- `Cluster` → phase: `Provisioned`
+- `CloudStackCluster` → phase: `Ready`
+- `KubeadmControlPlane` → replicas ready (e.g., 3/3)
+- `MachineDeployment` → replicas ready (e.g., 2/2)
+- All `Machines` → phase: `Running`, Ready: true
+
+### CloudStack VMs — Infrastructure Layer
+
+```bash
+# Verify VMs exist in CloudStack via cmk
+cmk list virtualmachines templatefilter=explicittags filter=customizedid | grep kube
+
+# Check compute offerings used
+cmk list serviceofferings listall=true
+```
+
+### Workload Cluster — Kubernetes Layer
+
+```bash
+# Get kubeconfig
+clusterctl get kubeconfig capc-cluster > capc-cluster.kubeconfig
+
+# Nodes ready?
+kubectl --kubeconfig=capc-cluster.kubeconfig get nodes -o wide
+# Expected: all nodes show Ready status with internal IP
+
+# Core system pods running?
+kubectl --kubeconfig=capc-cluster.kubeconfig get pods -n kube-system
+# Expected: all pods in Running state (kube-apiserver, etcd, coredns, etc.)
+
+# API server reachable?
+kubectl --kubeconfig=capc-cluster.kubeconfig cluster-info
+
+# Cluster version?
+kubectl --kubeconfig=capc-cluster.kubeconfig version --short
+```
+
+### Networking — CNI Layer
+
+```bash
+# CNI pods running?
+kubectl --kubeconfig=capc-cluster.kubeconfig get pods -A | grep -E 'calico|cilium|flannel'
+
+# Node networking functional?
+kubectl --kubeconfig=capc-cluster.kubeconfig get nodes -o wide
+# Expected: Ready status, network plugin column populated
+
+# Test pod-to-pod communication
+kubectl --kubeconfig=capc-cluster.kubeconfig apply -f - <<EOF
+apiVersion: v1
+kind: Pod
+metadata:
+  name: ping-test-1
+spec:
+  containers:
+  - name: ping
+    image: nicolaka/netshoot
+    command: ["sleep", "3600"]
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: ping-test-2
+spec:
+  containers:
+  - name: ping
+    image: nicolaka/netshoot
+    command: ["sleep", "3600"]
+EOF
+
+kubectl --kubeconfig=capc-cluster.kubeconfig exec ping-test-1 -- ping -c 3 <ping-test-2-ip>
+# Expected: 3 packets transmitted, 3 received, 0% packet loss
+```
+
+### Storage — CSI Layer
+
+```bash
+# CSI driver pods running?
+kubectl --kubeconfig=capc-cluster.kubeconfig get pods -A | grep cloudstack-csi
+
+# StorageClass available?
+kubectl --kubeconfig=capc-cluster.kubeconfig get storageclass
+# Expected: cloudstack-ssd (or your configured name)
+
+# Create and verify a test PVC
+kubectl --kubeconfig=capc-cluster.kubeconfig apply -f - <<EOF
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: test-pvc
+spec:
+  accessModes:
+  - ReadWriteOnce
+  storageClassName: cloudstack-ssd
+  resources:
+    requests:
+      storage: 5Gi
+EOF
+
+kubectl --kubeconfig=capc-cluster.kubeconfig get pvc test-pvc
+# Expected: STATUS: Bound
+```
+
+### Quick One-Liner Summary
+
+```bash
+# All-in-one health check (management plane + workload)
+echo "=== Management Plane ===" && \
+kubectl get pods -n capc-system && echo "" && \
+echo "=== Cluster CRDs ===" && \
+kubectl get clusters,cloudstackclusters,kubeadmcontrolplanes,machinesets,machinedeployments -A && echo "" && \
+echo "=== Workload Nodes ===" && \
+kubectl --kubeconfig=$(clusterctl get kubeconfig capc-cluster) get nodes && echo "" && \
+echo "=== System Pods ===" && \
+kubectl --kubeconfig=$(clusterctl get kubeconfig capc-cluster) get pods -n kube-system | grep -v Running || echo "All system pods running"
+```
+
 ## Managing the Cluster
 
 ### Scaling Workers

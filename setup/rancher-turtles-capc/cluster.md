@@ -129,7 +129,111 @@ kubectl get machinedeployments
 kubectl get events --sort-by='.lastTimestamp' -n default
 ```
 
-> **⚠️ CNI Required:** After the cluster is created, you **must** install a CNI plugin before pods can communicate. See [Section 6.2](#62-install-cni) for installation instructions. Without a CNI, nodes will be `Ready` but pods will not be able to communicate.
+> **⚠️ CNI Required:** After the cluster is created, you **must** install a CNI plugin before pods can communicate. See [Section 5.1](#51-calico-recommended) for installation instructions. Without a CNI, nodes will be `Ready` but pods will not be able to communicate.
+
+### 3.3 Verification Checklist
+
+Run these commands after deployment to verify the cluster is healthy end-to-end.
+
+#### Management Plane — Rancher Turtles + CAPC
+
+```bash
+# Turtles controller running?
+kubectl get pods -n cattle-capi-system | grep turtles
+
+# CAPC provider deployed by Turtles?
+kubectl get pods -n capc-system
+# Expected: capc-controller-manager-xxx 1/1 Running
+
+# CAPIProvider resources applied?
+kubectl get capiproviders -A
+# Expected: cloudstack provider with RECONCILING: false, READY: true
+```
+
+#### Cluster CRDs — All Resources
+
+```bash
+kubectl get clusters
+kubectl get cloudstackclusters
+kubectl get kubeadmcontrolplanes
+kubectl get machines
+kubectl get machinesets
+kubectl get machinedeployments
+```
+
+**Expected state:**
+- `Cluster` → phase: `Provisioned`
+- `CloudStackCluster` → phase: `Ready`
+- `KubeadmControlPlane` → replicas ready (e.g., 1/1 for minimal, 3/3 for HA)
+- `MachineDeployment` → replicas ready (e.g., 2/2 for minimal, 3/3 for HA)
+- All `Machines` → phase: `Running`, Ready: true
+
+#### Workload Cluster — Kubernetes Layer
+
+```bash
+# Get kubeconfig from secret
+kubectl get secret capc-cluster-1-kubeconfig -o jsonpath='{.data.value}' | base64 -d > kubeconfig
+
+# Nodes ready?
+kubectl --kubeconfig=kubeconfig get nodes -o wide
+# Expected: all nodes show Ready status with internal IP
+
+# Core system pods running?
+kubectl --kubeconfig=kubeconfig get pods -n kube-system
+# Expected: all pods in Running state (kube-apiserver, etcd, coredns, etc.)
+
+# API server reachable?
+kubectl --kubeconfig=kubeconfig cluster-info
+```
+
+#### Networking — CNI Layer
+
+```bash
+# CNI pods running?
+kubectl --kubeconfig=kubeconfig get pods -A | grep -E 'calico|cilium|flannel'
+
+# Test pod-to-pod communication
+kubectl --kubeconfig=kubeconfig apply -f - <<EOF
+apiVersion: v1
+kind: Pod
+metadata:
+  name: ping-test-1
+spec:
+  containers:
+  - name: ping
+    image: nicolaka/netshoot
+    command: ["sleep", "3600"]
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: ping-test-2
+spec:
+  containers:
+  - name: ping
+    image: nicolaka/netshoot
+    command: ["sleep", "3600"]
+EOF
+
+kubectl --kubeconfig=kubeconfig exec ping-test-1 -- ping -c 3 <ping-test-2-ip>
+# Expected: 3 packets transmitted, 3 received, 0% packet loss
+```
+
+#### Quick One-Liner Summary
+
+```bash
+# All-in-one health check
+echo "=== Turtles ===" && \
+kubectl get pods -n cattle-capi-system | grep turtles && echo "" && \
+echo "=== CAPC ===" && \
+kubectl get pods -n capc-system && echo "" && \
+echo "=== CAPI CRDs ===" && \
+kubectl get clusters,cloudstackclusters,kubeadmcontrolplanes,machinesets,machinedeployments && echo "" && \
+echo "=== Workload Nodes ===" && \
+kubectl --kubeconfig=kubeconfig get nodes && echo "" && \
+echo "=== System Pods ===" && \
+kubectl --kubeconfig=kubeconfig get pods -n kube-system | grep -v Running || echo "All system pods running"
+```
 
 ### 3.3 HA Cluster (3 Control + 3 Workers)
 
