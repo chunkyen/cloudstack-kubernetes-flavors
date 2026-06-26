@@ -113,7 +113,21 @@ The full cluster YAML is available in the manifests folder: [10-minimal-cluster.
 kubectl apply -f manifests/10-minimal-cluster.yaml
 ```
 
-### 3.2 Apply and Monitor
+### 3.2 Create Namespace
+
+All CAPI resources for this cluster must live in a dedicated namespace on the **management cluster** (your Rancher cluster). The workload cluster itself is just VMs on CloudStack — it has no namespace. But the CAPI CRDs (`Cluster`, `CloudStackCluster`, `KubeadmControlPlane`, etc.) are regular Kubernetes resources that need a namespace.
+
+```bash
+# Create the namespace (must match the namespace in your manifest)
+kubectl create namespace capc-cluster-1
+
+# Verify it exists
+kubectl get namespace capc-cluster-1
+```
+
+> **⚠️ Namespace must exist before applying:** If the namespace doesn't exist, `kubectl apply -f` will fail with `namespace not found`. Always create it first.
+
+### 3.3 Apply and Monitor
 
 ```bash
 kubectl apply -f manifests/10-minimal-cluster.yaml
@@ -131,7 +145,7 @@ kubectl get events --sort-by='.lastTimestamp' -n default
 
 > **⚠️ CNI Required:** After the cluster is created, you **must** install a CNI plugin before pods can communicate. See [Section 5.1](#51-calico-recommended) for installation instructions. Without a CNI, nodes will be `Ready` but pods will not be able to communicate.
 
-### 3.3 Verification Checklist
+### 3.4 Verification Checklist
 
 Run these commands after deployment to verify the cluster is healthy end-to-end.
 
@@ -235,7 +249,7 @@ echo "=== System Pods ===" && \
 kubectl --kubeconfig=kubeconfig get pods -n kube-system | grep -v Running || echo "All system pods running"
 ```
 
-### 3.3 HA Cluster (3 Control + 3 Workers)
+### 3.5 HA Cluster (3 Control + 3 Workers)
 
 The full cluster YAML is available in the manifests folder: [11-ha-cluster.yaml](./manifests/11-ha-cluster.yaml)
 
@@ -252,7 +266,7 @@ Same parameters as the minimal cluster (see table above). The HA cluster uses:
 kubectl apply -f manifests/11-ha-cluster.yaml
 ```
 
-### 3.4 Advanced — Inline Cloud-Init (Custom Image Setup)
+### 3.6 Advanced — Inline Cloud-Init (Custom Image Setup)
 
 For cases where you need more than just SSH key injection — custom users, package installation, kernel modules, systemd services, file provisioning — use **Method 2**: define everything inline in `KubeadmConfig`.
 
