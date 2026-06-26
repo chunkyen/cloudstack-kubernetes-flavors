@@ -213,6 +213,42 @@ make build-cloudstack-csi-driver
 make container
 ```
 
+## CKS vs CAPC/CAPM Image Compatibility
+
+The CloudStack CSI driver's node DaemonSet references a `hostPath` volume at `/var/mnt/local-storage` with `type: Directory`. This works on **CKS custom ISO images** because the ISO includes a pre-partitioned disk layout where this path exists by default.
+
+**CAPC and other CAPI provider machine images** (standard Ubuntu/Debian templates) do **not** have `/var/mnt/local-storage` — they're bare OS images with no custom partitioning. Changing `type: Directory` to `type: DirectoryOrCreate` is not enough because the parent directory doesn't exist at all on these images.
+
+### Fix for CAPC/CAPM Images
+
+Patch the CSI node DaemonSet to use `/var/lib/kubelet` instead:
+
+```bash
+# Find the CSI node DaemonSet
+kubectl get daemonset -A | grep cloudstack
+
+# Edit it (or apply a patch)
+kubectl edit daemonset <csi-node-ds-name> -n kube-system
+```
+
+Change the `cloud-init-dir` volume definition:
+
+```yaml
+# Before (CKS-specific, fails on CAPC images):
+- name: cloud-init-dir
+  hostPath:
+    path: /var/mnt/local-storage
+    type: Directory
+
+# After (works on all images):
+- name: cloud-init-dir
+  hostPath:
+    path: /var/lib/kubelet
+    type: DirectoryOrCreate
+```
+
+> **Note:** This is a known limitation of the CloudStack CSI driver when deployed on non-CKS machine images. Consider filing an upstream issue to make the default path configurable or use `DirectoryOrCreate` with a path that exists on all standard Kubernetes node images.
+
 ## References
 
 - [Canonical: cloudstack/cloudstack-csi-driver](https://github.com/cloudstack/cloudstack-csi-driver)
