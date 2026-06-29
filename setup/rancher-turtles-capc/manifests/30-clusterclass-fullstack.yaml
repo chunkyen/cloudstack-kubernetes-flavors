@@ -138,24 +138,7 @@ spec:
                     - name: xtables-lock
                       emptyDir: {}
 
-  # ─── Phase B — CCM + CSI (injected after all bootstrap completes) ──
-    - name: ccm-cloudstack-credentials
-      definitions:
-        - patchType: inline
-          value: |
-            apiVersion: v1
-            kind: Secret
-            metadata:
-              name: cloudstack-secret
-              namespace: kube-system
-            type: Opaque
-            stringData:
-              cloud-config: |
-                [Global]
-                api-url = http://<management-server>:8080/client/api
-                api-key = "***"
-                secret-key = "<your-secret-key>"
-                ssl-no-verify = "false"
+
 
     - name: ccm-cloudstack-rbac
       definitions:

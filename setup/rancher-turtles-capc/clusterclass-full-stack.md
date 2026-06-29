@@ -67,11 +67,16 @@ All patches use `patchType: inline` — raw YAML resources are embedded directly
 
 ### What the ClusterClass defines
 
-| Component | Patch Name | Injection Phase | Purpose |
-|-----------|-----------|-----------------|---------|
-| **Calico CNI** | `cni-calico` | `ControlPlaneInitialized` | Pod networking — needed before any workload pods can schedule |
-| **CloudStack K8s Provider (CCM)** | `secret-cloudstack-ccm`, `rbac-cloudstack-ccm`, `deployment-cloudstack-ccm` | `PostBootstrapInit` | LoadBalancer services + node labels from CloudStack |
-| **CSI Driver** | `csi-snapshot-crds`, `csi-driver`, `storageclass` | `PostBootstrapInit` | Persistent volumes with CloudStack storage |
+The ClusterClass patches inject only infrastructure-level resources — CNI, RBAC, deployments. **CloudStack API credentials are defined per-cluster** (in your cluster YAML), not as a shared template patch.
+
+| Component | Injected Where | Phase | Purpose |
+|-----------|---------------|-------|---------|
+| **Calico CNI** | ClusterClass patch `cni-calico` | `ControlPlaneInitialized` | Pod networking — needed before any workload pods can schedule |
+| **CCM RBAC + Deployment** | ClusterClass patches | `PostBootstrapInit` | LoadBalancer services + node labels from CloudStack |
+| **CSI Driver** | ClusterClass patches | `PostBootstrapInit` | Persistent volumes with CloudStack storage |
+| **CloudStack credentials** | Per-cluster YAML (`31-cluster-topology.yaml`) | Applied manually before cluster creation | ACS endpoint + API keys — unique per cluster/zone |
+
+> **Why credentials are not in the ClusterClass:** Each CAPC cluster typically uses its own CloudStack management server, zone, and API credentials. Shared credentials across clusters would require all tenants to share one ACS account.
 
 ### Patch injection order explained
 
@@ -88,6 +93,24 @@ Bootstrap completes on all workers → PostBootstrapInit phase fires
     │
     └── Cluster is fully operational — zero manual steps remaining
 ```
+
+## Step 1.5: Auto-Import into Rancher (Optional but Recommended)
+
+Rancher automatically imports CAPI clusters as workload clusters when you apply two labels to the `Cluster` CR metadata:
+
+| Label | Purpose |
+|-------|---------|
+| `turtles.cattle.io/bootstrap: "true"` | Tells Turtles this cluster is part of its management lifecycle |
+| `cluster-api.cattle.io/rancher-auto-import: "true"` | Triggers Rancher's auto-import controller to watch for Ready state and import the cluster into Rancher UI |
+
+When the workload cluster reaches **Ready** phase, Rancher picks up the kubeconfig secret and imports it as a managed cluster in **Cluster Management → capc-cluster-2**. From there you get:
+
+- Cluster-level monitoring and logging (Rancher built-in)
+- RBAC and project isolation
+- Fleet GitOps integration for ongoing workload management
+- Cert-manager for ingress TLS
+
+The labels are already included in the example cluster YAML (`31-cluster-topology.yaml`). No extra action needed — Rancher/Turtles handles the import automatically once the cluster is Ready.
 
 ### Key parameters to replace in the template
 
@@ -131,7 +154,18 @@ spec:
 kubectl apply -f manifests/31-cluster-topology.yaml
 ```
 
-That's it. No labeling, no CRS creation, no ConfigMap, no follow-up `kubectl apply`. The topology controller handles everything during cluster lifecycle phases.
+That's it. No CRS creation, no ConfigMap, no follow-up `kubectl apply`. The topology controller handles all component injection during cluster lifecycle phases, and Rancher auto-imports the cluster once Ready.
+
+### Verify Import
+
+```bash
+# In Rancher UI: Cluster Management → capc-cluster-2 should appear within 1-2 minutes of Ready state
+# Or via kubectl on management cluster:
+rancher clusters list
+kubectl get rancherclusters -A  # shows imported workload clusters
+```
+
+> **Note:** The import is automatic — no manual `rancher import` or kubeconfig upload needed. Rancher reads the `<cluster-name>-kubeconfig` secret that CAPC creates, imports it into the cluster registry, and exposes it in the UI.
 
 ## Step 3: Monitor Cluster Creation
 

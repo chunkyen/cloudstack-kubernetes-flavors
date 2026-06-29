@@ -1,13 +1,15 @@
-# One-Shot Full-Stack CAPC Cluster — CNI + CCM + CSI + Rancher Auto-Import
+# One-Shot Full-Stack CAPC Cluster — CCM + CSI + Rancher Auto-Import
 #
-# Apply this single file to get:
+# Apply this file to get:
 #   ✅ Kubernetes cluster (1 control plane + 2 workers)
-#   ✅ CNI (Calico) — networking between pods
-#   ✅ CCM (CloudStack Kubernetes Provider) — LoadBalancer services + node labels
-#   ✅ CSI (CloudStack CSI Driver) — persistent storage with PVC support
+#   ✅ CloudStack CCM (Kubernetes Provider) — LoadBalancer services + node labels
+#   ✅ CloudStack CSI Driver — persistent storage with PVC support
 #   ✅ Rancher auto-import — cluster appears in Rancher UI automatically
 #
 # This is the CAPC equivalent of CKS's "one ISO, everything works" experience.
+#
+# CNI (Calico/Cilium) is handled separately via ClusterResourceSet
+# (see [post-deploy-automation.md](../post-deploy-automation.md)).
 #
 # IMPORTANT: Replace ALL of the following before applying:
 #
