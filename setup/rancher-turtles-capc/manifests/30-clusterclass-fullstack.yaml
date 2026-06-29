@@ -1,0 +1,494 @@
+# ClusterClass: capc-fullstack
+# One template — every cluster created from it gets CNI + CCM + CSI automatically.
+#
+# Patches inject into the workload cluster during creation lifecycle:
+#   Phase A (ControlPlaneInitialized): Calico CNI
+#   Phase B (PostBootstrapInit):        CloudStack K8s Provider (CCM) + CSI driver
+#
+# IMPORTANT: Replace ALL of the following before applying:
+#
+# 1. <reserved-public-ip>   — Free public IP from CloudStack network
+#    Find: cmk list publicipaddresses listall=true zoneid=<zone-id> forvirtualnetwork=true allocatedonly=false
+#
+# 2. <network-name-or-id>   — CloudStack network name or ID
+#    List: cmk list networks listall=true zoneid=<zone-id>
+#
+# 3. <zone-name-or-id>      — CloudStack zone name or ID
+#    List: cmk list zones
+#
+# 4. capc-ubuntu24-1.35     — CAPI-compatible template name (must be registered in CloudStack)
+#    Prebuilt images: http://packages.shapeblue.com/cluster-api-provider-cloudstack/images/
+#
+# 5. kube control / kube worker1 — CloudStack service offering names
+#    List: cmk list serviceofferings listall=true
+#
+# 6. cylabnb-k1               — CloudStack SSH keypair name
+#    Register: cmk register-sshkeypair --name=cylabnb-k1 --publickey="$(cat ~/.ssh/id_ed25519.pub)"
+
+---
+apiVersion: cluster.x-k8s.io/v1beta1
+kind: ClusterClass
+metadata:
+  name: capc-fullstack
+spec:
+  # ─── InfrastructureClusterTemplate ──────────────────────────────
+  # Defines the CloudStack infrastructure (networking, load balancer, firewall)
+  infrastructureRef:
+    apiVersion: infrastructure.cluster.x-k8s.io/v1beta3
+    kind: CloudStackClusterTemplate
+    name: capc-fullstack-infrastructure
+
+  # ─── ControlPlaneMachineTemplate ────────────────────────────────
+  # Defines CP VM specs (service offering, template, SSH key)
+  controlPlane:
+    machineInfrastructure:
+      ref:
+        apiVersion: infrastructure.cluster.x-k8s.io/v1beta3
+        kind: CloudStackMachineTemplate
+        name: capc-fullstack-control-plane
+
+  # ─── Workers ────────────────────────────────────────────────────
+  workers:
+    machines:
+      - name: default-worker
+        machineDeploymentClass:
+          name: default-worker
+          replicas: 3
+        machineTemplate:
+          infrastructureRef:
+            apiVersion: infrastructure.cluster.x-k8s.io/v1beta3
+            kind: CloudStackMachineTemplate
+            name: capc-fullstack-workers
+
+  # ─── Bootstrap Config Template ──────────────────────────────────
+  bootstrapConfig:
+    ref:
+      apiVersion: bootstrap.cluster.x-k8s.io/v1beta1
+      kind: KubeadmConfigTemplate
+      name: capc-fullstack-bootstrap
+
+  # ─── Patches (injected into workload cluster at lifecycle phases) ──
+  patches:
+    # Phase A — Calico CNI. Injected as soon as control plane is initialized
+    # so pods can communicate across CP nodes before bootstrap completes.
+    - name: cni-calico
+      definitions:
+        - patchType: inline
+          value: |
+            apiVersion: v1
+            kind: PodDisruptionBudget
+            metadata:
+              name: calico-pdb
+              namespace: kube-system
+            spec:
+              minAvailable: 75%
+              selector:
+                matchLabels:
+                  k8s-app: calico-node
+            ---
+            apiVersion: v1
+            kind: ServiceAccount
+            metadata:
+              name: calico-node
+              namespace: kube-system
+            ---
+            apiVersion: apps/v1
+            kind: DaemonSet
+            metadata:
+              name: calico-node
+              namespace: kube-system
+              labels:
+                k8s-app: calico-node
+            spec:
+              selector:
+                matchLabels:
+                  k8s-app: calico-node
+              template:
+                metadata:
+                  labels:
+                    k8s-app: calico-node
+                spec:
+                  hostNetwork: true
+                  terminationGracePeriodSeconds: 0
+                  containers:
+                    - name: calico-node
+                      image: quay.io/calico/node:v3.28.1
+                      envFrom:
+                        - configMapRef:
+                            name: calico-config
+                      env:
+                        - name: DATASTORE_TYPE
+                          value: kubernetes
+                        - name: CALICO_IPV4POOL_CIDR
+                          value: "10.168.0.0/16"
+                        - name: FELIX_DEFAULTENDPOINTTOHOSTACTION
+                          value: ACCEPT
+                      securityContext:
+                        privileged: true
+                      volumeMounts:
+                        - mountPath: /lib/modules
+                          name: lib-modules
+                          readOnly: true
+                        - mountPath: /run/xtables.lock
+                          name: xtables-lock
+                          readOnly: false
+                  volumes:
+                    - name: lib-modules
+                      hostPath:
+                        path: /lib/modules
+                    - name: xtables-lock
+                      emptyDir: {}
+
+  # ─── Phase B — CCM + CSI (injected after all bootstrap completes) ──
+    - name: ccm-cloudstack-credentials
+      definitions:
+        - patchType: inline
+          value: |
+            apiVersion: v1
+            kind: Secret
+            metadata:
+              name: cloudstack-secret
+              namespace: kube-system
+            type: Opaque
+            stringData:
+              cloud-config: |
+                [Global]
+                api-url = http://<management-server>:8080/client/api
+                api-key = "***"
+                secret-key = "<your-secret-key>"
+                ssl-no-verify = "false"
+
+    - name: ccm-cloudstack-rbac
+      definitions:
+        - patchType: inline
+          value: |
+            apiVersion: v1
+            kind: ServiceAccount
+            metadata:
+              name: cloudstack-ccm
+              namespace: kube-system
+            ---
+            apiVersion: rbac.authorization.k8s.io/v1
+            kind: ClusterRole
+            metadata:
+              name: system:cloudstack-ccm
+            rules:
+              - apiGroups: [""]
+                resources: ["nodes", "pods", "events", "services", "endpoints", "persistentvolumes", "persistentvolumeclaims", "configmaps", "secrets"]
+                verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+              - apiGroups: ["coordination.k8s.io"]
+                resources: ["leases"]
+                verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+            ---
+            apiVersion: rbac.authorization.k8s.io/v1
+            kind: ClusterRoleBinding
+            metadata:
+              name: system:cloudstack-ccm
+            roleRef:
+              apiGroup: rbac.authorization.k8s.io
+              kind: ClusterRole
+              name: system:cloudstack-ccm
+            subjects:
+              - kind: ServiceAccount
+                name: cloudstack-ccm
+                namespace: kube-system
+
+    - name: ccm-cloudstack-deployment
+      definitions:
+        - patchType: inline
+          value: |
+            apiVersion: apps/v1
+            kind: Deployment
+            metadata:
+              name: cloudstack-ccm
+              namespace: kube-system
+              labels:
+                app: cloudstack-ccm
+            spec:
+              replicas: 1
+              selector:
+                matchLabels:
+                  app: cloudstack-ccm
+              template:
+                metadata:
+                  labels:
+                    app: cloudstack-ccm
+                spec:
+                  serviceAccountName: cloudstack-ccm
+                  containers:
+                    - name: cloudstack-ccm
+                      image: apachecloudstack/cloudstack-kubernetes-provider:v0.14.0
+                      args:
+                        - --cloud-provider=external-cloudstack
+                        - --cloud-config=/etc/kubernetes/cloud-config/cloud-config
+                        - --leader-elect=true
+                      volumeMounts:
+                        - name: cloud-config
+                          mountPath: /etc/kubernetes/cloud-config
+                  volumes:
+                    - name: cloud-config
+                      secret:
+                        secretName: cloudstack-secret
+
+    # CSI — Snapshot CRDs, driver controller + node, storage class
+    - name: csi-snapshot-crds
+      definitions:
+        - patchType: inline
+          value: |
+            apiVersion: apiextensions.k8s.io/v1
+            kind: CustomResourceDefinition
+            metadata:
+              name: volumesnapshots.snapshot.storage.k8s.io
+            spec:
+              group: snapshot.storage.k8s.io
+              versions:
+                - name: v1
+                  served: true
+                  storage: true
+                  schema:
+                    openAPIV3Schema:
+                      type: object
+                      properties:
+                        status:
+                          type: object
+                          x-kubernetes-preserve-unknown-fields: true
+              scope: Namespaced
+              names:
+                plural: volumesnapshots
+                singular: volumesnapshot
+                kind: VolumeSnapshot
+            ---
+            apiVersion: apiextensions.k8s.io/v1
+            kind: CustomResourceDefinition
+            metadata:
+              name: volumecontentsnapshots.snapshot.storage.k8s.io
+            spec:
+              group: snapshot.storage.k8s.io
+              versions:
+                - name: v1
+                  served: true
+                  storage: true
+                  schema:
+                    openAPIV3Schema:
+                      type: object
+                      properties:
+                        status:
+                          type: object
+                          x-kubernetes-preserve-unknown-fields: true
+              scope: Namespaced
+              names:
+                plural: volumecontentsnapshots
+                singular: volumecontentsnapshot
+                kind: VolumeContentSnapshot
+            ---
+            apiVersion: apiextensions.k8s.io/v1
+            kind: CustomResourceDefinition
+            metadata:
+              name: volumesnapshotclasses.snapshot.storage.k8s.io
+            spec:
+              group: snapshot.storage.k8s.io
+              versions:
+                - name: v1
+                  served: true
+                  storage: true
+              scope: Cluster
+              names:
+                plural: volumesnapshotclasses
+                singular: volumesnapshotclass
+                kind: VolumeSnapshotClass
+
+    - name: csi-driver-controller
+      definitions:
+        - patchType: inline
+          value: |
+            apiVersion: v1
+            kind: ServiceAccount
+            metadata:
+              name: cloudstack-csi-controller-sa
+              namespace: kube-system
+            ---
+            apiVersion: apps/v1
+            kind: Deployment
+            metadata:
+              name: cloudstack-csi-controller
+              namespace: kube-system
+              labels:
+                app: cloudstack-csi-controller
+            spec:
+              replicas: 2
+              selector:
+                matchLabels:
+                  app: cloudstack-csi-controller
+              template:
+                metadata:
+                  labels:
+                    app: cloudstack-csi-controller
+                spec:
+                  serviceAccountName: cloudstack-csi-controller-sa
+                  containers:
+                    - name: csi-driver
+                      image: apachecloudstack/cloudstack-csi-driver:v0.6.0
+                      args:
+                        - --endpoint=unix:///csi/csi.sock
+                        - --v=5
+                      volumeMounts:
+                        - mountPath: /csi
+                          name: socket-dir
+                    - name: csi-provisioner
+                      image: registry.k8s.io/sig-storage/csi-provisioner:v6.3.0
+                      args:
+                        - --csi-address=$(ADDRESS)
+                        - --v=5
+                      env:
+                        - name: ADDRESS
+                          value: /csi/csi.sock
+                    - name: csi-attacher
+                      image: registry.k8s.io/sig-storage/csi-attacher:v4.8.0
+                      args:
+                        - --csi-address=$(ADDRESS)
+                        - --v=5
+                      env:
+                        - name: ADDRESS
+                          value: /csi/csi.sock
+                  volumes:
+                    - name: socket-dir
+                      emptyDir: {}
+
+    - name: csi-driver-node
+      definitions:
+        - patchType: inline
+          value: |
+            apiVersion: v1
+            kind: ServiceAccount
+            metadata:
+              name: cloudstack-csi-node-sa
+              namespace: kube-system
+            ---
+            apiVersion: apps/v1
+            kind: DaemonSet
+            metadata:
+              name: cloudstack-csi-node
+              namespace: kube-system
+              labels:
+                app: cloudstack-csi-node
+            spec:
+              selector:
+                matchLabels:
+                  app: cloudstack-csi-node
+              template:
+                metadata:
+                  labels:
+                    app: cloudstack-csi-node
+                spec:
+                  serviceAccountName: cloudstack-csi-node-sa
+                  hostNetwork: true
+                  containers:
+                    - name: csi-driver
+                      image: apachecloudstack/cloudstack-csi-driver:v0.6.0
+                      args:
+                        - --endpoint=unix:///csi/csi.sock
+                        - --nodeid=$(KUBE_NODE_NAME)
+                      env:
+                        - name: KUBE_NODE_NAME
+                          valueFrom:
+                            fieldRef:
+                              fieldPath: spec.nodeName
+                      volumeMounts:
+                        - mountPath: /csi
+                          name: socket-dir
+                        - mountPath: /var/lib/kubelet
+                          name: kubelet-dir
+                          mountPropagation: Bidirectional
+                  volumes:
+                    - name: socket-dir
+                      hostPath:
+                        path: /var/lib/kubelet/plugins/cloudstack.csi.cloudstack.apache.org/
+                        type: DirectoryOrCreate
+                    - name: kubelet-dir
+                      hostPath:
+                        path: /var/lib/kubelet/
+                        type: Directory
+
+    - name: csi-storageclass
+      definitions:
+        - patchType: inline
+          value: |
+            apiVersion: storage.k8s.io/v1
+            kind: StorageClass
+            metadata:
+              name: cloudstack-ssd
+            provisioner: csi.cloudstack.apache.org
+            parameters:
+              csi.cloudstack.apache.org/disk-offering-id: "<disk-offering-uuid>"
+            volumeBindingMode: WaitForFirstConsumer
+            reclaimPolicy: Delete
+
+---
+# ─── InfrastructureClusterTemplate ────────────────────────────────
+apiVersion: infrastructure.cluster.x-k8s.io/v1beta3
+kind: CloudStackClusterTemplate
+metadata:
+  name: capc-fullstack-infrastructure
+spec:
+  template:
+    spec:
+      controlPlaneEndpoint:
+        host: "<reserved-public-ip>"
+        port: 6443
+      failureDomains:
+        - name: "<zone-name-or-id>"
+          zone:
+            name: "<zone-name-or-id>"
+            network:
+              name: "<network-name-or-id>"
+          acsEndpoint:
+            name: cloudstack-credentials
+            namespace: capc-cluster-1  # ← replace with your cluster namespace at apply time
+      offering: DefaultNetworkOfferingforKubernetesService
+
+---
+# ─── ControlPlane MachineTemplate ────────────────────────────────
+apiVersion: infrastructure.cluster.x-k8s.io/v1beta3
+kind: CloudStackMachineTemplate
+metadata:
+  name: capc-fullstack-control-plane
+spec:
+  template:
+    spec:
+      offering:
+        name: "kube control"
+      sshKey: "cylabnb-k1"
+      template:
+        name: "capc-ubuntu24-1.35"
+
+---
+# ─── Worker MachineTemplate ──────────────────────────────────────
+apiVersion: infrastructure.cluster.x-k8s.io/v1beta3
+kind: CloudStackMachineTemplate
+metadata:
+  name: capc-fullstack-workers
+spec:
+  template:
+    spec:
+      offering:
+        name: "kube worker1"
+      sshKey: "cylabnb-k1"
+      template:
+        name: "capc-ubuntu24-1.35"
+
+---
+# ─── KubeadmConfigTemplate (shared bootstrap config) ──────────────
+apiVersion: bootstrap.cluster.x-k8s.io/v1beta1
+kind: KubeadmConfigTemplate
+metadata:
+  name: capc-fullstack-bootstrap
+spec:
+  template:
+    spec:
+      joinConfiguration:
+        nodeRegistration:
+          kubeletExtraArgs:
+            provider-id: "cloudstack:///'{{ ds.meta_data.instance_id }}'"
+          name: "{{ local_hostname }}"
+      preKubeadmCommands:
+        - swapoff -a

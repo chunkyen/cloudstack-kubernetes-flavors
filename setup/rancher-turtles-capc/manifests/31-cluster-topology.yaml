@@ -1,0 +1,28 @@
+# Minimal Cluster from capc-fullstack ClusterClass
+#
+# This cluster YAML uses the topology-based model — every component
+# (CNI, CCM, CSI) is injected automatically during creation lifecycle.
+# No manual labeling, no CRS, no post-creation steps.
+#
+# IMPORTANT: Replace ALL parameters before applying:
+#   See 30-clusterclass-fullstack.yaml for the full parameter list.
+
+---
+apiVersion: cluster.x-k8s.io/v1beta1
+kind: Cluster
+metadata:
+  name: capc-cluster-2
+  namespace: capc-cluster-2
+  labels:
+    turtles.cattle.io/bootstrap: "true"
+    cluster-api.cattle.io/rancher-auto-import: "true"
+spec:
+  topology:
+    class: capc-fullstack
+    version: v1.35.0
+    controlPlane:
+      replicas: 3
+    workers:
+      machines:
+        - name: default-worker
+          replicas: 3
