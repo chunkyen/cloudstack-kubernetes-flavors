@@ -513,9 +513,66 @@ kubectl --kubeconfig=kubeconfig get nodes -w
 
 > **Note:** Rancher Turtles manages the CAPC controllers declaratively via `CAPIProvider` resources, but cluster scaling works exactly the same as traditional CAPC — you edit the workload cluster's CRDs directly.
 
-## 7. Upgrade the Cluster
+## 7. Rancher Turtles Auto-Import
 
-### 7.1 Upgrade Kubernetes Version
+To have Rancher Turtles automatically register a CAPC workload cluster in Rancher Manager, the CAPI `Cluster` object (or its namespace) must carry the **Rancher Turtles auto-import label**:
+
+```yaml
+labels:
+  cluster-api.cattle.io/rancher-auto-import: "true"
+```
+
+This label is already set in the example manifests (`10-minimal-cluster.yaml`, `11-ha-cluster.yaml`, `13-one-shot-full-stack.yaml`, `31-cluster-topology.yaml`). You can also apply it to the namespace once, so every cluster created in that namespace is auto-imported:
+
+```bash
+kubectl label namespace capc-cluster-1 cluster-api.cattle.io/rancher-auto-import=true
+```
+
+### 7.1 What Turtles Requires Before Importing
+
+Turtles does **not** import the cluster immediately when the label is present. The import controller waits for the CAPI condition:
+
+```text
+ControlPlaneAvailable = True
+```
+
+You can watch for it with:
+
+```bash
+kubectl wait cluster -n capc-cluster-1 capc-cluster-1 \
+  --for=condition=ControlPlaneAvailable=True --timeout=600s
+```
+
+`ControlPlaneAvailable` becomes `True` only when:
+
+1. **The management cluster can reach the CAPC control-plane endpoint.**  
+   Verify from a pod on the Rancher management cluster:
+   ```bash
+   kubectl run -it --rm debug --image=nicolaka/netshoot --restart=Never
+   curl -k -m 10 https://<reserved-public-ip>:6443/healthz
+   nc -zv <reserved-public-ip> 6443
+   ```
+2. **The CAPC control plane reports itself healthy.**  
+   This requires the CNI to be installed soon after control-plane initialization, otherwise nodes stay `NotReady` and etcd health checks may fail.
+
+### 7.2 Do Not Use the Bootstrap Label on Workload Clusters
+
+The `turtles.cattle.io/bootstrap: "true"` label is intended for the **local/bootstrap cluster** (the cluster that runs Rancher itself), not for CAPC workload clusters. Applying it to workload clusters can cause Rancher/Turtles to misidentify the cluster. Remove it from all workload cluster manifests and use only `cluster-api.cattle.io/rancher-auto-import: "true"`.
+
+### 7.3 If Auto-Import Does Not Happen
+
+1. Confirm the label is present on the `Cluster` or namespace.
+2. Confirm `ControlPlaneAvailable` is `True`.
+3. Confirm the management cluster can reach the CAPC API endpoint on port `6443`.
+4. Check Turtles controller logs for import predicate failures:
+   ```bash
+   kubectl logs -n cattle-turtles-system -l app=rancher-turtles-controller-manager
+   ```
+5. If you manually imported the cluster first, Turtles may have already annotated it with `cluster-api.cattle.io/imported: "true"` and will skip auto-import. In that case the cluster is managed by Rancher anyway; for net-new clusters, ensure the steps above are met before applying the manifest.
+
+## 8. Upgrade the Cluster
+
+### 8.1 Upgrade Kubernetes Version
 
 ```bash
 # Update KubeadmControlPlane version
@@ -527,9 +584,9 @@ kubectl edit machinedeployment capc-cluster-1-workers
 # Change spec.template.spec.version
 ```
 
-## 8. Troubleshooting
+## 9. Troubleshooting
 
-### 8.1 VM Deleted from CloudStack — Node Not Recreated
+### 9.1 VM Deleted from CloudStack — Node Not Recreated
 
 If you delete a VM directly from CloudStack (UI, cmk, API), CAPC **will not automatically recreate it**. Here's why and how to fix it:
 
@@ -577,7 +634,7 @@ This forces the MachineSet to recreate all machines from scratch.
 
 **Root cause:** CAPC's `GetOrCreateVMInstance()` only creates a VM if the CloudStackMachine has no InstanceID. Once the CR exists with an InstanceID (even pointing to a deleted VM), it won't recreate. This is a known gap in drift detection — manual cleanup of stale CAPI objects is required.
 
-### 8.2 Cluster Stuck in "Provisioning"
+### 9.2 Cluster Stuck in "Provisioning"
 
 ```bash
 # Check CloudStackCluster status
@@ -590,7 +647,7 @@ kubectl describe cloudstackmachine capc-cluster-1-workers-xxxxx
 kubectl logs -n cattle-capi-system -l app=cloudstack -f
 ```
 
-### 8.3 Nodes Not Joining
+### 9.3 Nodes Not Joining
 
 ```bash
 # Check kubeadm logs on nodes
@@ -603,7 +660,7 @@ kubectl get secret | grep bootstrap
 kubectl --kubeconfig=kubeconfig get nodes
 ```
 
-### 8.4 CloudStack VM Creation Failed
+### 9.4 CloudStack VM Creation Failed
 
 ```bash
 # Check CAPC logs for CloudStack API errors
@@ -619,7 +676,7 @@ cmk list templates filter=featured id=<template-id>
 cmk list serviceofferings id=<offering-id>
 ```
 
-## 9. Next Steps
+## 10. Next Steps
 
 - [Fleet GitOps](./fleet.md) — Automate cluster management with Fleet
 - [CAPC Upgrade Guide](../capc/capc-upgrade.md) — Upgrading CAPC and clusters

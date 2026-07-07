@@ -100,10 +100,12 @@ Rancher automatically imports CAPI clusters as workload clusters when you apply 
 
 | Label | Purpose |
 |-------|---------|
-| `turtles.cattle.io/bootstrap: "true"` | Tells Turtles this cluster is part of its management lifecycle |
-| `cluster-api.cattle.io/rancher-auto-import: "true"` | Triggers Rancher's auto-import controller to watch for Ready state and import the cluster into Rancher UI |
+| `cluster-api.cattle.io/rancher-auto-import: "true"` | Triggers Rancher Turtles to watch this CAPI cluster and import it into Rancher once `ControlPlaneAvailable=True` |
 
-When the workload cluster reaches **Ready** phase, Rancher picks up the kubeconfig secret and imports it as a managed cluster in **Cluster Management → capc-cluster-2**. From there you get:
+This label can be applied to the `Cluster` CR (as in `31-cluster-topology.yaml`) or to the namespace that contains the cluster, so every cluster in that namespace is auto-imported.  
+**Do not use `turtles.cattle.io/bootstrap: "true"` on workload clusters** — that label is intended only for the local/bootstrap cluster that runs Rancher Manager.
+
+When the workload cluster reaches **Ready** phase and Turtles sees `ControlPlaneAvailable=True`, it imports the cluster into Rancher UI under **Cluster Management**. From there you get:
 
 - Cluster-level monitoring and logging (Rancher built-in)
 - RBAC and project isolation

@@ -425,7 +425,7 @@ spec:
               name: "<network-name-or-id>"
           acsEndpoint:
             name: cloudstack-credentials
-            namespace: capc-cluster-1  # ← replace with your cluster namespace at apply time
+            namespace: capc-cluster-ha  # ← replace with your cluster namespace at apply time
       offering: DefaultNetworkOfferingforKubernetesService
 
 ---

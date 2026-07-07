@@ -32,26 +32,30 @@ apiVersion: cluster.x-k8s.io/v1beta2
 kind: Cluster
 metadata:
   name: capc-cluster-ha
-  namespace: default
+  namespace: capc-cluster-ha
+  labels:
+    # This label tells Rancher Turtles to automatically import this CAPI cluster
+    # into Rancher once its ControlPlaneAvailable condition is True.
+    cluster-api.cattle.io/rancher-auto-import: "true"
 spec:
   clusterNetwork:
     pods:
       cidrBlocks: ["10.244.0.0/16"]
     serviceDomain: cluster.local
   controlPlaneRef:
-    apiGroup: controlplane.cluster.x-k8s.io
+    apiVersion: controlplane.cluster.x-k8s.io/v1beta1
     kind: KubeadmControlPlane
     name: capc-cluster-ha-control-plane
   infrastructureRef:
-    apiGroup: infrastructure.cluster.x-k8s.io
+    apiVersion: infrastructure.cluster.x-k8s.io/v1beta3
     kind: CloudStackCluster
     name: capc-cluster-ha
 ---
-apiVersion: infrastructure.cluster.x-k8s.io/v1beta2
+apiVersion: infrastructure.cluster.x-k8s.io/v1beta3
 kind: CloudStackCluster
 metadata:
   name: capc-cluster-ha
-  namespace: default
+  namespace: capc-cluster-ha
 spec:
   controlPlaneEndpoint:
     host: "<reserved-public-ip>"  # Reserved public IP from CloudStack network
@@ -64,83 +68,105 @@ spec:
           name: "<network-name-or-id>"
       acsEndpoint:
         name: cloudstack-credentials
-        namespace: cattle-capi-system
+        namespace: capc-cluster-ha
+      offering: DefaultNetworkOfferingforKubernetesService
+      syncWithACS: true
 ---
-apiVersion: controlplane.cluster.x-k8s.io/v1beta2
+apiVersion: controlplane.cluster.x-k8s.io/v1beta1
 kind: KubeadmControlPlane
 metadata:
   name: capc-cluster-ha-control-plane
-  namespace: default
+  namespace: capc-cluster-ha
 spec:
   replicas: 3
-  version: "v1.32.0"
+  version: "v1.35.0"
   machineTemplate:
-    spec:
-      infrastructureRef:
-        apiGroup: infrastructure.cluster.x-k8s.io
-        kind: CloudStackMachine
-        name: capc-cluster-ha-control-plane
+    infrastructureRef:
+      apiVersion: infrastructure.cluster.x-k8s.io/v1beta3
+      kind: CloudStackMachineTemplate
+      name: capc-cluster-ha-control-plane
   kubeadmConfigSpec:
     clusterConfiguration:
       apiServer:
         certSANs:
           - "<reserved-public-ip>"  # Must match controlPlaneEndpoint.host
+    initConfiguration:
+      nodeRegistration:
+        kubeletExtraArgs:
+          provider-id: "cloudstack:///'{{ ds.meta_data.instance_id }}'"
+        name: "{{ local_hostname }}"
+    joinConfiguration:
+      nodeRegistration:
+        kubeletExtraArgs:
+          provider-id: "cloudstack:///'{{ ds.meta_data.instance_id }}'"
+        name: "{{ local_hostname }}"
+    preKubeadmCommands:
+      - swapoff -a
 ---
-apiVersion: infrastructure.cluster.x-k8s.io/v1beta2
-kind: CloudStackMachine
+apiVersion: infrastructure.cluster.x-k8s.io/v1beta3
+kind: CloudStackMachineTemplate
 metadata:
   name: capc-cluster-ha-control-plane
-  namespace: default
+  namespace: capc-cluster-ha
 spec:
-  offering:
-    name: "Large"
   template:
-    name: "capc-ubuntu-2404-kube-v1.32.3"
-  sshKey: "my-ssh-key"  # CloudStack SSH keypair name (registered via cmk register-sshkeypair)
+    spec:
+      offering:
+        name: "Large"
+      template:
+        name: "capc-ubuntu-2404-kube-v1.35.0"
+      sshKey: "my-ssh-key"  # CloudStack SSH keypair name (registered via cmk register-sshkeypair)
 ---
-apiVersion: cluster.x-k8s.io/v1beta2
+apiVersion: cluster.x-k8s.io/v1beta1
 kind: MachineDeployment
 metadata:
   name: capc-cluster-ha-workers
-  namespace: default
+  namespace: capc-cluster-ha
 spec:
   replicas: 3
   clusterName: capc-cluster-ha
   selector:
-    matchLabels:
-      cluster.x-k8s.io/cluster-name: capc-cluster-ha
+    matchLabels: null
   template:
     spec:
       clusterName: capc-cluster-ha
-      version: "v1.32.0"
+      version: "v1.35.0"
       bootstrap:
         configRef:
-          apiGroup: bootstrap.cluster.x-k8s.io
-          kind: KubeadmConfig
+          apiVersion: bootstrap.cluster.x-k8s.io/v1beta1
+          kind: KubeadmConfigTemplate
           name: capc-cluster-ha-workers
       infrastructureRef:
-        apiGroup: infrastructure.cluster.x-k8s.io
-        kind: CloudStackMachine
+        apiVersion: infrastructure.cluster.x-k8s.io/v1beta3
+        kind: CloudStackMachineTemplate
         name: capc-cluster-ha-workers
 ---
-apiVersion: infrastructure.cluster.x-k8s.io/v1beta2
-kind: CloudStackMachine
+apiVersion: infrastructure.cluster.x-k8s.io/v1beta3
+kind: CloudStackMachineTemplate
 metadata:
   name: capc-cluster-ha-workers
-  namespace: default
+  namespace: capc-cluster-ha
 spec:
-  offering:
-    name: "Large"
   template:
-    name: "capc-ubuntu-2404-kube-v1.32.3"
-  sshKey: "my-ssh-key"  # CloudStack SSH keypair name (registered via cmk register-sshkeypair)
+    spec:
+      offering:
+        name: "Large"
+      template:
+        name: "capc-ubuntu-2404-kube-v1.35.0"
+      sshKey: "my-ssh-key"  # CloudStack SSH keypair name (registered via cmk register-sshkeypair)
 ---
-apiVersion: bootstrap.cluster.x-k8s.io/v1beta2
-kind: KubeadmConfig
+apiVersion: bootstrap.cluster.x-k8s.io/v1beta1
+kind: KubeadmConfigTemplate
 metadata:
   name: capc-cluster-ha-workers
-  namespace: default
+  namespace: capc-cluster-ha
 spec:
-  joinConfiguration:
-    nodeRegistration:
-      name: "{{ ds.meta_data.local_hostname }}"
+  template:
+    spec:
+      joinConfiguration:
+        nodeRegistration:
+          kubeletExtraArgs:
+            provider-id: "cloudstack:///'{{ ds.meta_data.instance_id }}'"
+          name: "{{ local_hostname }}"
+      preKubeadmCommands:
+        - swapoff -a

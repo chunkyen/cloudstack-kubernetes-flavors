@@ -47,7 +47,8 @@ metadata:
   name: capc-cluster-2
   namespace: capc-cluster-2
   labels:
-    turtles.cattle.io/bootstrap: "true"
+    # This label tells Rancher Turtles to automatically import this CAPI cluster
+    # into Rancher once its ControlPlaneAvailable condition is True.
     cluster-api.cattle.io/rancher-auto-import: "true"
 spec:
   topology:
