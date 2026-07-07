@@ -558,7 +558,12 @@ kubectl wait cluster -n capc-cluster-1 capc-cluster-1 \
 
 ### 7.2 Worker-Only Cluster vs. CNI
 
-A CAPC cluster can be auto-imported without CNI **only when it has no worker nodes**. A practical test is:
+> **⚠️ Disclaimer — this is a theoretical demonstration.**  
+> Running a CAPC cluster with zero worker nodes is **not a practical production or even development configuration**. In real usage you will always have workers, and for those workers to become `Ready`, the cluster **must have a CNI installed**. Therefore, for any practical CAPC workload cluster, **CNI installation is effectively required for Rancher Turtles auto-import**, because the CAPI availability gate depends on the worker `MachineDeployment` having available replicas.
+
+A CAPC cluster *technically* can be auto-imported without CNI **only when it has no worker nodes**. This is useful only to understand the Turtles import predicate — it proves that the missing piece with workers is not API-server reachability, but worker node readiness.
+
+A practical test is:
 
 ```bash
 # Scale workers to 0
@@ -569,7 +574,7 @@ kubectl wait cluster -n capc-cluster-1 capc-cluster-1 \
   --for=condition=ControlPlaneAvailable=True --timeout=600s
 ```
 
-Once Turtles imports the cluster, scale the workers back up and install the CNI to make the workload cluster fully operational.
+Once Turtles imports the cluster, scale the workers back up and **install the CNI immediately** to make the workload cluster fully operational.
 
 ### 7.3 Do Not Use the Bootstrap Label on Workload Clusters
 
