@@ -553,16 +553,33 @@ kubectl wait cluster -n capc-cluster-1 capc-cluster-1 \
    nc -zv <reserved-public-ip> 6443
    ```
 2. **The CAPC control plane reports itself healthy.**  
-   This requires the CNI to be installed soon after control-plane initialization, otherwise nodes stay `NotReady` and etcd health checks may fail.
+   For a **single-node control plane with no workers**, the cluster can reach this state without a CNI because the API server is exposed directly via the CloudStack load balancer.  
+   For a cluster with **workers (`MachineDeployment.replicas > 0`)**, a CNI is required: without it the worker nodes stay `NotReady`, CAPI reports the `MachineDeployment` as having zero available replicas, and the `ControlPlaneAvailable` condition stays `False` / `NotAvailable` even though the API endpoint itself is reachable.
 
-### 7.2 Do Not Use the Bootstrap Label on Workload Clusters
+### 7.2 Worker-Only Cluster vs. CNI
+
+A CAPC cluster can be auto-imported without CNI **only when it has no worker nodes**. A practical test is:
+
+```bash
+# Scale workers to 0
+kubectl scale md.cluster.x-k8s.io -n capc-cluster-1 capc-cluster-1-md-0 --replicas=0
+
+# Wait for ControlPlaneAvailable
+kubectl wait cluster -n capc-cluster-1 capc-cluster-1 \
+  --for=condition=ControlPlaneAvailable=True --timeout=600s
+```
+
+Once Turtles imports the cluster, scale the workers back up and install the CNI to make the workload cluster fully operational.
+
+### 7.3 Do Not Use the Bootstrap Label on Workload Clusters
 
 The `turtles.cattle.io/bootstrap: "true"` label is intended for the **local/bootstrap cluster** (the cluster that runs Rancher itself), not for CAPC workload clusters. Applying it to workload clusters can cause Rancher/Turtles to misidentify the cluster. Remove it from all workload cluster manifests and use only `cluster-api.cattle.io/rancher-auto-import: "true"`.
 
-### 7.3 If Auto-Import Does Not Happen
+### 7.4 If Auto-Import Does Not Happen
 
 1. Confirm the label is present on the `Cluster` or namespace.
-2. Confirm `ControlPlaneAvailable` is `True`.
+2. Confirm `ControlPlaneAvailable` is `True`.  
+   If you have workers and no CNI, it will remain `NotAvailable` because the `MachineDeployment` has zero available replicas.
 3. Confirm the management cluster can reach the CAPC API endpoint on port `6443`.
 4. Check Turtles controller logs for import predicate failures:
    ```bash
