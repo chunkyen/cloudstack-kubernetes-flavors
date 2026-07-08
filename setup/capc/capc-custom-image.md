@@ -24,8 +24,10 @@ Image-builder for CloudStack produces `qcow2` images using the **KVM/QEMU** hype
 
    ```bash
    sudo apt update
-   sudo apt install -y qemu-kvm libvirt-bin qemu-utils
+   sudo apt install -y qemu-system-x86 libvirt-daemon-system libvirt-clients qemu-utils ovmf
    ```
+
+   > **Note:** On Ubuntu 18.04+, `libvirt-bin` was split into `libvirt-daemon-system` and `libvirt-clients`. On Ubuntu 16.04, use `libvirt-bin` instead. `qemu-kvm` is a transitional package that resolves to `qemu-system-x86`.
 
 2. **Add your user to the `kvm` group and fix `/dev/kvm` ownership:**
 
