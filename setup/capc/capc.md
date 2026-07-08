@@ -661,13 +661,13 @@ Build a custom image for the target Kubernetes version (see [CAPC Custom Image G
 
 #### Step 2: Create New CloudStackMachineTemplates
 
-Copy the existing templates and update their `image` references:
+Copy the existing templates and update their `template.name` references:
 
 ```bash
 # Get current templates
 kubectl get cloudstackmachinetemplate -o yaml > machine-templates.yaml
 
-# Edit: change image to new template name, increment version
+# Edit: change spec.template.spec.template.name to new template name
 # (e.g., kube-v1.32/ubuntu-2404 → kube-v1.33/ubuntu-2404)
 ```
 

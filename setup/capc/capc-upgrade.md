@@ -117,12 +117,12 @@ Or patch directly:
 ```bash
 # Control plane template
 kubectl patch cloudstackmachinetemplate capc-cluster-control-plane-xxxxx \
-  -p '{"spec":{"template":{"spec":{"image":"kube-v1.33/ubuntu-2404"}}}}' \
+  -p '{"spec":{"template":{"spec":{"template":{"name":"kube-v1.33/ubuntu-2404"}}}}}' \
   --type=merge
 
 # Worker template
 kubectl patch cloudstackmachinetemplate capc-cluster-md-0-xxxxx \
-  -p '{"spec":{"template":{"spec":{"image":"kube-v1.33/ubuntu-2404"}}}}' \
+  -p '{"spec":{"template":{"spec":{"template":{"name":"kube-v1.33/ubuntu-2404"}}}}}' \
   --type=merge
 ```
 
@@ -248,11 +248,11 @@ echo "=== Step 2: Upgrading K8s version to ${k8s_version} ==="
 
 # Update CloudStackMachineTemplates
 kubectl patch cloudstackmachinetemplate capc-cluster-control-plane-xxxxx \
-  -p '{"spec":{"template":{"spec":{"image":"kube-v1.33/ubuntu-2404"}}}}' \
+  -p '{"spec":{"template":{"spec":{"template":{"name":"kube-v1.33/ubuntu-2404"}}}}}' \
   --type=merge
 
 kubectl patch cloudstackmachinetemplate capc-cluster-md-0-xxxxx \
-  -p '{"spec":{"template":{"spec":{"image":"kube-v1.33/ubuntu-2404"}}}}' \
+  -p '{"spec":{"template":{"spec":{"template":{"name":"kube-v1.33/ubuntu-2404"}}}}}' \
   --type=merge
 
 # Update version in KubeadmControlPlane and MachineDeployment
