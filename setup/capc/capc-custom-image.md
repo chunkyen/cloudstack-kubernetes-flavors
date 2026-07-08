@@ -114,7 +114,7 @@ As of recent image-builder releases, Ubuntu targets include:
 | Rocky Linux | 8, 9 |
 | RHEL | 8, 9 |
 
-> **Ubuntu 26.04:** If image-builder does not yet ship a `build-qemu-ubuntu-2604` target, you cannot use the `--os ubuntu-2604` shortcut. You would need to add a custom build target by copying and adapting the Ubuntu 24.04 Packer configuration, or use a supported LTS release.
+> **Ubuntu 26.04:** Upstream image-builder `main` has a `build-qemu-ubuntu-2604` target, so you can build it with `PACKER_VAR_FILES=extra_vars.json make build-qemu-ubuntu-2604`. Make sure your local clone is recent; older image-builder releases may not include it.
 
 ### Convert for Other Hypervisors
 
