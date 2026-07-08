@@ -35,12 +35,42 @@ See the [Architecture](#architecture) section for details on each.
 
 ### Setup Guides
 
-- [CKS deployment](setup/cks/cks.md)
-- [CAPC deployment (with user-defined OS)](setup/capc/capc.md)
-- [CAPC custom image building](setup/capc/capc-custom-image.md) — build your own K8s-compatible images for CAPC
-- [Move From Bootstrap](setup/capc/move-from-bootstrap.md) — make CAPC clusters self-managing by transferring CAPI objects from a bootstrap cluster
-- [Rancher with CAPC](setup/rancher-turtles-capc/index.md)
-- Talos Linux standalone (with CAPI or bare-metal) (not yet documented)
+#### CKS (CloudStack Kubernetes Service)
+
+- [Main deployment](setup/cks/cks.md)
+- [Custom ISO build](setup/cks/cks-custom-iso.md)
+- [Custom VM template](setup/cks/cks-custom-template.md)
+- [Upgrade](setup/cks/cks-upgrade.md)
+- [Offline / air-gapped deployment](setup/cks/cks-offline.md)
+- [Improvements & notes](setup/cks/cks-improvements.md)
+
+#### CAPC (Cluster API Provider for CloudStack)
+
+- [Main deployment](setup/capc/capc.md)
+- [Custom image build](setup/capc/capc-custom-image.md)
+- [Move from bootstrap to self-managing](setup/capc/move-from-bootstrap.md)
+- [Upgrade](setup/capc/capc-upgrade.md)
+- [CNI automation options](setup/capc/cni-automation-options.md)
+
+#### Rancher Turtles + CAPC
+
+- [Overview & getting started](setup/rancher-turtles-capc/index.md)
+- [Deploy Rancher on CKS](setup/rancher-turtles-capc/rancher.md)
+- [Install CAPI providers with Turtles](setup/rancher-turtles-capc/turtles.md)
+- [Create workload clusters](setup/rancher-turtles-capc/cluster.md)
+- [One-shot full-stack onboarding](setup/rancher-turtles-capc/full-stack-onboarding.md)
+- [ClusterClass full-stack](setup/rancher-turtles-capc/clusterclass-full-stack.md)
+- [Fleet GitOps](setup/rancher-turtles-capc/fleet.md)
+- [Manifests README](setup/rancher-turtles-capc/manifests/README.md)
+
+#### Cross-Cutting Components
+
+- [CloudStack Kubernetes Provider (CCM)](setup/cloudstack-kubernetes-provider.md)
+- [CloudStack CSI Driver](setup/cloudstack-csi-driver.md)
+
+#### Talos Linux
+
+- Talos Linux standalone (with CAPI or bare-metal) — not yet documented
 
 ### Analysis
 
