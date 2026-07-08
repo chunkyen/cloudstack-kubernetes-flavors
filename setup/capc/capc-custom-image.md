@@ -199,15 +199,15 @@ python3 -m http.server 8888
 
 The image is now accessible at `http://<build-machine-ip>:8888/ubuntu-2404-kube-v1.36.1.qcow2`. Keep the server running until CloudStack finishes downloading the template.
 
-> **QCOW2 v3 format error:** If CloudStack rejects the image with *"File type mismatch between the sent file and the actual content. Received: QEMU QCOW Image (v3)"*, convert to QCOW2 v2 first:
+> **Filename must end in `.qcow2`:** CloudStack uses the file extension to determine the image format during URL-based registration. If the file does not have the `.qcow2` extension, CloudStack may reject it with a format mismatch error. Rename the file if needed before starting the HTTP server.
+
+> **Direct UI upload may fail:** If you upload the qcow2 file directly through the CloudStack UI, you may get *"File type mismatch between the sent file and the actual content. Received: QEMU QCOW Image (v3)"*. This is a browser content-type detection issue. Use the URL-based registration method above instead — it works reliably. If URL registration still fails, convert to QCOW2 v2 as a fallback:
 >
 > ```bash
 > qemu-img convert -f qcow2 -O qcow2 -o compat=0.10 \
 >   ubuntu-2404-kube-v1.36.1.qcow2 \
 >   ubuntu-2404-kube-v1.36.1-compat0.10.qcow2
 > ```
->
-> Then serve and register the `-compat0.10.qcow2` file instead.
 
 ### Option 1: Register via CloudStack UI
 
