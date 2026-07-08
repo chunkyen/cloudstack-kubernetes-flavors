@@ -802,7 +802,9 @@ kubectl patch cloudstackmachinetemplate capc-cluster-1-control-plane -n capc-clu
   "spec": {
     "template": {
       "spec": {
-        "template": "kube-v1.33/ubuntu-2404"
+        "template": {
+          "name": "capc-ubuntu24-1.36"
+        }
       }
     }
   }
@@ -818,7 +820,9 @@ kubectl patch cloudstackmachinetemplate capc-cluster-1-md-0 -n capc-cluster-1 --
   "spec": {
     "template": {
       "spec": {
-        "template": "kube-v1.33/ubuntu-2404"
+        "template": {
+          "name": "capc-ubuntu24-1.36"
+        }
       }
     }
   }

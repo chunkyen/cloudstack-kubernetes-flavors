@@ -303,11 +303,11 @@ If something goes wrong during the upgrade, you can rollback:
 ```bash
 # Revert CloudStackMachineTemplates to old image
 kubectl patch cloudstackmachinetemplate capc-cluster-control-plane-xxxxx \
-  -p '{"spec":{"template":{"spec":{"image":"kube-v1.32/ubuntu-2404"}}}}' \
+  -p '{"spec":{"template":{"spec":{"template":{"name":"kube-v1.32/ubuntu-2404"}}}}}' \
   --type=merge
 
 kubectl patch cloudstackmachinetemplate capc-cluster-md-0-xxxxx \
-  -p '{"spec":{"template":{"spec":{"image":"kube-v1.32/ubuntu-2404"}}}}' \
+  -p '{"spec":{"template":{"spec":{"template":{"name":"kube-v1.32/ubuntu-2404"}}}}}' \
   --type=merge
 
 # Revert version
