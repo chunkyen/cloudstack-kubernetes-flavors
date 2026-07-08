@@ -661,37 +661,56 @@ Build a custom image for the target Kubernetes version (see [CAPC Custom Image G
 
 #### Step 2: Create New CloudStackMachineTemplates
 
-Copy the existing templates and update their `template.name` references:
+CloudStackMachineTemplates are **immutable** — you cannot patch them. Export the existing templates, strip read-only metadata, rename them, and update the image reference:
 
 ```bash
-# Get current templates
-kubectl get cloudstackmachinetemplate -o yaml > machine-templates.yaml
-
-# Edit: change spec.template.spec.template.name to new template name
-# (e.g., kube-v1.32/ubuntu-2404 → kube-v1.33/ubuntu-2404)
+# Export current templates
+kubectl get cloudstackmachinetemplate capc-cluster-control-plane -o yaml > /tmp/cp-template.yaml
+kubectl get cloudstackmachinetemplate capc-cluster-md-0 -o yaml > /tmp/md-template.yaml
 ```
 
-Apply the updated templates:
+Edit both files. For each file:
+
+1. **Remove** `metadata.uid`, `metadata.resourceVersion`, `metadata.creationTimestamp`, `metadata.ownerReferences`, `metadata.annotations`
+2. **Change** `metadata.name` to include the target version (e.g., `capc-cluster-control-plane-v1.33`, `capc-cluster-md-0-v1.33`)
+3. **Change** `spec.template.spec.template.name` to the new CloudStack template name
+4. **Keep** `offering`, `sshKey`, `diskOffering` unchanged
+
+Apply the new templates:
 
 ```bash
-kubectl apply -f machine-templates.yaml
+kubectl apply -f /tmp/cp-template.yaml
+kubectl apply -f /tmp/md-template.yaml
 ```
 
 #### Step 3: Update KubeadmControlPlane and MachineDeployment
 
-Point them to the new templates and update the version field:
-
-```yaml
-# KubeadmControlPlane.spec.machineTemplate.infrastructureRef.name → new template name
-# KubeadmControlPlane.spec.version → v1.33
----
-# MachineDeployment.spec.template.spec.infrastructureRef.name → new worker template name
-# MachineDeployment.spec.template.spec.version → v1.33
-```
+Point KCP and MachineDeployment to the new templates and update the version field in a single patch:
 
 ```bash
-kubectl edit kubeadmcontrolplane capc-cluster-control-plane
-kubectl edit machinedeployment capc-cluster-md-0
+kubectl patch kubeadmcontrolplane capc-cluster-control-plane --type merge -p '{
+  "spec": {
+    "machineTemplate": {
+      "infrastructureRef": {
+        "name": "capc-cluster-control-plane-v1.33"
+      }
+    },
+    "version": "v1.33.0"
+  }
+}'
+
+kubectl patch machinedeployment capc-cluster-md-0 --type merge -p '{
+  "spec": {
+    "template": {
+      "spec": {
+        "infrastructureRef": {
+          "name": "capc-cluster-md-0-v1.33"
+        },
+        "version": "v1.33.0"
+      }
+    }
+  }
+}'
 ```
 
 CAPC performs a rolling update — old VMs are terminated and new ones provisioned from the updated image.

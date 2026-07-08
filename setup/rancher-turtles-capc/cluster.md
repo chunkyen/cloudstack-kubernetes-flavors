@@ -776,12 +776,9 @@ The `turtles.cattle.io/bootstrap: "true"` label is intended for the **local/boot
 
 ### 8.1 Upgrade Kubernetes Version
 
-A Kubernetes upgrade in CAPC is a **rolling update**. CAPI creates new Machines from the `CloudStackMachineTemplate`, joins them to the cluster, and removes the old ones one at a time. For this to work cleanly, you need **both**:
+A Kubernetes upgrade in CAPC is a **rolling update**. CAPI creates new Machines from new `CloudStackMachineTemplate` objects, joins them to the cluster, and removes the old ones one at a time.
 
-1. A CloudStack template with the target Kubernetes version pre-installed (or at minimum, compatible base packages + working package repos).
-2. Updated `spec.version` on `KubeadmControlPlane` and `MachineDeployment`.
-
-> **⚠️ Do not skip the template update.** If you only change `spec.version` without updating the `CloudStackMachineTemplate`, new Machines boot from the old image and kubeadm attempts an in-place package upgrade over the network. This is fragile and can fail if package repos are unavailable or the image's pre-installed version is too far from the target.
+> **⚠️ CloudStackMachineTemplates are immutable.** You cannot patch an existing template — you must create **new** template objects with the updated image reference, then update `KubeadmControlPlane` and `MachineDeployment` to point to them.
 
 #### Step 1 — Build or register the target image
 
@@ -790,61 +787,72 @@ Build a new CAPC image with the target Kubernetes version (see [Pre-built Images
 Verify the template is available:
 
 ```bash
-cmk listTemplates filter=unique nameFilter="kube-v1.33/ubuntu-2404"
+cmk listTemplates filter=unique nameFilter="capc-ubuntu24-1.36"
 ```
 
-#### Step 2 — Update the CloudStackMachineTemplate (control plane)
+#### Step 2 — Create new CloudStackMachineTemplates
 
-Patch the control-plane `CloudStackMachineTemplate` to reference the new template:
+Export the existing templates, strip read-only metadata, rename them, and update the image reference:
 
 ```bash
-kubectl patch cloudstackmachinetemplate capc-cluster-1-control-plane -n capc-cluster-1 --type merge -p '{
-  "spec": {
-    "template": {
-      "spec": {
-        "template": {
-          "name": "capc-ubuntu24-1.36"
-        }
-      }
-    }
-  }
-}'
+# Export current templates
+kubectl get cloudstackmachinetemplate capc-cluster-1-control-plane -n capc-cluster-1 -o yaml > /tmp/cp-template.yaml
+kubectl get cloudstackmachinetemplate capc-cluster-1-md-0 -n capc-cluster-1 -o yaml > /tmp/md-template.yaml
 ```
 
-#### Step 3 — Update the CloudStackMachineTemplate (workers)
+Edit both files. For each file:
 
-Patch the worker `CloudStackMachineTemplate`:
+1. **Remove** these metadata fields (they are read-only on apply):
+   - `metadata.uid`
+   - `metadata.resourceVersion`
+   - `metadata.creationTimestamp`
+   - `metadata.ownerReferences`
+   - `metadata.annotations`
+2. **Change** `metadata.name` to a new name with the target version:
+   - Control plane: `capc-cluster-1-control-plane-v1.36`
+   - Workers: `capc-cluster-1-md-0-v1.36`
+3. **Change** `spec.template.spec.template.name` to the new CloudStack template name (e.g., `capc-ubuntu24-1.36`)
+4. **Keep** `offering`, `sshKey`, `diskOffering` unchanged.
+
+Apply the new templates:
 
 ```bash
-kubectl patch cloudstackmachinetemplate capc-cluster-1-md-0 -n capc-cluster-1 --type merge -p '{
-  "spec": {
-    "template": {
-      "spec": {
-        "template": {
-          "name": "capc-ubuntu24-1.36"
-        }
-      }
-    }
-  }
-}'
+kubectl apply -f /tmp/cp-template.yaml -n capc-cluster-1
+kubectl apply -f /tmp/md-template.yaml -n capc-cluster-1
 ```
 
-#### Step 4 — Update the Kubernetes version on KCP and MachineDeployment
+#### Step 3 — Update KubeadmControlPlane (new template + version)
+
+Point KCP to the new control-plane template and update the Kubernetes version in a single patch:
 
 ```bash
-# Update KubeadmControlPlane version
 kubectl patch kubeadmcontrolplane capc-cluster-1-control-plane -n capc-cluster-1 --type merge -p '{
   "spec": {
-    "version": "v1.33.0"
+    "machineTemplate": {
+      "infrastructureRef": {
+        "name": "capc-cluster-1-control-plane-v1.36"
+      }
+    },
+    "version": "v1.36.0"
   }
 }'
+```
 
-# Update MachineDeployment version
+CAPI immediately starts replacing control-plane nodes one at a time (etcd quorum is maintained throughout).
+
+#### Step 4 — Update MachineDeployment (new template + version)
+
+Point the MachineDeployment to the new worker template and update the version:
+
+```bash
 kubectl patch machinedeployment capc-cluster-1-md-0 -n capc-cluster-1 --type merge -p '{
   "spec": {
     "template": {
       "spec": {
-        "version": "v1.33.0"
+        "infrastructureRef": {
+          "name": "capc-cluster-1-md-0-v1.36"
+        },
+        "version": "v1.36.0"
       }
     }
   }
@@ -854,7 +862,7 @@ kubectl patch machinedeployment capc-cluster-1-md-0 -n capc-cluster-1 --type mer
 #### Step 5 — Monitor the rolling update
 
 ```bash
-# Watch control-plane machines (one at a time)
+# Watch machines (control plane first, then workers)
 kubectl get machines -n capc-cluster-1 -w
 
 # Check KCP status
@@ -862,11 +870,14 @@ kubectl get kubeadmcontrolplane capc-cluster-1-control-plane -n capc-cluster-1
 
 # Check MachineDeployment status
 kubectl get machinedeployment capc-cluster-1-md-0 -n capc-cluster-1
+
+# Verify workload cluster nodes
+kubectl --kubeconfig=kubeconfig get nodes
 ```
 
 CAPI upgrades the control plane first (one node at a time, waiting for etcd health), then rolls the workers. The entire process can take 10–30 minutes depending on VM provisioning time.
 
-> **Note:** The order matters — update the `CloudStackMachineTemplate` **before** changing `spec.version`. If you change the version first, CAPI may start creating new Machines from the old template before you've had a chance to patch it.
+> **Order matters:** Create the new `CloudStackMachineTemplate` objects **before** patching KCP/MD. If you patch KCP/MD first, CAPI will try to reference a template that doesn't exist yet.
 
 ## 9. Troubleshooting
 

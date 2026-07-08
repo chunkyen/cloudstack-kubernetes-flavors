@@ -66,6 +66,8 @@ The workload cluster is completely unaffected during this step. You could have m
 
 ### Step 2: Upgrade K8s Version (Image-Based Rolling Update)
 
+> **CloudStackMachineTemplates are immutable.** You cannot patch an existing template. You must create **new** template objects with the updated image reference, then update `KubeadmControlPlane` and `MachineDeployment` to point to them.
+
 #### Step 2a: Build or Obtain New Image
 
 Build a custom image for the target Kubernetes version, or download a prebuilt one matching your hypervisor.
@@ -78,72 +80,72 @@ Build a custom image for the target Kubernetes version, or download a prebuilt o
 | **VMware** | ova | Rocky 9, Ubuntu 22.04, Ubuntu 24.04 |
 | **XenServer** | vhd (bz2) | Rocky 9, Ubuntu 22.04, Ubuntu 24.04 |
 
-Upload the new image to CloudStack as a template:
+Upload the new image to CloudStack as a template. See [Building Your Own Image](./capc-custom-image.md#registering-the-image-in-cloudstack) for registration instructions.
+
+#### Step 2b: Create New CloudStackMachineTemplates
+
+Export the existing templates, strip read-only metadata, rename them, and update the image reference:
 
 ```bash
-# Using cmk CLI
-cmk registeriso \
-  --url http://packages.shapeblue.com/cluster-api-provider-cloudstack/images/kube-v1.33/ubuntu-2404-kvm.qcow2.bz2 \
-  --zone <zone-id> \
-  --networkid <network-id> \
-  --hypervisor KVM \
-  --displaytext "kube-v1.33/ubuntu-2404" \
-  --name "kube-v1.33/ubuntu-2404" \
-  --ispublic \
-  --passwordenabled
+# Export current templates
+kubectl get cloudstackmachinetemplate capc-cluster-control-plane -o yaml > /tmp/cp-template.yaml
+kubectl get cloudstackmachinetemplate capc-cluster-md-0 -o yaml > /tmp/md-template.yaml
 ```
 
-#### Step 2b: Update CloudStackMachineTemplates
+Edit both files. For each file:
 
-Get the current templates and update their image references:
+1. **Remove** these metadata fields (they are read-only on apply):
+   - `metadata.uid`
+   - `metadata.resourceVersion`
+   - `metadata.creationTimestamp`
+   - `metadata.ownerReferences`
+   - `metadata.annotations`
+2. **Change** `metadata.name` to a new name with the target version:
+   - Control plane: `capc-cluster-control-plane-v1.33`
+   - Workers: `capc-cluster-md-0-v1.33`
+3. **Change** `spec.template.spec.template.name` to the new CloudStack template name (e.g., `kube-v1.33/ubuntu-2404`)
+4. **Keep** `offering`, `sshKey`, `diskOffering` unchanged.
 
-```bash
-# Get current templates
-kubectl get cloudstackmachinetemplate -o yaml > machine-templates.yaml
-
-# Edit: change image to new template name, increment version
-# (e.g., kube-v1.32/ubuntu-2404 → kube-v1.33/ubuntu-2404)
-# Also increment .spec.template.spec.version to force a rolling update
-```
-
-Apply the updated templates:
-
-```bash
-kubectl apply -f machine-templates.yaml
-```
-
-Or patch directly:
+Apply the new templates:
 
 ```bash
-# Control plane template
-kubectl patch cloudstackmachinetemplate capc-cluster-control-plane-xxxxx \
-  -p '{"spec":{"template":{"spec":{"template":{"name":"kube-v1.33/ubuntu-2404"}}}}}' \
-  --type=merge
-
-# Worker template
-kubectl patch cloudstackmachinetemplate capc-cluster-md-0-xxxxx \
-  -p '{"spec":{"template":{"spec":{"template":{"name":"kube-v1.33/ubuntu-2404"}}}}}' \
-  --type=merge
+kubectl apply -f /tmp/cp-template.yaml
+kubectl apply -f /tmp/md-template.yaml
 ```
 
 #### Step 2c: Update KubeadmControlPlane and MachineDeployment
 
-Point them to the new templates and update the version field:
-
-```yaml
-# KubeadmControlPlane.spec.machineTemplate.infrastructureRef.name → new template name
-# KubeadmControlPlane.spec.version → v1.33
----
-# MachineDeployment.spec.template.spec.infrastructureRef.name → new worker template name
-# MachineDeployment.spec.template.spec.version → v1.33
-```
+Point KCP and MachineDeployment to the new templates and update the version field in a single patch:
 
 ```bash
-kubectl edit kubeadmcontrolplane capc-cluster-control-plane
-kubectl edit machinedeployment capc-cluster-md-0
+# Control plane — new template + version
+kubectl patch kubeadmcontrolplane capc-cluster-control-plane --type merge -p '{
+  "spec": {
+    "machineTemplate": {
+      "infrastructureRef": {
+        "name": "capc-cluster-control-plane-v1.33"
+      }
+    },
+    "version": "v1.33.0"
+  }
+}'
+
+# Workers — new template + version
+kubectl patch machinedeployment capc-cluster-md-0 --type merge -p '{
+  "spec": {
+    "template": {
+      "spec": {
+        "infrastructureRef": {
+          "name": "capc-cluster-md-0-v1.33"
+        },
+        "version": "v1.33.0"
+      }
+    }
+  }
+}'
 ```
 
-CAPC performs a rolling update — old VMs are terminated and new ones provisioned from the updated image.
+CAPC performs a rolling update — old VMs are terminated and new ones provisioned from the new image.
 
 #### Step 2d: Wait for Rolling Update to Complete
 
@@ -246,21 +248,25 @@ echo "=== Step 2: Upgrading K8s version to ${k8s_version} ==="
 # Build new image or get prebuilt template
 # ... (your image build / template upload logic)
 
-# Update CloudStackMachineTemplates
-kubectl patch cloudstackmachinetemplate capc-cluster-control-plane-xxxxx \
-  -p '{"spec":{"template":{"spec":{"template":{"name":"kube-v1.33/ubuntu-2404"}}}}}' \
-  --type=merge
+# Create new CloudStackMachineTemplates (templates are immutable — cannot be patched)
+kubectl get cloudstackmachinetemplate capc-cluster-control-plane -o yaml > /tmp/cp-template.yaml
+kubectl get cloudstackmachinetemplate capc-cluster-md-0 -o yaml > /tmp/md-template.yaml
+# Edit both files:
+#   - Remove metadata.uid, metadata.resourceVersion, metadata.creationTimestamp,
+#     metadata.ownerReferences, metadata.annotations
+#   - Rename: capc-cluster-control-plane-v1.33, capc-cluster-md-0-v1.33
+#   - Update spec.template.spec.template.name to new CloudStack template
+kubectl apply -f /tmp/cp-template.yaml
+kubectl apply -f /tmp/md-template.yaml
 
-kubectl patch cloudstackmachinetemplate capc-cluster-md-0-xxxxx \
-  -p '{"spec":{"template":{"spec":{"template":{"name":"kube-v1.33/ubuntu-2404"}}}}}' \
-  --type=merge
-
-# Update version in KubeadmControlPlane and MachineDeployment
+# Update KCP and MachineDeployment — new template + version
 kubectl patch kubeadmcontrolplane capc-cluster-control-plane \
-  -p '{"spec":{"version":"'"${k8s_version}"'"}}' --type=merge
+  -p '{"spec":{"machineTemplate":{"infrastructureRef":{"name":"capc-cluster-control-plane-v1.33"}},"version":"'${k8s_version}'"}}' \
+  --type=merge
 
 kubectl patch machinedeployment capc-cluster-md-0 \
-  -p '{"spec":{"template":{"spec":{"version":"'"${k8s_version}"'"}}}}' --type=merge
+  -p '{"spec":{"template":{"spec":{"infrastructureRef":{"name":"capc-cluster-md-0-v1.33"},"version":"'${k8s_version}'"}}}}' \
+  --type=merge
 
 # Wait for rolling update to complete
 clusterctl wait cluster ${cluster_name} --for=condition=ControlPlaneReady --timeout=1200s
@@ -301,21 +307,22 @@ If something goes wrong during the upgrade, you can rollback:
 ### Rollback K8s Version
 
 ```bash
-# Revert CloudStackMachineTemplates to old image
-kubectl patch cloudstackmachinetemplate capc-cluster-control-plane-xxxxx \
-  -p '{"spec":{"template":{"spec":{"template":{"name":"kube-v1.32/ubuntu-2404"}}}}}' \
-  --type=merge
+# Create new CloudStackMachineTemplates pointing to the old image
+kubectl get cloudstackmachinetemplate capc-cluster-control-plane-v1.33 -o yaml > /tmp/cp-rollback.yaml
+kubectl get cloudstackmachinetemplate capc-cluster-md-0-v1.33 -o yaml > /tmp/md-rollback.yaml
+# Edit: strip metadata, rename to -v1.32, update template.name to old image
+kubectl apply -f /tmp/cp-rollback.yaml
+kubectl apply -f /tmp/md-rollback.yaml
 
-kubectl patch cloudstackmachinetemplate capc-cluster-md-0-xxxxx \
-  -p '{"spec":{"template":{"spec":{"template":{"name":"kube-v1.32/ubuntu-2404"}}}}}' \
-  --type=merge
-
-# Revert version
+# Revert KCP — point to old template + old version
 kubectl patch kubeadmcontrolplane capc-cluster-control-plane \
-  -p '{"spec":{"version":"v1.32"}}' --type=merge
+  -p '{"spec":{"machineTemplate":{"infrastructureRef":{"name":"capc-cluster-control-plane-v1.32"}},"version":"v1.32"}}' \
+  --type=merge
 
+# Revert MachineDeployment — point to old template + old version
 kubectl patch machinedeployment capc-cluster-md-0 \
-  -p '{"spec":{"template":{"spec":{"version":"v1.32"}}}}' --type=merge
+  -p '{"spec":{"template":{"spec":{"infrastructureRef":{"name":"capc-cluster-md-0-v1.32"},"version":"v1.32"}}}}' \
+  --type=merge
 
 # Wait for rollback to complete
 clusterctl wait cluster capc-cluster --for=condition=ControlPlaneReady --timeout=1200s
