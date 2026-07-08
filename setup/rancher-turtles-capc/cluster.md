@@ -23,7 +23,11 @@ This guide covers provisioning Kubernetes clusters on CloudStack using CAPI CRDs
 
 CAPC requires pre-built images with container runtime + kubelet + kubeadm already installed. These are registered as templates in CloudStack.
 
-### 2.1 Pre-built Images
+### 2.1 CAPI-Compatible Images
+
+CAPC requires pre-built images with container runtime + kubelet + kubeadm already installed. These are registered as templates in CloudStack. You can either download a pre-built image or build your own.
+
+#### Pre-built Images (Recommended)
 
 Pre-built CAPI-compatible images are available for multiple hypervisors and Kubernetes versions:
 
@@ -34,6 +38,10 @@ Pre-built CAPI-compatible images are available for multiple hypervisors and Kube
 | XenServer | vhd | [v1.32.3](http://packages.shapeblue.com/cluster-api-provider-cloudstack/images/xen/ubuntu-2404-kube-v1.32.3-xen.vhd.bz2) | [v1.32.3](http://packages.shapeblue.com/cluster-api-provider-cloudstack/images/xen/rockylinux-9-kube-v1.32.3-xen.vhd.bz2) |
 
 Full image list: [CAPC Images](http://packages.shapeblue.com/cluster-api-provider-cloudstack/images/)
+
+#### Building Your Own Image
+
+The steps for building a custom CAPI-compatible image are the same as for the standalone CAPC workflow. See the [CAPC Custom Image Guide](../capc/capc-custom-image.md) for the full build instructions. Once the image is built, register it as a CloudStack template exactly like a pre-built image (see [Section 2.2](#22-register-the-template)).
 
 ### 2.2 Register the Template
 
