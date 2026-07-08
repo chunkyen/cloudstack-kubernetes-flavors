@@ -114,6 +114,30 @@ image-builder/images/capi/output/ubuntu-2404-kube-v1.35.0/
 
 Inside that directory you will find the raw `qcow2` image.
 
+### Monitor the Build via VNC
+
+Packer's QEMU builder runs `qemu-system-x86` directly as a subprocess — **not through libvirt** — so `virsh list` will not show it. The VM is temporary and destroyed after the build completes.
+
+To watch the build progress, connect to the VNC display that Packer opens:
+
+```bash
+# Find the VNC port from the QEMU process
+ps aux | grep "[q]emu-system" | grep -oP 'vnc \S+'
+# Example output: 127.0.0.1:1  (VNC display :1 = port 5901, :33 = port 5933, etc.)
+```
+
+Then connect with any VNC client:
+
+```bash
+# From a terminal
+vncviewer 127.0.0.1:5933
+
+# Or use a URL scheme (some viewers)
+# vnc://127.0.0.1:5933
+```
+
+You will see the VM boot, cloud-init run, and Ansible install packages (kubelet, kubeadm, containerd, etc.). Typical build time is 10–20 minutes depending on hardware and network speed.
+
 ### Supported OS Versions
 
 The upstream image-builder project adds and removes OS targets over time. Check the current targets in your cloned repo:
