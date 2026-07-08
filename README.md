@@ -30,8 +30,8 @@ See the [Architecture](#architecture) section for details on each.
 - [CloudStack CSI Driver (persistent storage)](architecture/cloudstack-csi-driver.md) — applies to all flavors
 - [CKS architecture](architecture/cks.md)
 - [CAPC architecture](architecture/capc.md)
-- [Rancher+CAPC architecture](architecture/rancher-capc.md)
-- [Talos architecture](architecture/talos.md)
+- [Rancher+CAPC architecture](architecture/rancher-turtles-capc.md)
+- Talos architecture (not yet documented)
 
 ### Setup Guides
 
@@ -39,13 +39,13 @@ See the [Architecture](#architecture) section for details on each.
 - [CAPC deployment (with user-defined OS)](setup/capc/capc.md)
 - [CAPC custom image building](setup/capc/capc-custom-image.md) — build your own K8s-compatible images for CAPC
 - [Move From Bootstrap](setup/capc/move-from-bootstrap.md) — make CAPC clusters self-managing by transferring CAPI objects from a bootstrap cluster
-- [Rancher with CAPC](setup/rancher-capc.md)
-- [Talos Linux standalone (with CAPI or bare-metal)](setup/talos.md)
+- [Rancher with CAPC](setup/rancher-turtles-capc/index.md)
+- Talos Linux standalone (with CAPI or bare-metal) (not yet documented)
 
 ### Analysis
 
-- [Feature comparison matrix and analysis](comparison/)
-- [External references and documentation links](references/)
+- Feature comparison matrix and analysis (not yet created)
+- External references and documentation links (not yet created)
 
 ## Quick Comparison
 

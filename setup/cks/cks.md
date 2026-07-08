@@ -208,7 +208,7 @@ Install Cilium on a cluster that was provisioned with the default Calico ISO —
 **Note:** This approach pulls Cilium images from the internet during node bootstrap. If you need fully offline provisioning, use the Cilium ISO build in [CKS Custom ISO Build Guide](./cks-custom-iso.md#option-b-build-cilium-iso-community-script) (Option B).
 
 **The Cilium CNI config** is archived in this repo at:
-[`cilium-cni-config.yaml`](setup/cks/scripts/cilium-cni-config.yaml)
+[`cilium-cni-config.yaml`](./scripts/cilium-cni-config.yaml)
 
 > **Credit:** Adapted from [nulcell/homecloud](https://github.com/nulcell/homecloud/blob/3f5a40a3332084a4ff7bd5ae13fc3c70dce28d96/cloudstack/compute/cni-config/cilium.yaml) by [nulcell](https://github.com/nulcell). Archived for preservation.
 

@@ -84,7 +84,7 @@ This provider is relevant to **all four Kubernetes flavors** on CloudStack:
 
 ## Setup
 
-For deployment instructions, see [setup/cloudstack-kubernetes-provider.md](../../setup/cloudstack-kubernetes-provider.md).
+For deployment instructions, see [setup/cloudstack-kubernetes-provider.md](../setup/cloudstack-kubernetes-provider.md).
 
 ## References
 

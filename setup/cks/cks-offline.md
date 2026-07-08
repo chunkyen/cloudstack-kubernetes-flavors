@@ -147,7 +147,7 @@ This is a fundamental mismatch between how Helm generates manifests (digest-pinn
 
 ### Solution: Offline Cilium ISO Script ✅
 
-The [`create-cilium-offline-kubernetes-binaries-iso.sh`](setup/cks/scripts/create-cilium-offline-kubernetes-binaries-iso.sh) script solves this by stripping all `@sha256:...` digest pins from the generated YAML manifests before baking them into the ISO. This leaves tag-based image references that match what's already bundled in the containerd store, eliminating the need for external registry verification.
+The [`create-cilium-offline-kubernetes-binaries-iso.sh`](./scripts/create-cilium-offline-kubernetes-binaries-iso.sh) script solves this by stripping all `@sha256:...` digest pins from the generated YAML manifests before baking them into the ISO. This leaves tag-based image references that match what's already bundled in the containerd store, eliminating the need for external registry verification.
 
 See [Option C: Build Cilium Offline ISO](./cks-custom-iso.md#option-c-build-cilium-offline-iso) in the custom ISO build guide.
 

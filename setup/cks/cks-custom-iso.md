@@ -40,7 +40,7 @@ scp root@<mgmt-server>:/usr/share/cloudstack-common/scripts/util/create-kubernet
 chmod +x create-kubernetes-binaries-iso.sh
 ```
 
-Alternatively, an archived copy is available in this repo at [`setup/cks/scripts/create-kubernetes-binaries-iso.sh`](setup/cks/scripts/create-kubernetes-binaries-iso.sh), or grab the latest from the [CloudStack source](https://github.com/apache/cloudstack/blob/main/scripts/util/create-kubernetes-binaries-iso.sh).
+Alternatively, an archived copy is available in this repo at [`scripts/create-kubernetes-binaries-iso.sh`](./scripts/create-kubernetes-binaries-iso.sh), or grab the latest from the [CloudStack source](https://github.com/apache/cloudstack/blob/main/scripts/util/create-kubernetes-binaries-iso.sh).
 
 **Option B (Community Cilium):** Archived in this repo — see [Option B](#option-b-build-cilium-iso-community-script) below.
 
@@ -140,7 +140,7 @@ For a Cilium-based ISO that also bundles CCM, CSI, and Cluster Autoscaler.
 
 **Source:** [nulcell/homecloud](https://github.com/nulcell/homecloud/blob/3f5a40a3332084a4ff7bd5ae13fc3c70dce28d96/cloudstack/compute/cks/create-cilium-kubernetes-binaries-iso.sh)
 
-**Archived in this repo:** [`create-cilium-kubernetes-binaries-iso.sh`](setup/cks/scripts/create-cilium-kubernetes-binaries-iso.sh)
+**Archived in this repo:** [`create-cilium-kubernetes-binaries-iso.sh`](./scripts/create-cilium-kubernetes-binaries-iso.sh)
 
 ### 3.1 Example Build
 
@@ -156,7 +156,7 @@ ARCH="amd64"
 ETCD_VERSION="3.5.0"
 
 # Using the archived script in this repo:
-./setup/cks/scripts/create-cilium-kubernetes-binaries-iso.sh \
+./scripts/create-cilium-kubernetes-binaries-iso.sh \
   $OUTPUT_PATH \
   $KUBERNETES_VERSION \
   $CNI_VERSION \
@@ -209,7 +209,7 @@ Same as [Section 3](#3-option-b-build-cilium-iso-community-script) but with one 
 
 This enables **fully offline deployment**. Without this fix, Kubernetes tries to verify image digests against external registries (e.g., `quay.io`) when starting Cilium pods — which fails in air-gapped environments.
 
-**Archived in this repo:** [`create-cilium-offline-kubernetes-binaries-iso.sh`](setup/cks/scripts/create-cilium-offline-kubernetes-binaries-iso.sh)
+**Archived in this repo:** [`create-cilium-offline-kubernetes-binaries-iso.sh`](./scripts/create-cilium-offline-kubernetes-binaries-iso.sh)
 
 ### 4.1 Why This Works
 
@@ -234,7 +234,7 @@ BUILD_NAME="v${KUBERNETES_VERSION}-cks-cilium-offline"
 ARCH="amd64"
 ETCD_VERSION="3.5.0"
 
-./setup/cks/scripts/create-cilium-offline-kubernetes-binaries-iso.sh \
+./scripts/create-cilium-offline-kubernetes-binaries-iso.sh \
   $OUTPUT_PATH \
   $KUBERNETES_VERSION \
   $CNI_VERSION \

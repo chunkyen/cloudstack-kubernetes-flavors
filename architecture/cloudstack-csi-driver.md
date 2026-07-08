@@ -119,7 +119,7 @@ The `cloudstack-csi-sc-syncer` tool synchronizes CloudStack disk offerings to Ku
 
 ## Setup
 
-For deployment instructions, see [setup/cloudstack-csi-driver.md](../../setup/cloudstack-csi-driver.md).
+For deployment instructions, see [setup/cloudstack-csi-driver.md](../setup/cloudstack-csi-driver.md).
 
 ## Build
 

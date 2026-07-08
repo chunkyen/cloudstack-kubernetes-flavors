@@ -406,7 +406,7 @@ KUBECONFIG=capc-cluster.kubeconfig kubectl apply -f \
   <csi-driver-deployment-manifest>
 ```
 
-See [CloudStack Kubernetes Provider](../architecture/cloudstack-kubernetes-provider.md) and [CloudStack CSI Driver](../setup/cloudstack-csi-driver.md) for detailed deployment instructions.
+See [CloudStack Kubernetes Provider](../../architecture/cloudstack-kubernetes-provider.md) and [CloudStack CSI Driver](../../setup/cloudstack-csi-driver.md) for detailed deployment instructions.
 
 ## Verification Checklist
 
@@ -775,4 +775,4 @@ ssh cloud-user@<public-ip> -i path/to/private/key
 - See the [CAPC Upgrade Guide](./capc-upgrade.md) for end-to-end upgrade procedures
 - Explore [Tilt-based development](https://cluster-api-cloudstack.sigs.k8s.io/development/tilt) for CAPC contribution
 - Check out the [CKS setup guide](../cks/cks.md) for native CloudStack Kubernetes integration
-- Compare all flavors in the [comparison analysis](../comparison/)
+- Compare all flavors in the [feature comparison matrix in the top-level README](../../README.md#quick-comparison)
