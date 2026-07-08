@@ -9,3 +9,12 @@ spec:
   type: infrastructure
   configSecret:
     name: cloudstack-credentials
+  # Enable CKS sync so CAPC registers workload clusters with syncWithACS: true
+  # in CloudStack's Compute -> Kubernetes UI as ExternalManaged clusters.
+  patches:
+    - patch: |-
+        [{"op": "replace", "path": "/spec/template/spec/containers/0/args/5", "value": "--enable-cloudstack-cks-sync=true"}]
+      target:
+        kind: Deployment
+        name: capc-controller-manager
+        namespace: cattle-capi-system

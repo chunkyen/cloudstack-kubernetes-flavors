@@ -146,11 +146,20 @@ spec:
   type: infrastructure
   configSecret:
     name: cloudstack-credentials
+  # Enable CKS sync so CAPC registers workload clusters with syncWithACS: true
+  # in CloudStack's Compute -> Kubernetes UI as ExternalManaged clusters.
+  # The default CAPC deployment (including the Turtles manifests in this repo)
+  # sets --enable-cloudstack-cks-sync=false.
+  patches:
+    - patch: |-
+        [{"op": "replace", "path": "/spec/template/spec/containers/0/args/5", "value": "--enable-cloudstack-cks-sync=true"}]
+      target:
+        kind: Deployment
+        name: capc-controller-manager
+        namespace: cattle-capi-system
 ```
 
-```bash
-kubectl apply -f cloudstack-provider.yaml
-```
+**Important:** A patch is required because CAPC defaults this controller flag to `false`. `spec.manager.additionalArgs` cannot be used here — it appends a duplicate arg rather than replacing the existing one, leaving the deployment with both `--enable-cloudstack-cks-sync=false` and `--enable-cloudstack-cks-sync=true`. The RFC 6902 JSON patch above replaces the existing flag at index 5.
 
 ### 4.3 Verify CAPC Installation
 
@@ -218,6 +227,15 @@ spec:
   type: infrastructure
   configSecret:
     name: cloudstack-credentials
+  # Enable CKS sync so CAPC registers workload clusters with syncWithACS: true
+  # in CloudStack's Compute -> Kubernetes UI as ExternalManaged clusters.
+  patches:
+    - patch: |-
+        [{"op": "replace", "path": "/spec/template/spec/containers/0/args/5", "value": "--enable-cloudstack-cks-sync=true"}]
+      target:
+        kind: Deployment
+        name: capc-controller-manager
+        namespace: cattle-capi-system
 ```
 
 ```bash
