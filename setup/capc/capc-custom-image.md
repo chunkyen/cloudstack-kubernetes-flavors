@@ -56,47 +56,63 @@ Image-builder for CloudStack produces `qcow2` images using the **KVM/QEMU** hype
 
 CloudStack images need the `provider=cloudstack` Ansible variable. The standard way to pass this is via a Packer var file.
 
-1. **Create a Packer var file:**
+Image-builder ships with default Kubernetes version values in `packer/config/kubernetes.json`. You override them by adding the relevant keys to your `extra_vars.json` — Packer merges your file on top of the defaults.
 
-   ```bash
-   cat > extra_vars.json <<EOF
-   {
-     "ansible_user_vars": "provider=cloudstack"
-   }
-   EOF
-   ```
+#### Key variables
 
-2. **Build the image:**
+| Variable | Example | Description |
+|---|---|---|
+| `kubernetes_semver` | `"v1.36.1"` | Full semantic version (with `v` prefix) |
+| `kubernetes_series` | `"v1.36"` | Minor series (used for APT/YUM repo paths) |
+| `kubernetes_deb_version` | `"1.36.1-1.1"` | Exact DEB package version |
+| `kubernetes_rpm_version` | `"1.36.1"` | Exact RPM package version |
+| `crictl_version` | `"1.36.0"` | CRI-tools version (should match K8s series) |
 
-   ```bash
-   PACKER_VAR_FILES=extra_vars.json make clean build-qemu-ubuntu-2404
-   ```
+> **Where to find current defaults:** Check `packer/config/kubernetes.json` in your cloned repo. It contains all the `kubernetes_*` keys and their current values. Copy the ones you want to override into `extra_vars.json`.
 
-   The output directory is named after the OS and Kubernetes version baked into image-builder, for example:
-
-   ```text
-   ./output/ubuntu-2404-kube-v1.32.0/
-   ```
-
-   Inside that directory you will find the raw `qcow2` image.
-
-### Override the Kubernetes Version
-
-To build for Kubernetes 1.36 (or any other version), add the version to the Packer var file. The exact variable name depends on the image-builder release; common ones are `kubernetes_version`, `kubernetes_semver`, or `kubernetes_series`.
+#### Example 1 — Build with default K8s version (whatever image-builder ships)
 
 ```bash
 cat > extra_vars.json <<EOF
 {
-  "ansible_user_vars": "provider=cloudstack",
-  "kubernetes_version": "1.36.0",
-  "kubernetes_series": "v1.36"
+  "ansible_user_vars": "provider=cloudstack"
 }
 EOF
 
 PACKER_VAR_FILES=extra_vars.json make clean build-qemu-ubuntu-2404
 ```
 
-> **Note:** Image-builder does not necessarily support every Kubernetes/OS combination. If the build fails because a Kubernetes 1.36 DEB package or container image is unavailable, you may need to update the image-builder version or pin to a supported Kubernetes release.
+The output directory reflects the default version, for example:
+
+```text
+./output/ubuntu-2404-kube-v1.36.1/
+```
+
+#### Example 2 — Build with a specific K8s version
+
+Override `kubernetes_semver` and `kubernetes_series` (and the deb/rpm versions if they differ from the defaults):
+
+```bash
+cat > extra_vars.json <<EOF
+{
+  "ansible_user_vars": "provider=cloudstack",
+  "kubernetes_semver": "v1.35.0",
+  "kubernetes_series": "v1.35",
+  "kubernetes_deb_version": "1.35.0-1.1",
+  "kubernetes_rpm_version": "1.35.0"
+}
+EOF
+
+PACKER_VAR_FILES=extra_vars.json make clean build-qemu-ubuntu-2404
+```
+
+Output:
+
+```text
+./output/ubuntu-2404-kube-v1.35.0/
+```
+
+Inside that directory you will find the raw `qcow2` image.
 
 ### Supported OS Versions
 
