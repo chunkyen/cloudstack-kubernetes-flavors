@@ -128,7 +128,59 @@ kubectl apply -f cloudstack-secret.yaml -n capc-cluster-1
 # kubectl apply -f cloudstack-secret.yaml -n cattle-capi-system  ← don't do this
 ```
 
-### 3.1 Minimal Cluster (1 Control + 2 Workers)
+### 3.1 CAPI Resource Model: Machine, MachineSet, MachineDeployment, KubeadmControlPlane
+
+These objects appear in the Rancher Turtles UI and in `kubectl`. Understanding how they relate prevents confusion when scaling or troubleshooting.
+
+| Object | What it represents | Do you edit it directly? |
+|---|---|---|
+| **Machine** | One VM / one Kubernetes node | Usually no |
+| **MachineSet** | Controller that keeps N identical Machines running | No |
+| **MachineDeployment** | User-facing declaration: "I want N workers" | Yes (for workers) |
+| **KubeadmControlPlane** | User-facing declaration: "I want M control plane nodes" | Yes (for control plane) |
+
+#### Relationship
+
+**Workers:**
+
+```text
+MachineDeployment (capc-cluster-1-md-0)
+    └── MachineSet (capc-cluster-1-md-0-46xs6)
+            ├── Machine → Node worker-1
+            └── Machine → Node worker-2
+```
+
+**Control plane:**
+
+```text
+KubeadmControlPlane (capc-cluster-1-control-plane)
+    ├── Machine → Node control-plane-1
+    └── Machine → Node control-plane-2
+    └── Machine → Node control-plane-3
+```
+
+#### Key points
+
+- **`Machine`** is the lowest-level object. CAPC creates one CloudStack VM for each Machine.
+- **`MachineSet`** is owned by a `MachineDeployment`. It exists only to keep the right number of Machines. You normally ignore it.
+- **`MachineDeployment`** is what you scale for workers. Change `spec.replicas` and CAPI reconciles the MachineSet/Machines for you.
+- **`KubeadmControlPlane`** is the control-plane equivalent of a MachineDeployment. It directly owns Machine objects for the control plane and also manages etcd / API-server membership.
+- Control plane replica counts must be **odd** (`1`, `3`, `5`) because etcd needs quorum.
+
+#### Common commands
+
+```bash
+# List all CAPI machine resources for the cluster
+kubectl get machinedeployment,machinesets,machines,kubeadmcontrolplane -n capc-cluster-1
+
+# Scale workers
+kubectl patch machinedeployment capc-cluster-1-md-0 -n capc-cluster-1 --type merge -p '{"spec":{"replicas":3}}'
+
+# Scale control plane
+kubectl patch kubeadmcontrolplane capc-cluster-1-control-plane -n capc-cluster-1 --type merge -p '{"spec":{"replicas":3}}'
+```
+
+### 3.2 Minimal Cluster (1 Control + 2 Workers)
 
 The full cluster YAML is available in the manifests folder: [10-minimal-cluster.yaml](./manifests/10-minimal-cluster.yaml)
 
@@ -144,7 +196,7 @@ The full cluster YAML is available in the manifests folder: [10-minimal-cluster.
 
 | `my-ssh-key` | CloudStack SSH keypair name | `cmk register-sshkeypair --name=my-ssh-key --publickey="$(cat ~/.ssh/id_ed25519.pub)"` |
 
-> **SSH Key Method:** This example uses **Method 1** (CloudStack SSH KeyPair) — the recommended approach. Register your key via `cmk register-sshkeypair`, then reference it via the `sshKey` field on `CloudStackMachine` resources. CloudStack injects the key into the default user (`ubuntu` for Ubuntu images, `cloud-user` for Rocky). See [Section 3.6](#36-advanced--inline-cloud-init-custom-image-setup) for Method 2 (inline cloud-init for custom image setup).
+> **SSH Key Method:** This example uses **Method 1** (CloudStack SSH KeyPair) — the recommended approach. Register your key via `cmk register-sshkeypair`, then reference it via the `sshKey` field on `CloudStackMachine` resources. CloudStack injects the key into the default user (`ubuntu` for Ubuntu images, `cloud-user` for Rocky). See [Section 3.7](#37-advanced--inline-cloud-init-custom-image-setup) for Method 2 (inline cloud-init for custom image setup).
 
 > **Namespace note:** The YAML uses `namespace: default`, which means all CAPI resources (CloudStackCluster, KubeadmControlPlane, MachineDeployment, etc.) are created in the `default` namespace of the **management cluster** (your Rancher cluster). The workload cluster itself is just VMs on CloudStack — it has no namespace. To apply to a different namespace without editing the file: `kubectl apply -f manifests/10-minimal-cluster.yaml -n my-clusters`
 
@@ -154,7 +206,7 @@ The full cluster YAML is available in the manifests folder: [10-minimal-cluster.
 kubectl apply -f manifests/10-minimal-cluster.yaml
 ```
 
-### 3.2 Create Namespace + CloudStack Credentials Secret
+### 3.3 Create Namespace + CloudStack Credentials Secret
 
 All CAPI resources for this cluster must live in a dedicated namespace on the **management cluster** (your Rancher cluster). The workload cluster itself is just VMs on CloudStack — it has no namespace. But the CAPI CRDs (`Cluster`, `CloudStackCluster`, `KubeadmControlPlane`, etc.) are regular Kubernetes resources that need a namespace.
 
@@ -191,7 +243,7 @@ kubectl apply -f cloudstack-secret.yaml
 
 > **⚠️ Namespace must exist before applying:** Always create the namespace first, then the secret, then the cluster manifest.
 
-### 3.3 Apply and Monitor
+### 3.4 Apply and Monitor
 
 ```bash
 kubectl apply -f manifests/10-minimal-cluster.yaml
@@ -209,7 +261,7 @@ kubectl get events --sort-by='.lastTimestamp' -n default
 
 > **⚠️ CNI Required:** After the control plane is provisioned, you **must** install a CNI plugin before workers become `Ready` and pods can be scheduled. See [Section 5.1](#51-calico-recommended) for installation instructions. Without a CNI, worker nodes report `NotReady`, the `MachineDeployment` shows zero available replicas, and CoreDNS pods remain `Pending`.
 
-### 3.4 Verification Checklist
+### 3.5 Verification Checklist
 
 Run these commands after deployment to verify the cluster reaches a provisioned state. Then install a CNI (Section 5) and run the post-CNI checks.
 
@@ -321,7 +373,7 @@ echo "=== System Pods ===" && \
 kubectl --kubeconfig=kubeconfig get pods -n kube-system | grep -v Running || echo "All system pods running"
 ```
 
-### 3.5 HA Cluster (3 Control + 3 Workers)
+### 3.6 HA Cluster (3 Control + 3 Workers)
 
 The full cluster YAML is available in the manifests folder: [11-ha-cluster.yaml](./manifests/11-ha-cluster.yaml)
 
@@ -338,11 +390,11 @@ Same parameters as the minimal cluster (see table above). The HA cluster uses:
 kubectl apply -f manifests/11-ha-cluster.yaml
 ```
 
-### 3.6 Advanced — Inline Cloud-Init (Custom Image Setup)
+### 3.7 Advanced — Inline Cloud-Init (Custom Image Setup)
 
-For cases where you need more than just SSH key injection — custom users, package installation, kernel modules, systemd services, file provisioning — use **Method 2**: define everything inline in `KubeadmConfig`.
+If your image does not have cloud-init or you need custom first-boot setup, you can inject cloud-init inline in the `CloudStackMachineTemplate`.
 
-The full cluster YAML is available in the manifests folder: [12-custom-image-cluster.yaml](./manifests/12-custom-image-cluster.yaml)
+See [12-custom-image-cluster.yaml](./manifests/12-custom-image-cluster.yaml) for an example.
 
 This approach uses `KubeadmConfig.users` to create users and inject SSH keys via cloud-init, plus `preKubeadmCommands` and `postKubeadmCommands` for arbitrary setup. The `CloudStackMachine` resources omit the `sshKey` field — SSH is handled entirely by cloud-init.
 
@@ -388,7 +440,7 @@ kubectl --kubeconfig=kubeconfig get pods -n kube-system
 
 ### 4.2 SSH to Nodes
 
-SSH access is configured when you create the cluster (see [Section 3.1](#31-minimal-cluster-1-control--2-workers) for Method 1, or [Section 3.6](#36-advanced--inline-cloud-init-custom-image-setup) for Method 2).
+SSH access is configured when you create the cluster (see [Section 3.2](#32-minimal-cluster-1-control--2-workers) for Method 1, or [Section 3.7](#37-advanced--inline-cloud-init-custom-image-setup) for Method 2).
 
 **Method 1 (default)** — CloudStack SSH KeyPair: Register via `cmk register-sshkeypair`, then CloudStack injects the key into the default image user automatically.
 
