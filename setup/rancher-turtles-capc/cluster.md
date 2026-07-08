@@ -207,30 +207,22 @@ kubectl get machinedeployments
 kubectl get events --sort-by='.lastTimestamp' -n default
 ```
 
-> **⚠️ CNI Required:** After the cluster is created, you **must** install a CNI plugin before pods can communicate. See [Section 5.1](#51-calico-recommended) for installation instructions. Without a CNI, nodes will be `Ready` but pods will not be able to communicate.
+> **⚠️ CNI Required:** After the control plane is provisioned, you **must** install a CNI plugin before workers become `Ready` and pods can be scheduled. See [Section 5.1](#51-calico-recommended) for installation instructions. Without a CNI, worker nodes report `NotReady`, the `MachineDeployment` shows zero available replicas, and CoreDNS pods remain `Pending`.
 
 ### 3.4 Verification Checklist
 
-Run these commands after deployment to verify the cluster is healthy end-to-end.
+Run these commands after deployment to verify the cluster reaches a provisioned state. Then install a CNI (Section 5) and run the post-CNI checks.
 
-#### Management Plane — Rancher Turtles + CAPC
+#### Phase 1 — After Deployment, Before CNI
+
+These checks confirm the management plane, control plane, and worker VMs exist. Do **not** expect workers to be `Ready` or `MachineDeployment` replicas to be available yet.
 
 ```bash
-# Turtles controller running?
+# Management plane
 kubectl get pods -n cattle-capi-system | grep turtles
-
-# CAPC provider deployed by Turtles?
-kubectl get pods -n capc-system
-# Expected: capc-controller-manager-xxx 1/1 Running
-
-# CAPIProvider resources applied?
 kubectl get capiproviders -A
-# Expected: cloudstack provider with RECONCILING: false, READY: true
-```
 
-#### Cluster CRDs — All Resources
-
-```bash
+# Cluster CRDs
 kubectl get clusters
 kubectl get cloudstackclusters
 kubectl get kubeadmcontrolplanes
@@ -239,32 +231,48 @@ kubectl get machinesets
 kubectl get machinedeployments
 ```
 
-**Expected state:**
+**Expected state before CNI:**
 - `Cluster` → phase: `Provisioned`
-- `CloudStackCluster` → phase: `Ready`
-- `KubeadmControlPlane` → replicas ready (e.g., 1/1 for minimal, 3/3 for HA)
-- `MachineDeployment` → replicas ready (e.g., 2/2 for minimal, 3/3 for HA)
-- All `Machines` → phase: `Running`, Ready: true
+- `CloudStackCluster` → `Ready`
+- `KubeadmControlPlane` → initialized, API server reachable (e.g., `1/1` for minimal)
+- `MachineDeployment` → desired replicas created, but **available: 0** until CNI
+- `Machines` → phase: `Running`; control-plane `Machine` Ready: `true`; worker `Machines` Ready: `false` (expected)
 
-#### Workload Cluster — Kubernetes Layer
+If workers are `NotReady` at this stage, that is normal — proceed to install the CNI.
 
 ```bash
-# Get kubeconfig from secret
+# Workload cluster — control plane only
 kubectl get secret capc-cluster-1-kubeconfig -o jsonpath='{.data.value}' | base64 -d > kubeconfig
 
-# Nodes ready?
-kubectl --kubeconfig=kubeconfig get nodes -o wide
-# Expected: all nodes show Ready status with internal IP
+kubectl --kubeconfig=kubeconfig get nodes
+# Expected: control-plane node(s) Ready, worker nodes NotReady
 
-# Core system pods running?
 kubectl --kubeconfig=kubeconfig get pods -n kube-system
-# Expected: all pods in Running state (kube-apiserver, etcd, coredns, etc.)
+# Expected: CoreDNS pods Pending until CNI is installed
 
-# API server reachable?
 kubectl --kubeconfig=kubeconfig cluster-info
+# Expected: API server reachable
 ```
 
-#### Networking — CNI Layer
+#### Phase 2 — After CNI Installation
+
+Install a CNI from [Section 5](#5-install-cni), then verify:
+
+```bash
+kubectl --kubeconfig=kubeconfig get nodes -o wide
+# Expected: all nodes (control plane + workers) Ready
+
+kubectl --kubeconfig=kubeconfig get pods -n kube-system
+# Expected: CoreDNS and CNI pods Running
+
+kubectl get machinedeployments
+# Expected: available replicas equal to desired replicas
+
+kubectl get machines
+# Expected: all machines phase Running, Ready: true
+```
+
+#### Networking — Pod-to-Pod
 
 ```bash
 # CNI pods running?
@@ -300,11 +308,11 @@ kubectl --kubeconfig=kubeconfig exec ping-test-1 -- ping -c 3 <ping-test-2-ip>
 #### Quick One-Liner Summary
 
 ```bash
-# All-in-one health check
+# All-in-one health check (run after CNI is installed)
 echo "=== Turtles ===" && \
 kubectl get pods -n cattle-capi-system | grep turtles && echo "" && \
 echo "=== CAPC ===" && \
-kubectl get pods -n capc-system && echo "" && \
+kubectl get pods -n cattle-capi-system | grep capc && echo "" && \
 echo "=== CAPI CRDs ===" && \
 kubectl get clusters,cloudstackclusters,kubeadmcontrolplanes,machinesets,machinedeployments && echo "" && \
 echo "=== Workload Nodes ===" && \
