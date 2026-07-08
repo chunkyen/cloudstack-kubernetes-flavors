@@ -588,6 +588,104 @@ Once `ControlPlaneAvailable=True`, Turtles begins the auto-import handshake. Two
 3. Turtles has access to the Rancher CA certificate, and the workload cluster agent has access to the Rancher CA certificate.  
    > **Note:** We patched the Turtles deployment with a ConfigMap containing the Rancher CA from `secret/tls-rancher-ingress` and mounted it via `SSL_CERT_FILE`. For production, use a properly trusted certificate or distribute the CA through the standard operating-system trust store on all nodes.
 
+If your Rancher server uses the default self-signed `dynamiclistener` certificate (secret `tls-rancher-ingress` in the `cattle-system` namespace), Turtles will fail to download the import manifest with an `x509: certificate signed by unknown authority` error. The fix is to inject that CA into the Turtles controller pod.
+
+#### Injecting the Rancher CA into Turtles
+
+1. **Extract the Rancher CA certificate.**
+
+   The CA is stored in the `ca.crt` field of the `tls-rancher-ingress` secret in the Rancher namespace (usually `cattle-system`):
+
+   ```bash
+   KUBECONFIG=~/.kube/kube-rancher-config
+   RANCHER_NS=cattle-system
+
+   kubectl get secret tls-rancher-ingress -n "$RANCHER_NS" -o jsonpath='{.data.ca\.crt}' | base64 -d > rancher-ca.crt
+   ```
+
+   If `ca.crt` is not present, extract it from `tls.crt` instead:
+
+   ```bash
+   kubectl get secret tls-rancher-ingress -n "$RANCHER_NS" -o jsonpath='{.data.tls\.crt}' | base64 -d > rancher-ca.crt
+   ```
+
+2. **Create a ConfigMap with the CA in the Turtles namespace.**
+
+   ```bash
+   kubectl create configmap rancher-turtles-ca \
+     -n cattle-turtles-system \
+     --from-file=ca.crt=rancher-ca.crt \
+     --dry-run=client -o yaml | kubectl apply -f -
+   ```
+
+3. **Mount the CA into the Turtles controller via `SSL_CERT_FILE`.**
+
+   Edit the Turtles controller Deployment:
+
+   ```bash
+   kubectl edit deployment rancher-turtles-controller-manager -n cattle-turtles-system
+   ```
+
+   Add or update the following items:
+
+   - An environment variable in the `manager` container:
+
+     ```yaml
+     env:
+       - name: SSL_CERT_FILE
+         value: /etc/ssl/rancher/ca.crt
+     ```
+
+   - A volume mount in the same container:
+
+     ```yaml
+     volumeMounts:
+       - name: rancher-ca
+         mountPath: /etc/ssl/rancher
+         readOnly: true
+     ```
+
+   - A new volume:
+
+     ```yaml
+     volumes:
+       - name: rancher-ca
+         configMap:
+           name: rancher-turtles-ca
+     ```
+
+4. **Wait for the Deployment to roll out.**
+
+   ```bash
+   kubectl rollout status deployment/rancher-turtles-controller-manager -n cattle-turtles-system
+   ```
+
+5. **Verify the CA is loaded.**
+
+   ```bash
+   kubectl exec -n cattle-turtles-system \
+     deploy/rancher-turtles-controller-manager -- \
+     sh -c 'SSL_CERT_FILE=/etc/ssl/rancher/ca.crt openssl s_client -connect ${RANCHER_HOST}:443 -CAfile /etc/ssl/rancher/ca.crt </dev/null 2>/dev/null | grep Verify'
+   ```
+
+   Replace `${RANCHER_HOST}` with the hostname in your Rancher `server-url`. You should see `Verify return code: 0 (ok)`.
+
+#### Workload cluster agent trust (self-signed Rancher)
+
+The `cattle-cluster-agent` pod that Turtles deploys into the workload cluster also needs to trust the Rancher CA. There are two practical approaches:
+
+- **Production / recommended:** Replace the Rancher `dynamiclistener` certificate with a certificate signed by a CA that is already trusted by the workload cluster nodes (corporate PKI, public CA, or a CA added to the OS trust store of the VM image).
+
+- **Lab / workaround:** Include the Rancher CA in the workload cluster node image or inject it via a `ClusterResourceSet` (CRS) before the agent is deployed. For example, a CRS can place `ca.crt` under `/etc/ssl/certs/` on every node and run `update-ca-certificates` (Ubuntu/Debian) or `update-ca-trust extract` (RHEL/Rocky).
+
+The simplest path for ongoing deployments is to bake the Rancher CA into the base OS image used by `CloudStackMachineTemplate`, or to use a proper PKI-signed Rancher certificate.
+
+After both Turtles and the workload cluster agent trust the Rancher CA, auto-import should proceed. If the workload cluster still shows TLS errors, check the `cattle-cluster-agent` pod logs:
+
+```bash
+kubectl --kubeconfig=~/.kube/capc-cluster-1-config logs -n cattle-system -l app=cattle-cluster-agent
+```
+
 ### 7.3 Worker-Only Cluster vs. CNI
 
 > **⚠️ Disclaimer — this is a theoretical demonstration.**  
