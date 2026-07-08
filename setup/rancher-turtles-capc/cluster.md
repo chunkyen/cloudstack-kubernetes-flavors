@@ -128,7 +128,7 @@ kubectl apply -f cloudstack-secret.yaml -n capc-cluster-1
 # kubectl apply -f cloudstack-secret.yaml -n cattle-capi-system  ← don't do this
 ```
 
-### 3.1 CAPI Resource Model: Machine, MachineSet, MachineDeployment, KubeadmControlPlane
+### 3.1 CAPI Resource Model: Machine, MachineSet, MachineDeployment
 
 These objects appear in the Rancher Turtles UI and in `kubectl`. Understanding how they relate prevents confusion when scaling or troubleshooting.
 
@@ -137,7 +137,8 @@ These objects appear in the Rancher Turtles UI and in `kubectl`. Understanding h
 | **Machine** | One VM / one Kubernetes node | Usually no |
 | **MachineSet** | Controller that keeps N identical Machines running | No |
 | **MachineDeployment** | User-facing declaration: "I want N workers" | Yes (for workers) |
-| **KubeadmControlPlane** | User-facing declaration: "I want M control plane nodes" | Yes (for control plane) |
+
+> **Note on control plane:** `KubeadmControlPlane` is the control-plane equivalent of a `MachineDeployment`, but it is **not exposed as a separate UI element in Rancher Turtles**. You manage it through `kubectl` (or the cluster's YAML) rather than the Turtles resource tree.
 
 #### Relationship
 
@@ -155,7 +156,7 @@ MachineDeployment (capc-cluster-1-md-0)
 ```text
 KubeadmControlPlane (capc-cluster-1-control-plane)
     ├── Machine → Node control-plane-1
-    └── Machine → Node control-plane-2
+    ├── Machine → Node control-plane-2
     └── Machine → Node control-plane-3
 ```
 
@@ -164,19 +165,19 @@ KubeadmControlPlane (capc-cluster-1-control-plane)
 - **`Machine`** is the lowest-level object. CAPC creates one CloudStack VM for each Machine.
 - **`MachineSet`** is owned by a `MachineDeployment`. It exists only to keep the right number of Machines. You normally ignore it.
 - **`MachineDeployment`** is what you scale for workers. Change `spec.replicas` and CAPI reconciles the MachineSet/Machines for you.
-- **`KubeadmControlPlane`** is the control-plane equivalent of a MachineDeployment. It directly owns Machine objects for the control plane and also manages etcd / API-server membership.
+- **`KubeadmControlPlane`** directly owns Machine objects for the control plane and also manages etcd / API-server membership. It has no dedicated Turtles UI element, so scaling the control plane is done via `kubectl patch kubeadmcontrolplane ...`.
 - Control plane replica counts must be **odd** (`1`, `3`, `5`) because etcd needs quorum.
 
 #### Common commands
 
 ```bash
-# List all CAPI machine resources for the cluster
-kubectl get machinedeployment,machinesets,machines,kubeadmcontrolplane -n capc-cluster-1
+# List machine resources (note: KubeadmControlPlane is kubectl-only in Turtles)
+kubectl get machinedeployment,machinesets,machines -n capc-cluster-1
 
-# Scale workers
+# Scale workers (works via Turtles UI or kubectl)
 kubectl patch machinedeployment capc-cluster-1-md-0 -n capc-cluster-1 --type merge -p '{"spec":{"replicas":3}}'
 
-# Scale control plane
+# Scale control plane (kubectl only; no Turtles UI element for KCP)
 kubectl patch kubeadmcontrolplane capc-cluster-1-control-plane -n capc-cluster-1 --type merge -p '{"spec":{"replicas":3}}'
 ```
 
