@@ -82,10 +82,10 @@ EOF
 PACKER_VAR_FILES=extra_vars.json make clean build-qemu-ubuntu-2404
 ```
 
-The output directory reflects the default version, for example:
+The output directory is created under `images/capi/output/` in your cloned image-builder repo, for example:
 
 ```text
-./output/ubuntu-2404-kube-v1.36.1/
+image-builder/images/capi/output/ubuntu-2404-kube-v1.36.1/
 ```
 
 #### Example 2 — Build with a specific K8s version
@@ -109,7 +109,7 @@ PACKER_VAR_FILES=extra_vars.json make clean build-qemu-ubuntu-2404
 Output:
 
 ```text
-./output/ubuntu-2404-kube-v1.35.0/
+image-builder/images/capi/output/ubuntu-2404-kube-v1.35.0/
 ```
 
 Inside that directory you will find the raw `qcow2` image.
