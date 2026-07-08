@@ -672,19 +672,27 @@ If your Rancher server uses the default self-signed `dynamiclistener` certificat
 
 #### Workload cluster agent trust (self-signed Rancher)
 
-The `cattle-cluster-agent` pod that Turtles deploys into the workload cluster also needs to trust the Rancher CA. There are two practical approaches:
+For Turtles auto-import, you generally **do not need to manually distribute the Rancher CA to workload cluster nodes**. The import manifest that Turtles downloads from Rancher includes the Rancher server URL and a `CATTLE_CA_CHECKSUM` environment variable. The Rancher `cattle-cluster-agent` uses that checksum to validate/retrieve the CA during registration.
 
-- **Production / recommended:** Replace the Rancher `dynamiclistener` certificate with a certificate signed by a CA that is already trusted by the workload cluster nodes (corporate PKI, public CA, or a CA added to the OS trust store of the VM image).
+- **Self-signed Rancher (`dynamiclistener` CA):** Turtles downloads the import manifest, which embeds the CA checksum. The deployed `cattle-cluster-agent` pods trust the Rancher CA via `CATTLE_CA_CHECKSUM`; no node OS CA-store change is required for auto-import.
+- **Publicly trusted or corporate PKI Rancher certificate:** The agent validates the certificate against the standard trust store or the chain provided by the server, again with no extra manual steps.
 
-- **Lab / workaround:** Include the Rancher CA in the workload cluster node image or inject it via a `ClusterResourceSet` (CRS) before the agent is deployed. For example, a CRS can place `ca.crt` under `/etc/ssl/certs/` on every node and run `update-ca-certificates` (Ubuntu/Debian) or `update-ca-trust extract` (RHEL/Rocky).
+The only TLS prerequisite that usually needs manual intervention for a self-signed Rancher certificate is the **Turtles controller itself**, covered in the previous subsection.
 
-The simplest path for ongoing deployments is to bake the Rancher CA into the base OS image used by `CloudStackMachineTemplate`, or to use a proper PKI-signed Rancher certificate.
+Manual CA distribution (CRS, baked-into-image, or OS trust-store update) is only necessary if you run custom workloads or pipelines inside the workload cluster that directly call the Rancher API and cannot use `CATTLE_CA_CHECKSUM`. For Turtles auto-import, it is not required.
 
-After both Turtles and the workload cluster agent trust the Rancher CA, auto-import should proceed. If the workload cluster still shows TLS errors, check the `cattle-cluster-agent` pod logs:
+If the agent still shows TLS errors, check the `cattle-cluster-agent` pod logs:
 
 ```bash
 kubectl --kubeconfig=~/.kube/capc-cluster-1-config logs -n cattle-system -l app=cattle-cluster-agent
 ```
+
+Common issues:
+
+| Symptom | Cause |
+|---|---|
+| `certificate signed by unknown authority` in Turtles logs | Turtles does not trust the Rancher CA; patch `SSL_CERT_FILE` as shown above. |
+| `certificate signed by unknown authority` in `cattle-cluster-agent` logs | `CATTLE_CA_CHECKSUM` is missing or does not match the current Rancher CA. Ensure Turtles is downloading a fresh import manifest from Rancher. |
 
 ### 7.3 Worker-Only Cluster vs. CNI
 
