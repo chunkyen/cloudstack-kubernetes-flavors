@@ -766,6 +766,8 @@ The `turtles.cattle.io/bootstrap: "true"` label is intended for the **local/boot
 
 ## 8. Upgrade the Cluster
 
+> **Full stack upgrade guide:** This section covers the K8s version upgrade for Rancher Turtles-managed clusters. For a complete end-to-end upgrade that also includes the CAPC controller, CNI, CSI, and CCM, see the [CAPC Cluster Upgrade — Full Stack Guide](../capc/capc-upgrade.md).
+
 ### 8.1 Upgrade Kubernetes Version
 
 A Kubernetes upgrade in CAPC is a **rolling update**. CAPI creates new Machines from the `CloudStackMachineTemplate`, joins them to the cluster, and removes the old ones one at a time. For this to work cleanly, you need **both**:
