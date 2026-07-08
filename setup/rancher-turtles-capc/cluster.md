@@ -768,15 +768,93 @@ The `turtles.cattle.io/bootstrap: "true"` label is intended for the **local/boot
 
 ### 8.1 Upgrade Kubernetes Version
 
+A Kubernetes upgrade in CAPC is a **rolling update**. CAPI creates new Machines from the `CloudStackMachineTemplate`, joins them to the cluster, and removes the old ones one at a time. For this to work cleanly, you need **both**:
+
+1. A CloudStack template with the target Kubernetes version pre-installed (or at minimum, compatible base packages + working package repos).
+2. Updated `spec.version` on `KubeadmControlPlane` and `MachineDeployment`.
+
+> **⚠️ Do not skip the template update.** If you only change `spec.version` without updating the `CloudStackMachineTemplate`, new Machines boot from the old image and kubeadm attempts an in-place package upgrade over the network. This is fragile and can fail if package repos are unavailable or the image's pre-installed version is too far from the target.
+
+#### Step 1 — Build or register the target image
+
+Build a new CAPC image with the target Kubernetes version (see [Pre-built Images](#pre-built-images-recommended) for prebuilt images or [Building Your Own Image](../capc/capc-custom-image.md) for custom builds). Register it in CloudStack as a template.
+
+Verify the template is available:
+
+```bash
+cmk listTemplates filter=unique nameFilter="kube-v1.33/ubuntu-2404"
+```
+
+#### Step 2 — Update the CloudStackMachineTemplate (control plane)
+
+Patch the control-plane `CloudStackMachineTemplate` to reference the new template:
+
+```bash
+kubectl patch cloudstackmachinetemplate capc-cluster-1-control-plane -n capc-cluster-1 --type merge -p '{
+  "spec": {
+    "template": {
+      "spec": {
+        "template": "kube-v1.33/ubuntu-2404"
+      }
+    }
+  }
+}'
+```
+
+#### Step 3 — Update the CloudStackMachineTemplate (workers)
+
+Patch the worker `CloudStackMachineTemplate`:
+
+```bash
+kubectl patch cloudstackmachinetemplate capc-cluster-1-md-0 -n capc-cluster-1 --type merge -p '{
+  "spec": {
+    "template": {
+      "spec": {
+        "template": "kube-v1.33/ubuntu-2404"
+      }
+    }
+  }
+}'
+```
+
+#### Step 4 — Update the Kubernetes version on KCP and MachineDeployment
+
 ```bash
 # Update KubeadmControlPlane version
-kubectl edit kubeadmcontrolplane capc-cluster-1-control-plane
-# Change spec.version from "v1.32.0" to "v1.33.0"
+kubectl patch kubeadmcontrolplane capc-cluster-1-control-plane -n capc-cluster-1 --type merge -p '{
+  "spec": {
+    "version": "v1.33.0"
+  }
+}'
 
 # Update MachineDeployment version
-kubectl edit machinedeployment capc-cluster-1-workers
-# Change spec.template.spec.version
+kubectl patch machinedeployment capc-cluster-1-md-0 -n capc-cluster-1 --type merge -p '{
+  "spec": {
+    "template": {
+      "spec": {
+        "version": "v1.33.0"
+      }
+    }
+  }
+}'
 ```
+
+#### Step 5 — Monitor the rolling update
+
+```bash
+# Watch control-plane machines (one at a time)
+kubectl get machines -n capc-cluster-1 -w
+
+# Check KCP status
+kubectl get kubeadmcontrolplane capc-cluster-1-control-plane -n capc-cluster-1
+
+# Check MachineDeployment status
+kubectl get machinedeployment capc-cluster-1-md-0 -n capc-cluster-1
+```
+
+CAPI upgrades the control plane first (one node at a time, waiting for etcd health), then rolls the workers. The entire process can take 10–30 minutes depending on VM provisioning time.
+
+> **Note:** The order matters — update the `CloudStackMachineTemplate` **before** changing `spec.version`. If you change the version first, CAPI may start creating new Machines from the old template before you've had a chance to patch it.
 
 ## 9. Troubleshooting
 
