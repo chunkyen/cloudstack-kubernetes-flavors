@@ -778,7 +778,7 @@ The `turtles.cattle.io/bootstrap: "true"` label is intended for the **local/boot
 
 A Kubernetes upgrade in CAPC is a **rolling update**. CAPI creates new Machines from new `CloudStackMachineTemplate` objects, joins them to the cluster, and removes the old ones one at a time.
 
-> **⚠️ CloudStackMachineTemplates are immutable.** You cannot patch an existing template — you must create **new** template objects with the updated image reference, then update `KubeadmControlPlane` and `MachineDeployment` to point to them.
+> **⚠️ CloudStackMachineTemplates are immutable.** You cannot modify an existing template's `spec.template` — the admission webhook will reject it. Instead, you create **new** template objects with the updated image reference, then update `KubeadmControlPlane` and `MachineDeployment` to point to them.
 
 #### Step 1 — Build or register the target image
 
@@ -790,76 +790,73 @@ Verify the template is available:
 cmk listTemplates filter=unique nameFilter="capc-ubuntu24-1.36"
 ```
 
-#### Step 2 — Create new CloudStackMachineTemplates
+#### Step 2 — Edit the cluster manifest
 
-Export the existing templates, strip read-only metadata, rename them, and update the image reference:
+Edit your source cluster manifest (e.g., `manifests/10-minimal-cluster.yaml`). Make **three changes**:
 
-```bash
-# Export current templates
-kubectl get cloudstackmachinetemplate capc-cluster-1-control-plane -n capc-cluster-1 -o yaml > /tmp/cp-template.yaml
-kubectl get cloudstackmachinetemplate capc-cluster-1-md-0 -n capc-cluster-1 -o yaml > /tmp/md-template.yaml
+**2a.** Rename the `CloudStackMachineTemplate` objects to include the target version:
+
+```yaml
+# Before
+metadata:
+  name: capc-cluster-1-control-plane
+# After
+metadata:
+  name: capc-cluster-1-control-plane-v1.36
 ```
 
-Edit both files. For each file:
-
-1. **Remove** these metadata fields (they are read-only on apply):
-   - `metadata.uid`
-   - `metadata.resourceVersion`
-   - `metadata.creationTimestamp`
-   - `metadata.ownerReferences`
-   - `metadata.annotations`
-2. **Change** `metadata.name` to a new name with the target version:
-   - Control plane: `capc-cluster-1-control-plane-v1.36`
-   - Workers: `capc-cluster-1-md-0-v1.36`
-3. **Change** `spec.template.spec.template.name` to the new CloudStack template name (e.g., `capc-ubuntu24-1.36`)
-4. **Keep** `offering`, `sshKey`, `diskOffering` unchanged.
-
-Apply the new templates:
-
-```bash
-kubectl apply -f /tmp/cp-template.yaml -n capc-cluster-1
-kubectl apply -f /tmp/md-template.yaml -n capc-cluster-1
+```yaml
+# Before
+metadata:
+  name: capc-cluster-1-md-0
+# After
+metadata:
+  name: capc-cluster-1-md-0-v1.36
 ```
 
-#### Step 3 — Update KubeadmControlPlane (new template + version)
+**2b.** Update `spec.template.spec.template.name` in both templates to the new CloudStack image:
 
-Point KCP to the new control-plane template and update the Kubernetes version in a single patch:
-
-```bash
-kubectl patch kubeadmcontrolplane capc-cluster-1-control-plane -n capc-cluster-1 --type merge -p '{
-  "spec": {
-    "machineTemplate": {
-      "infrastructureRef": {
-        "name": "capc-cluster-1-control-plane-v1.36"
-      }
-    },
-    "version": "v1.36.0"
-  }
-}'
+```yaml
+# Before
+template:
+  name: "capc-ubuntu24-1.35"
+# After
+template:
+  name: "capc-ubuntu24-1.36"
 ```
 
-CAPI immediately starts replacing control-plane nodes one at a time (etcd quorum is maintained throughout).
+**2c.** Update the `infrastructureRef.name` references in KCP and MachineDeployment to match the new template names, and update `spec.version`:
 
-#### Step 4 — Update MachineDeployment (new template + version)
-
-Point the MachineDeployment to the new worker template and update the version:
-
-```bash
-kubectl patch machinedeployment capc-cluster-1-md-0 -n capc-cluster-1 --type merge -p '{
-  "spec": {
-    "template": {
-      "spec": {
-        "infrastructureRef": {
-          "name": "capc-cluster-1-md-0-v1.36"
-        },
-        "version": "v1.36.0"
-      }
-    }
-  }
-}'
+```yaml
+# KubeadmControlPlane
+spec:
+  machineTemplate:
+    infrastructureRef:
+      name: capc-cluster-1-control-plane-v1.36   # ← new template name
+  version: v1.36.0                                # ← new K8s version
 ```
 
-#### Step 5 — Monitor the rolling update
+```yaml
+# MachineDeployment
+spec:
+  template:
+    spec:
+      infrastructureRef:
+        name: capc-cluster-1-md-0-v1.36           # ← new template name
+      version: v1.36.0                              # ← new K8s version
+```
+
+#### Step 3 — Apply the updated manifest
+
+```bash
+kubectl apply -f manifests/10-minimal-cluster.yaml
+```
+
+`kubectl apply` creates the new `CloudStackMachineTemplate` objects (new names) and updates KCP/MD to reference them in a single transaction. CAPI immediately starts the rolling update — control plane first, then workers.
+
+> **GitOps:** If you manage clusters via Fleet, commit the manifest changes to your Git repo and let Fleet sync them. No `kubectl` needed.
+
+#### Step 4 — Monitor the rolling update
 
 ```bash
 # Watch machines (control plane first, then workers)
@@ -876,8 +873,6 @@ kubectl --kubeconfig=kubeconfig get nodes
 ```
 
 CAPI upgrades the control plane first (one node at a time, waiting for etcd health), then rolls the workers. The entire process can take 10–30 minutes depending on VM provisioning time.
-
-> **Order matters:** Create the new `CloudStackMachineTemplate` objects **before** patching KCP/MD. If you patch KCP/MD first, CAPI will try to reference a template that doesn't exist yet.
 
 ## 9. Troubleshooting
 
