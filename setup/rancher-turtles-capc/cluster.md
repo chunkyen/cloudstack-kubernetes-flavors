@@ -2,6 +2,12 @@
 
 This guide covers provisioning Kubernetes clusters on CloudStack using CAPI CRDs managed by Rancher Turtles + CAPC.
 
+> **ℹ️ Rancher Turtles UI limitations**
+>
+> Rancher Turtles is designed as a **GitOps-first** integration — the intended workflow is to define clusters as YAML in a Git repo, let Fleet sync them into the management cluster, and have Turtles reconcile and import them into Rancher. The dashboard provides a read-only resource tree view, but almost every operation (creating clusters, scaling, upgrading, configuring providers) requires YAML or `kubectl`.
+>
+> This is by design, not a bug. If you need UI-driven cluster creation, consider using Rancher's built-in RKE2 provisioning instead. For Turtles, expect to work primarily with `kubectl` and YAML manifests.
+
 ## 1. Prerequisites
 
 - Rancher + Turtles + CAPC deployed (see [Rancher](./rancher.md) and [Turtles](./turtles.md))
