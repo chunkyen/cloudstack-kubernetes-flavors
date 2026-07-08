@@ -42,9 +42,9 @@ chmod +x create-kubernetes-binaries-iso.sh
 
 Alternatively, an archived copy is available in this repo at [`scripts/create-kubernetes-binaries-iso.sh`](./scripts/create-kubernetes-binaries-iso.sh), or grab the latest from the [CloudStack source](https://github.com/apache/cloudstack/blob/main/scripts/util/create-kubernetes-binaries-iso.sh).
 
-**Option B (Community Cilium):** Archived in this repo — see [Option B](#option-b-build-cilium-iso-community-script) below.
+**Option B (Community Cilium):** Archived in this repo — see [Option B](#3-option-b-build-cilium-iso-community-script) below.
 
-**Option C (Offline Cilium):** Same as Option B but strips `@sha256:...` digest pins from generated YAML manifests, enabling fully offline deployment. See [Option C](#option-c-build-cilium-offline-iso).
+**Option C (Offline Cilium):** Same as Option B but strips `@sha256:...` digest pins from generated YAML manifests, enabling fully offline deployment. See [Option C](#4-option-c-build-cilium-offline-iso).
 
 ### 2.2 Uploading the ISO (after build)
 

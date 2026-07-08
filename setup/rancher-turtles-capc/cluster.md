@@ -144,7 +144,7 @@ The full cluster YAML is available in the manifests folder: [10-minimal-cluster.
 
 | `my-ssh-key` | CloudStack SSH keypair name | `cmk register-sshkeypair --name=my-ssh-key --publickey="$(cat ~/.ssh/id_ed25519.pub)"` |
 
-> **SSH Key Method:** This example uses **Method 1** (CloudStack SSH KeyPair) — the recommended approach. Register your key via `cmk register-sshkeypair`, then reference it via the `sshKey` field on `CloudStackMachine` resources. CloudStack injects the key into the default user (`ubuntu` for Ubuntu images, `cloud-user` for Rocky). See [Section 3.4](#34-advanced-inline-cloudinit) for Method 2 (inline cloud-init for custom image setup).
+> **SSH Key Method:** This example uses **Method 1** (CloudStack SSH KeyPair) — the recommended approach. Register your key via `cmk register-sshkeypair`, then reference it via the `sshKey` field on `CloudStackMachine` resources. CloudStack injects the key into the default user (`ubuntu` for Ubuntu images, `cloud-user` for Rocky). See [Section 3.6](#36-advanced--inline-cloud-init-custom-image-setup) for Method 2 (inline cloud-init for custom image setup).
 
 > **Namespace note:** The YAML uses `namespace: default`, which means all CAPI resources (CloudStackCluster, KubeadmControlPlane, MachineDeployment, etc.) are created in the `default` namespace of the **management cluster** (your Rancher cluster). The workload cluster itself is just VMs on CloudStack — it has no namespace. To apply to a different namespace without editing the file: `kubectl apply -f manifests/10-minimal-cluster.yaml -n my-clusters`
 
@@ -388,7 +388,7 @@ kubectl --kubeconfig=kubeconfig get pods -n kube-system
 
 ### 4.2 SSH to Nodes
 
-SSH access is configured when you create the cluster (see [Section 3.1](#31-minimal-cluster-1-control--2-workers) for Method 1, or [Section 3.4](#34-advanced-inline-cloudinit) for Method 2).
+SSH access is configured when you create the cluster (see [Section 3.1](#31-minimal-cluster-1-control--2-workers) for Method 1, or [Section 3.6](#36-advanced--inline-cloud-init-custom-image-setup) for Method 2).
 
 **Method 1 (default)** — CloudStack SSH KeyPair: Register via `cmk register-sshkeypair`, then CloudStack injects the key into the default image user automatically.
 

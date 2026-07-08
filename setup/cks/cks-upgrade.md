@@ -169,7 +169,9 @@ kubectl --kubeconfig=${kubeconfig} get pods -n kube-system -l k8s-app=cloudstack
 
 If something goes wrong during the upgrade, you can rollback using the snapshots created in Section 3.3.
 
-### 4.1 Rollback via Snapshot Revert
+### 4.1 Rollback via Snapshot Revert {#rollback-via-snapshot-revert}
+
+If something goes wrong during the upgrade and the cluster is unusable, you can revert each node to the instance snapshots created in [Section 3.3](#33-create-instance-snapshots-rollback-safety). This is the fastest and safest rollback path.
 
 1. **Stop the failing cluster** (if still running):
    ```bash
@@ -486,7 +488,7 @@ The practical approach is **manual recovery** (see [Section 6.1.1](#611-manual-r
 
 > **Note:** For clusters stuck in "Starting" during bootstrap (dashboard verification failures, CCM/CSI not deployed), see [CKS Setup Guide → Troubleshooting: Cluster Stuck in "Starting"](./cks.md#cluster-stuck-in-starting-with-kubeconfig-available).
 
-### 6.2 Cilium Can't Reach API Server After Upgrade to 1.19.x
+### 6.2 Cilium Can't Reach API Server After Upgrade to 1.19.x {#cilium-cant-reach-api-server-after-upgrade-to-119x}
 
 Upgrading Cilium from **1.18.x** (e.g., 1.18.10) to **1.19.x** (e.g., 1.19.4) can cause the Cilium DaemonSet pods to crash-loop with `Init:Error`. The logs show repeated attempts to connect to the Kubernetes API server at `https://10.96.0.1:443` that fail with:
 

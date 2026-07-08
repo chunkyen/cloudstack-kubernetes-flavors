@@ -41,7 +41,7 @@ Additionally, with the corrupted pause container in the 1.34.7 ISO:
 
 Additionally, with custom Cilium ISOs:
 
-- ❌ **Cilium CNI deployment fails offline** — digest-pinned image references can't be verified without internet (see [Section 4.2](#42-custom-cilium-iso---image-digest-mismatch) below)
+- ❌ **Cilium CNI deployment fails offline** — digest-pinned image references can't be verified without internet (see [Section 4.2](#42-custom-cilium-iso--image-digest-mismatch) below)
 
 ### Root Cause Summary
 
@@ -52,7 +52,7 @@ Two distinct root causes can prevent offline deployment:
 
 Both issues are silent when online: internet provides a fallback that masks the problem. The two scenarios are documented below.
 
-### 4.1 Pre-Built Calico ISO — Pause Container Issue
+### 4.1 Pre-Built Calico ISO — Pause Container Issue {#41-pre-built-calico-iso--pause-container-issue}
 
 #### Investigation
 
@@ -111,7 +111,7 @@ To avoid relying on official ISOs that may have corrupted images, you can build 
 
 **Testing your custom ISO offline:** Before deploying to production, validate your ISO by creating a CKS cluster in an **offline environment**. This is the only way to catch issues like corrupted images that would be silently masked when internet connectivity provides a fallback. The same test methodology described in this guide (cluster creation → scaling → upgrade) will confirm the ISO works end-to-end without any network dependency.
 
-### 4.2 Custom Cilium ISO — Image Digest Mismatch
+### 4.2 Custom Cilium ISO — Image Digest Mismatch {#42-custom-cilium-iso--image-digest-mismatch}
 
 When building a custom CKS ISO with **Cilium** CNI, there's another offline failure mode. The Cilium manifest is generated via Helm chart and references images using **digest pins** (e.g., `quay.io/cilium/cilium@sha256:xxxxx`). However, the bundled image tarballs in the ISO are stored **without the digest reference**.
 
@@ -149,13 +149,13 @@ This is a fundamental mismatch between how Helm generates manifests (digest-pinn
 
 The [`create-cilium-offline-kubernetes-binaries-iso.sh`](./scripts/create-cilium-offline-kubernetes-binaries-iso.sh) script solves this by stripping all `@sha256:...` digest pins from the generated YAML manifests before baking them into the ISO. This leaves tag-based image references that match what's already bundled in the containerd store, eliminating the need for external registry verification.
 
-See [Option C: Build Cilium Offline ISO](./cks-custom-iso.md#option-c-build-cilium-offline-iso) in the custom ISO build guide.
+See [Option C: Build Cilium Offline ISO](./cks-custom-iso.md#4-option-c-build-cilium-offline-iso) in the custom ISO build guide.
 
-> **Note:** The pause container issue described in [Section 4.1](#41-pre-built-calico-iso---pause-container-issue) also applies during upgrades of Cilium custom ISOs — if a new pause version is introduced, the same worker-node image-missing problem will occur.
+> **Note:** The pause container issue described in [Section 4.1](#41-pre-built-calico-iso--pause-container-issue) also applies during upgrades of Cilium custom ISOs — if a new pause version is introduced, the same worker-node image-missing problem will occur.
 
 ## 5. The Workaround — Manually Import Images on Non-Upgraded Nodes
 
-This workaround addresses the **pause container version mismatch** described in [Section 4.1](#41-pre-built-calico-iso---pause-container-issue). 
+This workaround addresses the **pause container version mismatch** described in [Section 4.1](#41-pre-built-calico-iso--pause-container-issue). 
 
 Because CKS only imports new images onto the node currently being upgraded, intermediate Jobs (like health checks) scheduled on other nodes will fail if those nodes lack the newer image versions.
 

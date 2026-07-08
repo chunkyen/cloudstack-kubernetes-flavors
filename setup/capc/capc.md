@@ -696,7 +696,7 @@ kubectl edit machinedeployment capc-cluster-md-0
 
 CAPC performs a rolling update — old VMs are terminated and new ones provisioned from the updated image.
 
-> **Note:** If using prebuilt images, you can skip Step 1 entirely. See [Prebuilt Images](#prebuilt-images) for available versions.
+> **Note:** If using prebuilt images, you can skip Step 1 entirely. See [Prebuilt Images](#prebuilt-images-recommended) for available versions.
 
 ### Deleting the Cluster
 
