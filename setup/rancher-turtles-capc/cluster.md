@@ -148,9 +148,7 @@ The full cluster YAML is available in the manifests folder: [10-minimal-cluster.
 
 > **Namespace note:** The YAML uses `namespace: default`, which means all CAPI resources (CloudStackCluster, KubeadmControlPlane, MachineDeployment, etc.) are created in the `default` namespace of the **management cluster** (your Rancher cluster). The workload cluster itself is just VMs on CloudStack — it has no namespace. To apply to a different namespace without editing the file: `kubectl apply -f manifests/10-minimal-cluster.yaml -n my-clusters`
 
-> **`syncWithACS: true`** — This setting (on the `CloudStackCluster` spec) tells CAPC to register the workload cluster as an `ExternalManaged` entry in CloudStack's **Compute → Kubernetes** UI. It works **only** when CAPC is deployed with the controller flag `--enable-cloudstack-cks-sync=true` (the default with plain `clusterctl`, but `false` in the Rancher Turtles manifests used by this guide). If that flag is left as `false`, the `CksClusterReconciler` is not registered, so `syncWithACS: true` does nothing and the cluster never appears in the CloudStack UI. See the note in [Section 1.3](#13-apply-the-capi-providers) for how to enable it.
->
-> **Note:** The CloudStack Kubernetes UI offers extremely limited management features (just a cluster listing). For CAPC clusters managed by CAPI/Rancher Turtles, all real operations happen through `kubectl` anyway.
+> **`syncWithACS: true`** — This setting (on the `CloudStackCluster` spec) tells CAPC to register the workload cluster as an `ExternalManaged` entry in CloudStack's **Compute → Kubernetes** UI. It works **only** when CAPC is deployed with the controller flag `--enable-cloudstack-cks-sync=true` (the default with plain `clusterctl`, but `false` in the Rancher Turtles manifests used by this guide). If that flag is left as `false`, the `CksClusterReconciler` is not registered, so `syncWithACS: true` does nothing and the cluster never appears in the CloudStack UI. See [Install CAPC via CAPIProvider](./turtles.md#install-capc-provider) for how to enable it.
 
 ```bash
 kubectl apply -f manifests/10-minimal-cluster.yaml

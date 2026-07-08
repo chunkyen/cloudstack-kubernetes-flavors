@@ -132,7 +132,7 @@ kubectl apply -f cloudstack-secret.yaml
 > 2. Click your account (top-right) → API Key
 > 3. Copy the API key and secret key
 
-### 4.2 CAPIProvider for CloudStack
+### 4.2 CAPIProvider for CloudStack {#install-capc-provider}
 
 ```yaml
 # cloudstack-provider.yaml
