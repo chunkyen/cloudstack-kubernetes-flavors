@@ -694,7 +694,7 @@ Common issues:
 | `certificate signed by unknown authority` in Turtles logs | Turtles does not trust the Rancher CA; patch `SSL_CERT_FILE` as shown above. |
 | `certificate signed by unknown authority` in `cattle-cluster-agent` logs | `CATTLE_CA_CHECKSUM` is missing or does not match the current Rancher CA. Ensure Turtles is downloading a fresh import manifest from Rancher. |
 
-### 7.3 Worker-Only Cluster vs. CNI
+### 7.3 Control-Plane-Only Cluster vs. CNI
 
 > **⚠️ Disclaimer — this is a theoretical demonstration.**  
 > Running a CAPC cluster with zero worker nodes is **not a practical production or even development configuration**. In real usage you will always have workers, and for those workers to become `Ready`, the cluster **must have a CNI installed**. Therefore, for any practical CAPC workload cluster, **CNI installation is effectively required for Rancher Turtles auto-import**, because the CAPI availability gate depends on the worker `MachineDeployment` having available replicas.
