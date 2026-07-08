@@ -184,16 +184,39 @@ For convenience, prebuilt CAPC images are available from [packages.shapeblue.com
 
 ## Registering the Image in CloudStack
 
-After building (and optionally converting) your image, upload and register it as a CloudStack template.
+After building (and optionally converting) your image, register it as a CloudStack template. CloudStack's `registerTemplate` API downloads the image from a URL — it does not accept direct file uploads. You need to host the image on a web server accessible from the CloudStack management server.
 
-### Option 1: Upload via CloudStack UI
+### Host the Image Temporarily
+
+If you don't have a web server handy, use Python's built-in HTTP server from the build output directory:
+
+```bash
+cd image-builder/images/capi/output/ubuntu-2404-kube-v1.36.1/
+
+# Start a temporary web server on port 8888
+python3 -m http.server 8888
+```
+
+The image is now accessible at `http://<build-machine-ip>:8888/ubuntu-2404-kube-v1.36.1.qcow2`. Keep the server running until CloudStack finishes downloading the template.
+
+> **QCOW2 v3 format error:** If CloudStack rejects the image with *"File type mismatch between the sent file and the actual content. Received: QEMU QCOW Image (v3)"*, convert to QCOW2 v2 first:
+>
+> ```bash
+> qemu-img convert -f qcow2 -O qcow2 -o compat=0.10 \
+>   ubuntu-2404-kube-v1.36.1.qcow2 \
+>   ubuntu-2404-kube-v1.36.1-compat0.10.qcow2
+> ```
+>
+> Then serve and register the `-compat0.10.qcow2` file instead.
+
+### Option 1: Register via CloudStack UI
 
 1. Go to **Templates** → **Register template**.
 2. Set:
-   - **Name**: e.g. `kube-v1.36/ubuntu-2404-custom`
+   - **Name**: e.g. `capc-ubuntu24-1.36`
    - **Format**: `QCOW2` (KVM), `VHD` (XenServer), or `OVA` (VMware)
    - **Hypervisor**: matching the format
-   - **URL**: HTTP/HTTPS URL where the image is hosted
+   - **URL**: `http://<build-machine-ip>:8888/ubuntu-2404-kube-v1.36.1.qcow2`
    - **OS Type**: `Ubuntu Linux (64-bit)`
    - **Zone**: the zone where the template should be available
 
@@ -204,9 +227,9 @@ export CLOUDSTACK_ZONE_ID=<zone-id>
 
 # KVM qcow2 example
 cmk registerTemplate \
-  name="kube-v1.36/ubuntu-2404-custom" \
+  name="capc-ubuntu24-1.36" \
   displayText="CAPC Ubuntu 24.04 K8s 1.36" \
-  url="http://your-web-server/images/ubuntu-2404-kube-v1.36.0.qcow2.bz2" \
+  url="http://<build-machine-ip>:8888/ubuntu-2404-kube-v1.36.1.qcow2" \
   zoneid="$CLOUDSTACK_ZONE_ID" \
   format=QCOW2 \
   hypervisor=KVM \
