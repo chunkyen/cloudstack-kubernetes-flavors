@@ -23,6 +23,11 @@ CAPC (Cluster API Provider for CloudStack) is the official Kubernetes SIGs provi
 │              Workload Clusters                      │
 │         (created on CloudStack VMs)                 │
 └─────────────────────────────────────────────────────┘
+
+User workflow:
+  clusterctl init --infrastructure cloudstack   ← installs CAPC providers
+  clusterctl generate cluster my-cluster         ← generates Cluster CRDs
+  kubectl apply -f cluster.yaml                 ← creates the cluster
 ```
 
 ### Core Components
