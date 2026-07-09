@@ -2,7 +2,13 @@
 
 Deploy a CAPC cluster and get **CNI** (networking), **CCM** (CloudStack Kubernetes Provider for LoadBalancer services and node labels), and **CSI** (persistent storage) all installed automatically — no manual follow-up steps. This is the CAPC equivalent of CKS's "one ISO, everything works" experience.
 
-This uses **ClusterResourceSet**, a CAPI-native mechanism that applies resources to a workload cluster after it's provisioned.
+This uses **ClusterResourceSet**, a CAPI-native mechanism that applies resources to a workload cluster after it's provisioned. This is the approach recommended by the [Rancher Turtles documentation](https://turtles.docs.rancher.com/turtles/stable/en/user/applications.html) for installing bootstrap applications (CNI, CCM, CSI) on Kubeadm-based CAPI clusters.
+
+> **ℹ️ RKE2 vs Kubeadm**
+>
+> RKE2 clusters can specify CNI directly in the `RKE2ControlPlane` manifest (`serverConfig.cni: calico`). CAPC uses **Kubeadm**, which has no built-in CNI — so `ClusterResourceSet` is the recommended way to automate CNI/CCM/CSI installation.
+
+> **⚠️ ClusterResourceSet is namespace-scoped.** All resources (ConfigMaps, Secrets) and clusters referenced in the `ClusterResourceSet` spec must be in the **same namespace** as the `ClusterResourceSet` itself.
 
 ## Architecture
 
@@ -66,6 +72,10 @@ kubectl apply -f cloudstack-secret.yaml -n capc-cluster-1
 ## Step 2: Create the Full-Stack ConfigMap
 
 Package all three components (CNI + CCM + CSI) into a single ConfigMap. Each manifest is stored as a separate key so ClusterResourceSet can apply them in order.
+
+> **ℹ️ Raw YAML vs HelmChart CRD**
+>
+> The [Turtles documentation](https://turtles.docs.rancher.com/turtles/stable/en/user/applications.html) shows an alternative approach using `HelmChart` CRDs (`helm.cattle.io/v1`) inside the ConfigMap instead of raw YAML. This works well when your component has a Helm chart (e.g. Azure CCM, Cilium). For CloudStack CCM/CSI which are distributed as raw YAML manifests, inline raw YAML is the practical approach. Both are valid — CRS applies whatever is in the ConfigMap.
 
 ```yaml
 # full-stack-manifests.yaml
@@ -206,20 +216,27 @@ The ClusterResourceSet ties everything together — it watches for clusters with
 
 ```yaml
 # full-stack-resource-set.yaml
-apiVersion: cluster.x-k8s.io/v1beta1
+apiVersion: addons.cluster.x-k8s.io/v1beta2
 kind: ClusterResourceSet
 metadata:
   name: capc-cluster-1-full-stack
   namespace: capc-cluster-1
 spec:
-  strategy: RollingUpdate
+  strategy: Reconcile
   clusterSelector:
     matchLabels:
       cluster.x-k8s.io/cluster-name: capc-cluster-1
-  resourceSelector:
-    matchLabels:
-      full-stack: "true"
+  resources:
+    - name: full-stack-manifests
+      kind: ConfigMap
 ```
+
+| Field | Value | Notes |
+|---|---|---|
+| `apiVersion` | `addons.cluster.x-k8s.io/v1beta2` | CAPI addons API group, not `cluster.x-k8s.io` |
+| `strategy` | `Reconcile` | Re-applies if drift detected. `ApplyOnce` (default) applies only once. |
+| `clusterSelector` | label selector | Selects clusters by label — must not be empty |
+| `resources` | array of `{name, kind}` | References ConfigMaps/Secrets by name in the same namespace |
 
 ```bash
 kubectl apply -f full-stack-resource-set.yaml
@@ -239,10 +256,10 @@ The ClusterResourceSet controller will detect the labeled cluster and apply all 
 
 ```bash
 # Check ClusterResourceSet status
-kubectl get clustersetresource capc-cluster-1-full-stack -n capc-cluster-1 -o wide
+kubectl get clusterresourceset capc-cluster-1-full-stack -n capc-cluster-1 -o wide
 
 # Check events
-kubectl describe clustersetresource capc-cluster-1-full-stack -n capc-cluster-1
+kubectl describe clusterresourceset capc-cluster-1-full-stack -n capc-cluster-1
 
 # Check workload cluster resources
 KUBECONFIG=$(kubectl get secret capc-cluster-1-kubeconfig -n capc-cluster-1 \
@@ -399,7 +416,7 @@ echo "✅ All components deployed successfully!"
 
 ```bash
 # Check what's being applied
-kubectl describe clustersetresource capc-cluster-1-full-stack -n capc-cluster-1
+kubectl describe clusterresourceset capc-cluster-1-full-stack -n capc-cluster-1
 
 # Check if the ConfigMap is readable by the controller
 kubectl get configmap full-stack-manifests -n capc-cluster-1 -o yaml

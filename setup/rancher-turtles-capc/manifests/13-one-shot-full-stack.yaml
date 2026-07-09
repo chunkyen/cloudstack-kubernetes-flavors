@@ -8,8 +8,8 @@
 #
 # This is the CAPC equivalent of CKS's "one ISO, everything works" experience.
 #
-# CNI (Calico/Cilium) is handled separately via ClusterResourceSet
-# (see [post-deploy-automation.md](../post-deploy-automation.md)).
+# CNI (Calico/Cilium), CCM, and CSI are all installed automatically via
+# ClusterResourceSet (see Step 3 in full-stack-onboarding.md).
 #
 # IMPORTANT: Replace ALL of the following before applying:
 #
@@ -618,16 +618,16 @@ data:
     reclaimPolicy: Delete
 
 # ─── ClusterResourceSet — Applies ConfigMap to workload cluster ────
-apiVersion: cluster.x-k8s.io/v1beta1
+apiVersion: addons.cluster.x-k8s.io/v1beta2
 kind: ClusterResourceSet
 metadata:
   name: capc-cluster-1-full-stack
   namespace: capc-cluster-1
 spec:
-  strategy: RollingUpdate
+  strategy: Reconcile
   clusterSelector:
     matchLabels:
       capc-one-shot: "full-stack"
-  resourceSelector:
-    matchLabels:
-      capc-one-shot: "full-stack"
+  resources:
+    - name: capc-cluster-1-post-deploy
+      kind: ConfigMap
