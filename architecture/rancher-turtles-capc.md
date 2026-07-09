@@ -32,20 +32,12 @@ The result: declarative, GitOps-driven Kubernetes cluster provisioning on CloudS
 │  │  │  + RBAC      │                 │                       │   │
 │  │  └──────────────┘                 │                       │   │
 │  └───────────────────────────────────┼───────────────────────┘   │
-│                                      │ clusterctl                │
-│                                      │ generate cluster          │
+│                                      │ CAPI CRDs                 │
+│                                      │ (Cluster, KCP, MD, etc.)  │
 │                                      ▼                           │
 │  ┌──────────────────────────────────────────────────────────┐   │
-│  │              Management Cluster (CAPC)                    │   │
-│  │         (CKS cluster on CloudStack via CAPC)              │   │
-│  │                                                           │   │
-│  │  ┌──────────────────────────────────────────────────┐    │   │
-│  │  │ CAPC Controllers                                 │    │   │
-│  │  │                                                  │    │   │
-│  │  │  CloudStackCluster  ──► CloudStack VMs (CP)     │    │   │
-│  │  │  CloudStackMachineSet ──► CKS Worker Nodes      │    │   │
-│  │  │  CloudStackMachine ──► CKS Etcd Nodes           │    │   │
-│  │  └──────────────────────────────────────────────────┘    │   │
+│  │              Workload Cluster (CAPC)                     │   │
+│  │         (K8s cluster on CloudStack via CAPC)             │   │
 │  └───────────────────────────────────────────────────────────┘   │
 └─────────────────────────────────────────────────────────────────┘
 ```
@@ -95,10 +87,10 @@ CAPC runs inside the management cluster and:
 ## Data Flow
 
 ```
-1. User declares cluster in Git (Fleet) or Rancher UI
+1. User declares cluster in Git (Fleet) or applies CAPI CRDs via kubectl
          │
          ▼
-2. Fleet/Rancher applies CAPI CRDs to bootstrap cluster
+2. CAPI CRDs (Cluster, KubeadmControlPlane, MachineDeployment) created on bootstrap cluster
          │
          ▼
 3. Turtles ensures CAPC provider is running
@@ -113,10 +105,10 @@ CAPC runs inside the management cluster and:
 6. VMs boot with cloud-init → kubeadm init/join
          │
          ▼
-7. Cluster becomes Ready — Fleet imports kubeconfig
+7. Cluster becomes Ready — Rancher Turtles auto-imports it into Rancher UI
          │
          ▼
-8. Workload manifests deployed via Fleet GitOps
+8. Bootstrap apps (CNI/CCM/CSI) applied via ClusterResourceSet or Fleet GitOps
 ```
 
 ## Key Differences from Standalone CAPC
