@@ -131,7 +131,52 @@ CAPC runs inside the management cluster and:
 | **Monitoring** | Manual setup | Rancher monitoring built-in |
 | **Cert management** | Manual | Rancher cert-manager integration |
 | **Upgrade path** | Manual provider + cluster | Helm upgrade + CAPI rolling update |
-| **Cluster templates** | Manual YAML | ClusterClass (topology templates) |
+| **Cluster templates** | Manual YAML | Manual YAML (ClusterClass not available — see below) |
+| **Bootstrap apps (CNI/CCM/CSI)** | Manual `kubectl apply` | ClusterResourceSet (CAPI-native) or Fleet GitOps |
+
+## ClusterResourceSet — Bootstrap Application Injection
+
+CAPC uses Kubeadm, which has no built-in CNI. The [Rancher Turtles documentation](https://turtles.docs.rancher.com/turtles/stable/en/user/applications.html) recommends using **ClusterResourceSet** (CRS) — a CAPI-native mechanism — to automatically install bootstrap applications (CNI, CCM, CSI) on workload clusters after they're created.
+
+### How it works
+
+```
+1. Create a ConfigMap containing the manifests to apply (CNI, CCM, CSI YAML)
+         │
+         ▼
+2. Create a ClusterResourceSet referencing the ConfigMap
+   - clusterSelector: matches clusters by label
+   - resources: references ConfigMap/Secret by name
+   - strategy: ApplyOnce (default) or Reconcile
+         │
+         ▼
+3. CRS controller detects matching cluster
+         │
+         ▼
+4. Applies all manifests from the ConfigMap to the workload cluster's API server
+```
+
+### Key properties
+
+| Property | Value | Notes |
+|---|---|---|
+| `apiVersion` | `addons.cluster.x-k8s.io/v1beta2` | CAPI addons API group |
+| `strategy` | `ApplyOnce` (default) or `Reconcile` | `ApplyOnce` runs once; `Reconcile` re-applies on drift |
+| `clusterSelector` | label selector | Selects clusters by label — must not be empty |
+| `resources` | array of `{name, kind}` | References ConfigMaps/Secrets in the same namespace |
+| Namespace scope | namespace-scoped | All resources and clusters must be in the same namespace as the CRS |
+
+### Why CRS instead of ClusterClass
+
+ClusterClass patches modify **template specs** (JSONPatch operations on `/spec/` paths) — they cannot inject arbitrary Kubernetes resources like DaemonSets, Deployments, or Secrets into a workload cluster. CRS is purpose-built for this: it applies any YAML manifest to the workload cluster's API server after creation.
+
+### Alternatives
+
+- **Fleet GitOps** — for ongoing reconciliation of application versions after initial deployment. CRS handles initial bootstrap; Fleet handles ongoing management.
+- **Manual `kubectl apply`** — simplest but doesn't scale across multiple clusters.
+- **HelmChart CRD** — Turtles docs also mention using `HelmChart` CRDs (`helm.cattle.io/v1`) inside the ConfigMap instead of raw YAML, which works well when a component has a Helm chart (e.g. Cilium, Azure CCM).
+
+See [Full-Stack Onboarding](../setup/rancher-turtles-capc/full-stack-onboarding.md) for a complete CRS implementation guide.
 
 ## Namespace Layout
 
