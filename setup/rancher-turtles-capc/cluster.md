@@ -787,53 +787,60 @@ Build a new CAPC image with the target Kubernetes version (see [Pre-built Images
 Verify the template is available:
 
 ```bash
-cmk listTemplates filter=unique nameFilter="capc-ubuntu24-1.36"
+cmk listTemplates filter=unique nameFilter="capc-ubuntu24-1.36.1"
 ```
 
 #### Step 2 — Edit the cluster manifest
 
-Edit your source cluster manifest (e.g., `manifests/10-minimal-cluster.yaml`). Make **three changes**:
+Edit your source cluster manifest (e.g., `manifests/10-minimal-cluster.yaml`). Make **two changes**:
 
-**2a.** Rename the `CloudStackMachineTemplate` objects to include the target version:
+**2a.** Create new `CloudStackMachineTemplate` objects with updated names and image references (templates are immutable, so you cannot edit the existing ones — you create new ones):
 
 ```yaml
-# Before
+# Control plane — new CloudStackMachineTemplate
+apiVersion: infrastructure.cluster.x-k8s.io/v1beta3
+kind: CloudStackMachineTemplate
 metadata:
-  name: capc-cluster-1-control-plane
-# After
-metadata:
-  name: capc-cluster-1-control-plane-v1.36
+  name: capc-cluster1-control-plane-v136
+  namespace: capc-cluster1
+spec:
+  template:
+    spec:
+      offering:
+        name: kube control
+      sshKey: cylabnb-k1
+      template:
+        name: capc-ubuntu24-1.36.1
 ```
 
 ```yaml
-# Before
+# Workers — new CloudStackMachineTemplate
+apiVersion: infrastructure.cluster.x-k8s.io/v1beta3
+kind: CloudStackMachineTemplate
 metadata:
-  name: capc-cluster-1-md-0
-# After
-metadata:
-  name: capc-cluster-1-md-0-v1.36
+  name: capc-cluster1-md-0-v136
+  namespace: capc-cluster1
+spec:
+  template:
+    spec:
+      offering:
+        name: kube worker1
+      sshKey: cylabnb-k1
+      template:
+        name: capc-ubuntu24-1.36.1
 ```
 
-**2b.** Update `spec.template.spec.template.name` in both templates to the new CloudStack image:
-
-```yaml
-# Before
-template:
-  name: "capc-ubuntu24-1.35"
-# After
-template:
-  name: "capc-ubuntu24-1.36"
-```
-
-**2c.** Update the `infrastructureRef.name` references in KCP and MachineDeployment to match the new template names, and update `spec.version`:
+**2b.** Update the `infrastructureRef` references in KCP and MachineDeployment to point to the new template names, and update `spec.version`:
 
 ```yaml
 # KubeadmControlPlane
 spec:
   machineTemplate:
     infrastructureRef:
-      name: capc-cluster-1-control-plane-v1.36   # ← new template name
-  version: v1.36.0                                # ← new K8s version
+      apiVersion: infrastructure.cluster.x-k8s.io/v1beta3
+      kind: CloudStackMachineTemplate
+      name: capc-cluster1-control-plane-v136   # ← new template name
+  version: v1.36.1                              # ← new K8s version
 ```
 
 ```yaml
@@ -842,8 +849,10 @@ spec:
   template:
     spec:
       infrastructureRef:
-        name: capc-cluster-1-md-0-v1.36           # ← new template name
-      version: v1.36.0                              # ← new K8s version
+        apiVersion: infrastructure.cluster.x-k8s.io/v1beta3
+        kind: CloudStackMachineTemplate
+        name: capc-cluster1-md-0-v136           # ← new template name
+      version: v1.36.1                            # ← new K8s version
 ```
 
 #### Step 3 — Apply the updated manifest
@@ -860,13 +869,13 @@ kubectl apply -f manifests/10-minimal-cluster.yaml
 
 ```bash
 # Watch machines (control plane first, then workers)
-kubectl get machines -n capc-cluster-1 -w
+kubectl get machines -n capc-cluster1 -w
 
 # Check KCP status
-kubectl get kubeadmcontrolplane capc-cluster-1-control-plane -n capc-cluster-1
+kubectl get kubeadmcontrolplane capc-cluster1-control-plane -n capc-cluster1
 
 # Check MachineDeployment status
-kubectl get machinedeployment capc-cluster-1-md-0 -n capc-cluster-1
+kubectl get machinedeployment capc-cluster1-md-0 -n capc-cluster1
 
 # Verify workload cluster nodes
 kubectl --kubeconfig=kubeconfig get nodes
