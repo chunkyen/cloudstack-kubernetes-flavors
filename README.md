@@ -8,10 +8,10 @@ This repository examines four primary approaches to running Kubernetes on CloudS
 
 ### Four Flavors
 
-1. **CKS (CloudStack Kubernetes Service)** - Native CloudStack Kubernetes integration
-2. **CAPC (Cluster API Provider for CloudStack)** - Infrastructure-as-Code approach using Cluster API (with user-defined node OS)
-3. **Rancher + CAPC** - Managed Kubernetes with Rancher as the management plane, CAPC as the CloudStack infrastructure provider (with user-defined nodes)
-4. **Talos Linux** - Minimal, immutable Linux designed for Kubernetes (can be used standalone with CAPI, with Rancher, or independently)
+1. **CKS (CloudStack Kubernetes Service)** — Native CloudStack Kubernetes integration
+2. **CAPC (Cluster API Provider for CloudStack)** — Infrastructure-as-Code approach using Cluster API (with user-defined node OS)
+3. **Rancher + CAPC** — Managed Kubernetes with Rancher as the management plane, CAPC as the CloudStack infrastructure provider (with user-defined nodes)
+4. **Talos Linux** — Minimal, immutable Linux designed for Kubernetes (can be used standalone with CAPI, with Rancher, or independently)
 
 ### Cross-Cutting Components
 
@@ -19,8 +19,6 @@ These components are required or recommended for **every flavor**:
 
 - **CloudStack Kubernetes Provider (CCM)** — External Cloud Controller Manager that replaces the deprecated in-tree provider (removed K8s 1.16). Handles node metadata labels, CloudStack load balancers for `LoadBalancer` services, and firewall rules. Auto-deployed on CKS 4.16+, must be manually deployed on all other flavors.
 - **CloudStack CSI Driver** — Persistent storage plugin that maps CloudStack disk offerings to Kubernetes StorageClasses. Supports dynamic provisioning, volume snapshots, and lifecycle management. Deployed separately on each cluster.
-
-See the [Architecture](#architecture) section for details on each.
 
 ## Contents
 
@@ -54,14 +52,25 @@ See the [Architecture](#architecture) section for details on each.
 
 #### Rancher Turtles + CAPC
 
+The Rancher Turtles integration uses Rancher as the management plane and CAPI/Turtles for declarative cluster lifecycle management. CAPC serves as the CloudStack infrastructure provider.
+
+**Phase 1 — Deploy Management Plane:**
+
 - [Overview & getting started](setup/rancher-turtles-capc/index.md)
 - [Deploy Rancher on CKS](setup/rancher-turtles-capc/rancher.md)
 - [Install CAPI providers with Turtles](setup/rancher-turtles-capc/turtles.md)
-- [Create workload clusters](setup/rancher-turtles-capc/cluster.md)
-- [Full-stack onboarding (CNI + CCM + CSI)](setup/rancher-turtles-capc/full-stack-onboarding.md)
-- [ClusterClass limitation](setup/rancher-turtles-capc/clusterclass-limitation.md)
-- [Fleet GitOps](setup/rancher-turtles-capc/fleet.md)
-- [Manifests README](setup/rancher-turtles-capc/manifests/README.md)
+
+**Phase 2 — Create & Manage Workload Clusters:**
+
+- [Create workload clusters](setup/rancher-turtles-capc/cluster.md) — minimal/HA cluster creation, scaling, upgrade, troubleshooting
+- [Full-stack onboarding (CNI + CCM + CSI)](setup/rancher-turtles-capc/full-stack-onboarding.md) — auto-install all components via ClusterResourceSet
+- [ClusterClass limitation](setup/rancher-turtles-capc/clusterclass-limitation.md) — why ClusterClass is not available for CAPC
+- [Fleet GitOps](setup/rancher-turtles-capc/fleet.md) — automate cluster management with Fleet
+- [Manifests README](setup/rancher-turtles-capc/manifests/README.md) — all YAML manifests with descriptions
+
+> **ClusterClass note:** CAPI ClusterClass (topology-based clusters) is **not available** for CAPC because CAPC does not implement `CloudStackClusterTemplate`, the CRD required by ClusterClass's `infrastructure.templateRef`. Clusters must use explicit CRD references. See [ClusterClass limitation](setup/rancher-turtles-capc/clusterclass-limitation.md) for details.
+>
+> **CNI/CCM/CSI:** For Kubeadm-based CAPC clusters (no built-in CNI), use [ClusterResourceSet](https://turtles.docs.rancher.com/turtles/stable/en/user/applications.html) — the approach recommended by the Rancher Turtles documentation — to auto-install bootstrap applications. See [Full-stack onboarding](setup/rancher-turtles-capc/full-stack-onboarding.md).
 
 #### Cross-Cutting Components
 
@@ -85,10 +94,11 @@ See the [Architecture](#architecture) section for details on each.
 | **Node OS** | User-defined | User-defined | User-defined | Talos Linux (immutable) |
 | **GitOps** | No | Yes (CAPI native) | Yes (Rancher Fleet) | Yes (Terraform/Talos) |
 | **Multi-cluster** | Limited | Yes (CAPI native) | Yes (CAPI + Rancher Turtles) | Manual/CAPI |
-| **Upgrade Strategy** | Manual | Automated | Automated | Automated (Talos) |
+| **Upgrade Strategy** | Manual | Image-based rolling update | Image-based rolling update | Automated (Talos) |
+| **CNI/CCM/CSI** | Baked into ISO | Manual or ClusterResourceSet | Manual or ClusterResourceSet | Manual |
+| **ClusterClass** | N/A | Not supported (no CloudStackClusterTemplate) | Not supported (no CloudStackClusterTemplate) | Supported |
 | **Complexity** | Low | Medium | High | Medium |
-| **Terraform** | No | Yes (CAPI provider) | Yes | Yes |
 
 ## Status
 
-🚧 **Work in Progress** - This repository is being actively developed.
+🚧 **Work in Progress** — This repository is being actively developed.
