@@ -56,7 +56,6 @@ The Rancher Turtles integration uses Rancher as the management plane and CAPI/Tu
 
 **Phase 1 — Deploy Management Plane:**
 
-- [Overview & getting started](setup/rancher-turtles-capc/index.md)
 - [Deploy Rancher on CKS](setup/rancher-turtles-capc/rancher.md)
 - [Install CAPI providers with Turtles](setup/rancher-turtles-capc/turtles.md)
 
