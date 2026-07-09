@@ -570,7 +570,7 @@ labels:
   cluster-api.cattle.io/rancher-auto-import: "true"
 ```
 
-This label is already set in the example manifests (`10-minimal-cluster.yaml`, `11-ha-cluster.yaml`, `13-one-shot-full-stack.yaml`, `31-cluster-topology.yaml`). You can also apply it to the namespace once, so every cluster created in that namespace is auto-imported:
+This label is already set in the example manifests (`10-minimal-cluster.yaml`, `11-ha-cluster.yaml`, `13-one-shot-full-stack.yaml`). You can also apply it to the namespace once, so every cluster created in that namespace is auto-imported:
 
 ```bash
 kubectl label namespace capc-cluster-1 cluster-api.cattle.io/rancher-auto-import=true

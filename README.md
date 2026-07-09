@@ -58,8 +58,7 @@ See the [Architecture](#architecture) section for details on each.
 - [Deploy Rancher on CKS](setup/rancher-turtles-capc/rancher.md)
 - [Install CAPI providers with Turtles](setup/rancher-turtles-capc/turtles.md)
 - [Create workload clusters](setup/rancher-turtles-capc/cluster.md)
-- [One-shot full-stack onboarding](setup/rancher-turtles-capc/full-stack-onboarding.md)
-- [ClusterClass full-stack](setup/rancher-turtles-capc/clusterclass-full-stack.md)
+- [Full-stack onboarding (CNI + CCM + CSI)](setup/rancher-turtles-capc/full-stack-onboarding.md)
 - [Fleet GitOps](setup/rancher-turtles-capc/fleet.md)
 - [Manifests README](setup/rancher-turtles-capc/manifests/README.md)
 
