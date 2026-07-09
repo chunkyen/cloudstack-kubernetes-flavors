@@ -201,9 +201,51 @@ CAPI providers like CAPC use the Cluster API framework — a completely separate
 
 Node drivers and Turtles/CAPC are parallel, non-competing systems. Turtles replaced the Rancher Provisioning component (K3s/RKE2 v2prov engine), not node drivers. CAPC does not go through the node driver mechanism — it's a full CAPI infrastructure provider with its own lifecycle managed by Turtles.
 
+## ClusterClass — Not Available for CAPC
+
+CAPI ClusterClass is a feature that defines reusable cluster templates. A `Cluster` using topology mode references a ClusterClass, and the CAPI topology controller expands it into the full set of provider CRDs (`CloudStackCluster`, `KubeadmControlPlane`, `MachineDeployment`, `CloudStackMachineTemplate`, `KubeadmConfigTemplate`).
+
+**ClusterClass cannot be used with CAPC today.** CAPC does not implement `CloudStackClusterTemplate`, the CRD that ClusterClass requires for its `infrastructure.templateRef` field.
+
+For ClusterClass to work, each infrastructure provider must implement two template CRDs:
+
+| CRD | Purpose | CAPC status |
+|-----|---------|------------|
+| `CloudStackMachineTemplate` | Machine-level template (offering, image, SSH key) | ✅ Implemented |
+| `CloudStackClusterTemplate` | Cluster-level template (network, zone, endpoints) | ❌ Not implemented |
+
+Without `CloudStackClusterTemplate`, the topology controller has nothing to expand the `Cluster` topology's infrastructure layer into — ClusterClass cannot function.
+
+### What this means in practice
+
+- **Cluster topology mode** (`spec.topology.class`) is not available for CAPC clusters
+- Clusters must be created with **explicit CRD references** — `CloudStackCluster`, `KubeadmControlPlane`, `MachineDeployment`, `CloudStackMachineTemplate`, `KubeadmConfigTemplate`
+- **ClusterResourceSet** (not ClusterClass) is the correct mechanism for auto-installing CNI/CCM/CSI — see [Full-Stack Onboarding](../setup/rancher-turtles-capc/full-stack-onboarding.md)
+- Cluster upgrades are done by creating new `CloudStackMachineTemplate` objects and updating `KubeadmControlPlane`/`MachineDeployment` references — see [Upgrade Guide](../setup/rancher-turtles-capc/cluster.md#8-upgrade-the-cluster)
+
+### What CAPC would need to support ClusterClass
+
+1. Implement a `CloudStackClusterTemplate` CRD with a `spec.template.spec` mirroring `CloudStackCluster.spec`
+2. Register it with the CAPI topology controller
+3. The CAPC controller would reconcile `CloudStackCluster` objects created from the template (same as it does today for manually-created ones)
+
+This is a provider-level implementation gap, not a configuration issue. It would need to be addressed in the [CAPC project](https://github.com/apache/cloudstack-kubernetes-provider).
+
+### Comparison with other CAPI providers
+
+| Provider | MachineTemplate | ClusterTemplate | ClusterClass support |
+|----------|----------------|-----------------|---------------------|
+| CAPA (AWS) | ✅ | ✅ | ✅ |
+| CAPD (Docker) | ✅ | ✅ | ✅ |
+| CAPV (vSphere) | ✅ | ✅ | ✅ |
+| CAPZ (Azure) | ✅ | ✅ | ✅ |
+| **CAPC (CloudStack)** | ✅ | ❌ | ❌ |
+
 ## References
 
 - [CAPC Architecture](./capc.md)
 - [Rancher Turtles Docs](https://turtles.docs.rancher.com)
 - [Fleet Docs](https://fleet.rancher.io)
 - [CAPC Book](https://cluster-api-cloudstack.sigs.k8s.io)
+- [CAPI ClusterClass documentation](https://cluster-api.sigs.k8s.io/tasks/experimental-features/cluster-class)
+- [Rancher Turtles — Installing applications](https://turtles.docs.rancher.com/turtles/stable/en/user/applications.html) — recommends ClusterResourceSet for Kubeadm-based clusters

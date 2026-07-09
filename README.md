@@ -63,11 +63,10 @@ The Rancher Turtles integration combines three layers — Rancher (management pl
 
 - [Create workload clusters](setup/rancher-turtles-capc/cluster.md) — minimal/HA cluster creation, scaling, upgrade, troubleshooting
 - [Full-stack onboarding (CNI + CCM + CSI)](setup/rancher-turtles-capc/full-stack-onboarding.md) — auto-install all components via ClusterResourceSet
-- [ClusterClass limitation](setup/rancher-turtles-capc/clusterclass-limitation.md) — why ClusterClass is not available for CAPC
 - [Fleet GitOps](setup/rancher-turtles-capc/fleet.md) — automate cluster management with Fleet
 - [Manifests README](setup/rancher-turtles-capc/manifests/README.md) — all YAML manifests with descriptions
 
-> **ClusterClass note:** CAPI ClusterClass (topology-based clusters) is **not available** for CAPC because CAPC does not implement `CloudStackClusterTemplate`, the CRD required by ClusterClass's `infrastructure.templateRef`. Clusters must use explicit CRD references. See [ClusterClass limitation](setup/rancher-turtles-capc/clusterclass-limitation.md) for details.
+> **ClusterClass note:** CAPI ClusterClass (topology-based clusters) is **not available** for CAPC because CAPC does not implement `CloudStackClusterTemplate`, the CRD required by ClusterClass's `infrastructure.templateRef`. Clusters must use explicit CRD references. See [Rancher+CAPC architecture](architecture/rancher-turtles-capc.md#clusterclass--not-available-for-capc) for details.
 >
 > **CNI/CCM/CSI:** For Kubeadm-based CAPC clusters (no built-in CNI), use [ClusterResourceSet](https://turtles.docs.rancher.com/turtles/stable/en/user/applications.html) — the approach recommended by the Rancher Turtles documentation — to auto-install bootstrap applications. See [Full-stack onboarding](setup/rancher-turtles-capc/full-stack-onboarding.md).
 
