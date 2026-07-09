@@ -661,11 +661,68 @@ Build a custom image for the target Kubernetes version (see [CAPC Custom Image G
 
 #### Step 2: Edit the cluster manifest
 
-CloudStackMachineTemplates are **immutable** — you cannot modify an existing template's `spec.template`. Edit your source cluster manifest to:
+CloudStackMachineTemplates are **immutable** — you cannot modify an existing template's `spec.template`. Edit your source cluster manifest to make **two changes**:
 
-1. **Rename** the `CloudStackMachineTemplate` objects to include the target version (e.g., `capc-cluster-control-plane-v1.33`, `capc-cluster-md-0-v1.33`)
-2. **Update** `spec.template.spec.template.name` in both templates to the new CloudStack image
-3. **Update** `infrastructureRef.name` in `KubeadmControlPlane` and `MachineDeployment` to match the new template names, and update `spec.version` to the target K8s version
+**2a.** Create new `CloudStackMachineTemplate` objects with updated names and image references (templates are immutable, so you cannot edit the existing ones — you create new ones):
+
+```yaml
+# Control plane — new CloudStackMachineTemplate
+apiVersion: infrastructure.cluster.x-k8s.io/v1beta3
+kind: CloudStackMachineTemplate
+metadata:
+  name: capc-cluster-control-plane-v1.33
+  namespace: capc-cluster
+spec:
+  template:
+    spec:
+      offering:
+        name: <control-plane-offering>
+      sshKey: <ssh-key>
+      template:
+        name: <new-image-name>
+```
+
+```yaml
+# Workers — new CloudStackMachineTemplate
+apiVersion: infrastructure.cluster.x-k8s.io/v1beta3
+kind: CloudStackMachineTemplate
+metadata:
+  name: capc-cluster-md-0-v1.33
+  namespace: capc-cluster
+spec:
+  template:
+    spec:
+      offering:
+        name: <worker-offering>
+      sshKey: <ssh-key>
+      template:
+        name: <new-image-name>
+```
+
+**2b.** Update the `infrastructureRef` references in `KubeadmControlPlane` and `MachineDeployment` to point to the new template names, and update `spec.version`:
+
+```yaml
+# KubeadmControlPlane
+spec:
+  machineTemplate:
+    infrastructureRef:
+      apiVersion: infrastructure.cluster.x-k8s.io/v1beta3
+      kind: CloudStackMachineTemplate
+      name: capc-cluster-control-plane-v1.33   # ← new template name
+  version: v1.33.0                              # ← new K8s version
+```
+
+```yaml
+# MachineDeployment
+spec:
+  template:
+    spec:
+      infrastructureRef:
+        apiVersion: infrastructure.cluster.x-k8s.io/v1beta3
+        kind: CloudStackMachineTemplate
+        name: capc-cluster-md-0-v1.33           # ← new template name
+      version: v1.33.0                            # ← new K8s version
+```
 
 Apply the updated manifest:
 

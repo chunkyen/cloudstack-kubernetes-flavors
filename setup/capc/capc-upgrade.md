@@ -84,11 +84,68 @@ Upload the new image to CloudStack as a template. See [Building Your Own Image](
 
 #### Step 2b: Edit the cluster manifest
 
-Edit your source cluster manifest. Make three changes:
+Edit your source cluster manifest. Make **two changes**:
 
-1. **Rename** the `CloudStackMachineTemplate` objects to include the target version (e.g., `capc-cluster-control-plane-v1.33`, `capc-cluster-md-0-v1.33`)
-2. **Update** `spec.template.spec.template.name` in both templates to the new CloudStack image
-3. **Update** `infrastructureRef.name` in `KubeadmControlPlane` and `MachineDeployment` to match the new template names, and update `spec.version` to the target K8s version
+**2a.** Create new `CloudStackMachineTemplate` objects with updated names and image references (templates are immutable, so you cannot edit the existing ones — you create new ones):
+
+```yaml
+# Control plane — new CloudStackMachineTemplate
+apiVersion: infrastructure.cluster.x-k8s.io/v1beta3
+kind: CloudStackMachineTemplate
+metadata:
+  name: capc-cluster-control-plane-v1.33
+  namespace: capc-cluster
+spec:
+  template:
+    spec:
+      offering:
+        name: <control-plane-offering>
+      sshKey: <ssh-key>
+      template:
+        name: <new-image-name>
+```
+
+```yaml
+# Workers — new CloudStackMachineTemplate
+apiVersion: infrastructure.cluster.x-k8s.io/v1beta3
+kind: CloudStackMachineTemplate
+metadata:
+  name: capc-cluster-md-0-v1.33
+  namespace: capc-cluster
+spec:
+  template:
+    spec:
+      offering:
+        name: <worker-offering>
+      sshKey: <ssh-key>
+      template:
+        name: <new-image-name>
+```
+
+**2b.** Update the `infrastructureRef` references in `KubeadmControlPlane` and `MachineDeployment` to point to the new template names, and update `spec.version`:
+
+```yaml
+# KubeadmControlPlane
+spec:
+  machineTemplate:
+    infrastructureRef:
+      apiVersion: infrastructure.cluster.x-k8s.io/v1beta3
+      kind: CloudStackMachineTemplate
+      name: capc-cluster-control-plane-v1.33   # ← new template name
+  version: v1.33.0                              # ← new K8s version
+```
+
+```yaml
+# MachineDeployment
+spec:
+  template:
+    spec:
+      infrastructureRef:
+        apiVersion: infrastructure.cluster.x-k8s.io/v1beta3
+        kind: CloudStackMachineTemplate
+        name: capc-cluster-md-0-v1.33           # ← new template name
+      version: v1.33.0                            # ← new K8s version
+```
 
 #### Step 2c: Apply the updated manifest
 
@@ -204,8 +261,7 @@ echo "=== Step 2: Upgrading K8s version to ${k8s_version} ==="
 # ... (your image build / template upload logic)
 
 # Edit cluster-manifest.yaml:
-#   - Rename CloudStackMachineTemplate objects (e.g., capc-cluster-control-plane-v1.33)
-#   - Update spec.template.spec.template.name to new CloudStack image
+#   - Create new CloudStackMachineTemplate objects (new name + new image, templates are immutable)
 #   - Update infrastructureRef.name in KubeadmControlPlane and MachineDeployment
 #   - Update spec.version in KubeadmControlPlane and MachineDeployment
 # Then apply:
@@ -253,9 +309,8 @@ Edit your cluster manifest to revert the template names, image reference, and ve
 
 ```bash
 # Revert manifest changes:
-#   - Rename templates back (e.g., capc-cluster-control-plane-v1.32)
-#   - Revert spec.template.spec.template.name to old CloudStack image
-#   - Revert infrastructureRef.name and spec.version in KubeadmControlPlane and MachineDeployment
+#   - Point infrastructureRef back to old CloudStackMachineTemplate objects (or create old ones again)
+#   - Revert spec.version in KubeadmControlPlane and MachineDeployment
 kubectl apply -f cluster-manifest.yaml
 
 # Wait for rollback to complete
