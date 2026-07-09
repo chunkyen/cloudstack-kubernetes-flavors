@@ -52,7 +52,49 @@ These components are required or recommended for **every flavor**:
 
 #### Rancher Turtles + CAPC
 
-The Rancher Turtles integration uses Rancher as the management plane and CAPI/Turtles for declarative cluster lifecycle management. CAPC serves as the CloudStack infrastructure provider.
+The Rancher Turtles integration combines three layers — Rancher (management plane with UI, Fleet GitOps, RBAC), Turtles (CAPI operator for declarative provider management), and CAPC (CloudStack infrastructure provider). CAPC serves as the CloudStack infrastructure provider.
+
+See [Rancher+CAPC architecture](architecture/rancher-turtles-capc.md) for the full breakdown.
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    Bootstrap Cluster                             │
+│              (CKS cluster on CloudStack)                         │
+│                                                                  │
+│  ┌──────────────────────────────────────────────────────────┐   │
+│  │                    Rancher                                │   │
+│  │                                                           │   │
+│  │  ┌──────────────┐  ┌──────────────────────────────────┐  │   │
+│  │  │ Rancher      │  │ Turtles Controller               │  │   │
+│  │  │ Server       │  │                                  │  │   │
+│  │  │              │  │  CAPIProvider: core              │  │   │
+│  │  │  Fleet       │◄─┼─ CAPIProvider: kubeadm-bootstrap │  │   │
+│  │  │  (GitOps)    │  │  CAPIProvider: kubeadm-cp        │  │   │
+│  │  │              │  │  CAPIProvider: cloudstack        │  │   │
+│  │  │  Cluster UI  │  │                                  │  │   │
+│  │  │  + Project   │  └──────────────┬───────────────────┘  │   │
+│  │  │  + RBAC      │                 │                       │   │
+│  │  └──────────────┘                 │                       │   │
+│  └───────────────────────────────────┼───────────────────────┘   │
+│                                      │ clusterctl                │
+│                                      │ generate cluster          │
+│                                      ▼                           │
+│  ┌──────────────────────────────────────────────────────────┐   │
+│  │              Management Cluster (CAPC)                    │   │
+│  │         (CKS cluster on CloudStack via CAPC)              │   │
+│  │                                                           │   │
+│  │  ┌──────────────────────────────────────────────────┐    │   │
+│  │  │ CAPC Controllers                                 │    │   │
+│  │  │                                                  │    │   │
+│  │  │  CloudStackCluster  ──► CloudStack VMs (CP)     │    │   │
+│  │  │  CloudStackMachineSet ──► CKS Worker Nodes      │    │   │
+│  │  │  CloudStackMachine ──► CKS Etcd Nodes           │    │   │
+│  │  └──────────────────────────────────────────────────┘    │   │
+│  └───────────────────────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+**Turtles replaces `clusterctl init`.** Instead of running imperative commands, you deploy `CAPIProvider` resources and Turtles reconciles them — providers are managed as Kubernetes resources, not CLI commands.
 
 **Phase 1 — Deploy Management Plane:**
 
