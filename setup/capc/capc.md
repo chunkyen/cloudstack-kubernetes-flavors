@@ -665,7 +665,7 @@ CloudStackMachineTemplates are **immutable** — you cannot modify an existing t
 
 1. **Rename** the `CloudStackMachineTemplate` objects to include the target version (e.g., `capc-cluster-control-plane-v1.33`, `capc-cluster-md-0-v1.33`)
 2. **Update** `spec.template.spec.template.name` in both templates to the new CloudStack image
-3. **Update** `infrastructureRef.name` in KCP and MachineDeployment to match the new template names, and update `spec.version` to the target K8s version
+3. **Update** `infrastructureRef.name` in `KubeadmControlPlane` and `MachineDeployment` to match the new template names, and update `spec.version` to the target K8s version
 
 Apply the updated manifest:
 
@@ -673,7 +673,7 @@ Apply the updated manifest:
 kubectl apply -f cluster-manifest.yaml
 ```
 
-`kubectl apply` creates the new templates (new names) and updates KCP/MD in a single transaction.
+`kubectl apply` creates the new templates (new names) and updates `KubeadmControlPlane`/`MachineDeployment` in a single transaction.
 
 > **GitOps:** If you manage clusters via Fleet, commit the manifest changes to your Git repo and let Fleet sync them.
 

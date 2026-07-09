@@ -183,7 +183,7 @@ kubectl get machinedeployment,machinesets,machines -n capc-cluster-1
 # Scale workers (works via Turtles UI or kubectl)
 kubectl patch machinedeployment capc-cluster-1-md-0 -n capc-cluster-1 --type merge -p '{"spec":{"replicas":3}}'
 
-# Scale control plane (kubectl only; no Turtles UI element for KCP)
+# Scale control plane (kubectl only; no Turtles UI element for KubeadmControlPlane)
 kubectl patch kubeadmcontrolplane capc-cluster-1-control-plane -n capc-cluster-1 --type merge -p '{"spec":{"replicas":3}}'
 ```
 
@@ -830,7 +830,7 @@ spec:
         name: capc-ubuntu24-1.36.1
 ```
 
-**2b.** Update the `infrastructureRef` references in KCP and MachineDeployment to point to the new template names, and update `spec.version`:
+**2b.** Update the `infrastructureRef` references in `KubeadmControlPlane` and `MachineDeployment` to point to the new template names, and update `spec.version`:
 
 ```yaml
 # KubeadmControlPlane
@@ -861,7 +861,7 @@ spec:
 kubectl apply -f manifests/10-minimal-cluster.yaml
 ```
 
-`kubectl apply` creates the new `CloudStackMachineTemplate` objects (new names) and updates KCP/MD to reference them in a single transaction. CAPI immediately starts the rolling update — control plane first, then workers.
+`kubectl apply` creates the new `CloudStackMachineTemplate` objects (new names) and updates `KubeadmControlPlane`/`MachineDeployment` to reference them in a single transaction. CAPI immediately starts the rolling update — control plane first, then workers.
 
 > **GitOps:** If you manage clusters via Fleet, commit the manifest changes to your Git repo and let Fleet sync them. No `kubectl` needed.
 
@@ -871,7 +871,7 @@ kubectl apply -f manifests/10-minimal-cluster.yaml
 # Watch machines (control plane first, then workers)
 kubectl get machines -n capc-cluster1 -w
 
-# Check KCP status
+# Check KubeadmControlPlane status
 kubectl get kubeadmcontrolplane capc-cluster1-control-plane -n capc-cluster1
 
 # Check MachineDeployment status

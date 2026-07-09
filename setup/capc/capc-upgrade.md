@@ -88,7 +88,7 @@ Edit your source cluster manifest. Make three changes:
 
 1. **Rename** the `CloudStackMachineTemplate` objects to include the target version (e.g., `capc-cluster-control-plane-v1.33`, `capc-cluster-md-0-v1.33`)
 2. **Update** `spec.template.spec.template.name` in both templates to the new CloudStack image
-3. **Update** `infrastructureRef.name` in KCP and MachineDeployment to match the new template names, and update `spec.version` to the target K8s version
+3. **Update** `infrastructureRef.name` in `KubeadmControlPlane` and `MachineDeployment` to match the new template names, and update `spec.version` to the target K8s version
 
 #### Step 2c: Apply the updated manifest
 
@@ -96,7 +96,7 @@ Edit your source cluster manifest. Make three changes:
 kubectl apply -f cluster-manifest.yaml
 ```
 
-`kubectl apply` creates the new `CloudStackMachineTemplate` objects (new names) and updates KCP/MD in a single transaction. CAPI immediately starts the rolling update — control plane first, then workers.
+`kubectl apply` creates the new `CloudStackMachineTemplate` objects (new names) and updates `KubeadmControlPlane`/`MachineDeployment` in a single transaction. CAPI immediately starts the rolling update — control plane first, then workers.
 
 > **GitOps:** If you manage clusters via Fleet or another GitOps tool, commit the manifest changes to your Git repo and let the sync tool apply them. No `kubectl` needed.
 
@@ -206,8 +206,8 @@ echo "=== Step 2: Upgrading K8s version to ${k8s_version} ==="
 # Edit cluster-manifest.yaml:
 #   - Rename CloudStackMachineTemplate objects (e.g., capc-cluster-control-plane-v1.33)
 #   - Update spec.template.spec.template.name to new CloudStack image
-#   - Update infrastructureRef.name in KCP and MachineDeployment
-#   - Update spec.version in KCP and MachineDeployment
+#   - Update infrastructureRef.name in KubeadmControlPlane and MachineDeployment
+#   - Update spec.version in KubeadmControlPlane and MachineDeployment
 # Then apply:
 kubectl apply -f cluster-manifest.yaml
 
@@ -255,7 +255,7 @@ Edit your cluster manifest to revert the template names, image reference, and ve
 # Revert manifest changes:
 #   - Rename templates back (e.g., capc-cluster-control-plane-v1.32)
 #   - Revert spec.template.spec.template.name to old CloudStack image
-#   - Revert infrastructureRef.name and spec.version in KCP and MachineDeployment
+#   - Revert infrastructureRef.name and spec.version in KubeadmControlPlane and MachineDeployment
 kubectl apply -f cluster-manifest.yaml
 
 # Wait for rollback to complete
