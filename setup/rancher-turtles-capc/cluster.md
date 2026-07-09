@@ -801,7 +801,7 @@ Edit your source cluster manifest (e.g., `manifests/10-minimal-cluster.yaml`). M
 apiVersion: infrastructure.cluster.x-k8s.io/v1beta3
 kind: CloudStackMachineTemplate
 metadata:
-  name: capc-cluster1-control-plane-v136
+  name: capc-cluster1-control-plane-v136   # ← new template name
   namespace: capc-cluster1
 spec:
   template:
@@ -810,7 +810,7 @@ spec:
         name: kube control
       sshKey: cylabnb-k1
       template:
-        name: capc-ubuntu24-1.36.1
+        name: capc-ubuntu24-1.36.1         # ← new CloudStack image
 ```
 
 ```yaml
@@ -818,7 +818,7 @@ spec:
 apiVersion: infrastructure.cluster.x-k8s.io/v1beta3
 kind: CloudStackMachineTemplate
 metadata:
-  name: capc-cluster1-md-0-v136
+  name: capc-cluster1-md-0-v136           # ← new template name
   namespace: capc-cluster1
 spec:
   template:
@@ -827,7 +827,7 @@ spec:
         name: kube worker1
       sshKey: cylabnb-k1
       template:
-        name: capc-ubuntu24-1.36.1
+        name: capc-ubuntu24-1.36.1         # ← new CloudStack image
 ```
 
 **2b.** Update the `infrastructureRef` references in `KubeadmControlPlane` and `MachineDeployment` to point to the new template names, and update `spec.version`:

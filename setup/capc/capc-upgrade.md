@@ -93,7 +93,7 @@ Edit your source cluster manifest. Make **two changes**:
 apiVersion: infrastructure.cluster.x-k8s.io/v1beta3
 kind: CloudStackMachineTemplate
 metadata:
-  name: capc-cluster-control-plane-v1.33
+  name: capc-cluster-control-plane-v1.33   # ← new template name
   namespace: capc-cluster
 spec:
   template:
@@ -102,7 +102,7 @@ spec:
         name: <control-plane-offering>
       sshKey: <ssh-key>
       template:
-        name: <new-image-name>
+        name: <new-image-name>             # ← new CloudStack image
 ```
 
 ```yaml
@@ -110,7 +110,7 @@ spec:
 apiVersion: infrastructure.cluster.x-k8s.io/v1beta3
 kind: CloudStackMachineTemplate
 metadata:
-  name: capc-cluster-md-0-v1.33
+  name: capc-cluster-md-0-v1.33           # ← new template name
   namespace: capc-cluster
 spec:
   template:
@@ -119,7 +119,7 @@ spec:
         name: <worker-offering>
       sshKey: <ssh-key>
       template:
-        name: <new-image-name>
+        name: <new-image-name>             # ← new CloudStack image
 ```
 
 **2b.** Update the `infrastructureRef` references in `KubeadmControlPlane` and `MachineDeployment` to point to the new template names, and update `spec.version`:
