@@ -50,6 +50,21 @@ kubectl apply -f 12-custom-image-cluster.yaml
 | `10-minimal-cluster.yaml` | Minimal cluster — 1 control plane + 2 workers (Method 1: CloudStack SSH KeyPair) |
 | `11-ha-cluster.yaml` | HA cluster — 3 control planes + 3 workers (Method 1: CloudStack SSH KeyPair) |
 | `12-custom-image-cluster.yaml` | Custom image setup — inline cloud-init for packages, kernel modules, etc. (Method 2) |
+| `13-one-shot-full-stack.yaml` | Full-stack cluster — CNI + CCM + CSI via ClusterResourceSet (see [full-stack-onboarding.md](../full-stack-onboarding.md)) |
+
+### CCM & CSI Manifests (standalone)
+
+Standalone manifests for manual CCM/CSI installation or for building a ClusterResourceSet ConfigMap (see [full-stack-onboarding.md](../full-stack-onboarding.md)):
+
+| File | Description |
+|------|-------------|
+| `ccm-deployment.yaml` | CloudStack Kubernetes Provider (CCM) — Deployment + RBAC |
+| `csi-00-snapshot-crds.yaml` | VolumeSnapshot CRDs |
+| `csi-controller.yaml` | CSI controller Deployment |
+| `csi-csidriver.yaml` | CSIDriver resource |
+| `csi-node.yaml` | CSI node DaemonSet |
+| `csi-rbac.yaml` | CSI RBAC (ServiceAccounts, ClusterRoles, Bindings) |
+| `csi-volume-snapshot-class.yaml` | VolumeSnapshotClass for CloudStack CSI |
 
 ## Namespace
 
