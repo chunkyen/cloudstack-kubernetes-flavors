@@ -6,7 +6,8 @@ Deploy a CAPC cluster and get **CNI** (networking), **CCM** (CloudStack Kubernet
 >
 > | Method | File | Best for |
 > |--------|------|----------|
-> | **One-shot YAML** | `manifests/13-one-shot-full-stack.yaml` | Quick start, single cluster, copy-paste |
+> | **One-shot YAML (Calico)** | `manifests/13-one-shot-full-stack.yaml` | Quick start, single cluster, Calico CNI |
+> | **One-shot YAML (Cilium)** | `manifests/13-one-shot-full-stack-cilium.yaml` | Quick start, single cluster, Cilium CNI |
 > | **Kustomize** | `manifests/kustomize/` | Multiple clusters, composable, maintainable |
 >
 > Both produce the same result. Choose the one that fits your workflow.

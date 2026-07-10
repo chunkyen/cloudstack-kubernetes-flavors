@@ -1,4 +1,4 @@
-# Overlay for capc-cluster3 (Calico CNI)
+# Overlay for capc-cluster3 (Cilium CNI)
 # Overrides base placeholders with cluster3-specific values
 
 apiVersion: kustomize.config.k8s.io/v1beta1
@@ -9,12 +9,12 @@ namespace: capc-cluster3
 resources:
   - ../../base
 
-# Merge Calico CNI into the base ConfigMap
+# Merge Cilium CNI into the base ConfigMap
 configMapGenerator:
   - name: capc-cluster-1-addons
     behavior: merge
     files:
-      - calico.yaml
+      - cilium.yaml
 
 patches:
   # --- Namespace ---

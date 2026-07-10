@@ -1,4 +1,4 @@
-# Base: Cluster infrastructure + addons
+# Base: Cluster infrastructure + CCM + CSI (no CNI — overlays pick one)
 # Override cluster-specific values in overlays/<name>/kustomization.yaml
 
 apiVersion: kustomize.config.k8s.io/v1beta1
@@ -14,13 +14,12 @@ resources:
   - workers.yaml
   - cluster-resource-set.yaml
 
-# Auto-generate ConfigMap from addon files
+# CCM + CSI only — CNI is added by the overlay
 configMapGenerator:
   - name: capc-cluster-1-addons
     options:
       disableNameSuffixHash: true
     files:
-      - addons/calico.yaml
       - addons/ccm.yaml
       - addons/csi.yaml
 

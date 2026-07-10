@@ -7,7 +7,7 @@ small, focused files. Each overlay is a cluster-specific configuration.
 
 ```
 manifests/kustomize/
-├── base/                          # Shared cluster template
+├── base/                          # Shared cluster template (CCM + CSI, no CNI)
 │   ├── kustomization.yaml         # Composes all base resources
 │   ├── namespace.yaml              # Namespace
 │   ├── cloudstack-credentials.yaml # CloudStack API credentials (placeholders)
@@ -15,21 +15,39 @@ manifests/kustomize/
 │   ├── control-plane.yaml          # KubeadmControlPlane + MachineTemplate
 │   ├── workers.yaml                # MachineDeployment + KubeadmConfigTemplate
 │   ├── cluster-resource-set.yaml   # ClusterResourceSet
-│   └── addons/                     # Workload cluster addons (auto-bundled into ConfigMap)
-│       ├── calico.yaml             # CNI: Calico v3.28.0
+│   └── addons/                     # CCM + CSI (CNI is per-overlay)
 │       ├── ccm.yaml                # CCM: CloudStack Kubernetes Provider
 │       └── csi.yaml                # CSI: CloudStack CSI Driver + StorageClass
 └── overlays/
-    └── cluster3/                   # Example: capc-cluster3
-        └── kustomization.yaml      # Patches base with cluster3-specific values
+    ├── cluster3/                   # Example: capc-cluster3 (Calico CNI)
+    │   ├── kustomization.yaml      # Patches base + merges Calico
+    │   └── calico.yaml             # Calico v3.28.0 manifest
+    └── cluster3-cilium/            # Example: capc-cluster3 (Cilium CNI)
+        ├── kustomization.yaml      # Patches base + merges Cilium
+        └── cilium.yaml             # Cilium v1.16.0 manifest
 ```
+
+## CNI Choice
+
+The base includes **CCM + CSI only** — no CNI. Each overlay picks its CNI:
+
+| Overlay | CNI | File |
+|---------|-----|------|
+| `overlays/cluster3/` | Calico v3.28.0 | `calico.yaml` |
+| `overlays/cluster3-cilium/` | Cilium v1.16.0 | `cilium.yaml` |
+
+To switch CNI, copy the overlay and change the `configMapGenerator` file reference.
 
 ## Usage
 
 ### Build (dry-run)
 
 ```bash
+# Calico
 kubectl kustomize manifests/kustomize/overlays/cluster3
+
+# Cilium
+kubectl kustomize manifests/kustomize/overlays/cluster3-cilium
 ```
 
 ### Apply
@@ -55,10 +73,11 @@ kubectl kustomize manifests/kustomize/overlays/my-cluster | kubectl apply -f -
 
 ## Compared to the one-shot YAML
 
-| | One-shot (13-one-shot-full-stack.yaml) | Kustomize |
+| | One-shot | Kustomize |
 |---|---|---|
-| Lines | ~1650 | ~150 (overlay) + shared base |
+| Lines | ~1650 (Calico) / ~2740 (Cilium) | ~150 (overlay) + shared base |
 | Addons | Inlined in ConfigMap data | Separate files, auto-bundled |
-| New cluster | Copy 1650 lines, find/replace | Copy 150-line overlay, edit values |
+| New cluster | Copy 1650+ lines, find/replace | Copy 150-line overlay, edit values |
+| CNI switch | Copy entire file, replace CNI section | Change one line in overlay |
 | Maintenance | Edit one giant file | Edit individual component files |
 | Diff review | Hard to see what changed | Clear: only overlay values change |
