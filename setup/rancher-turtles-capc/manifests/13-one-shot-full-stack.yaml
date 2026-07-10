@@ -1631,6 +1631,16 @@ data:
       volumeLifecycleModes:
         - Persistent
         - Ephemeral
+  csi-storageclass.yaml: |
+    apiVersion: storage.k8s.io/v1
+    kind: StorageClass
+    metadata:
+      name: cloudstack-ssd
+    provisioner: csi.cloudstack.apache.org
+    parameters:
+      csi.cloudstack.apache.org/disk-offering-id: "<disk-offering-uuid>"
+    volumeBindingMode: WaitForFirstConsumer
+    reclaimPolicy: Delete
 
 # ─── ClusterResourceSet — Applies ConfigMap to workload cluster ────
 apiVersion: addons.cluster.x-k8s.io/v1beta2
