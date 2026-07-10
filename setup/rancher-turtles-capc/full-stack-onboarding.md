@@ -2,6 +2,15 @@
 
 Deploy a CAPC cluster and get **CNI** (networking), **CCM** (CloudStack Kubernetes Provider for LoadBalancer services and node labels), and **CSI** (persistent storage) all installed automatically — no manual follow-up steps. This is the CAPC equivalent of CKS's "one ISO, everything works" experience.
 
+> **Two approaches available:**
+>
+> | Method | File | Best for |
+> |--------|------|----------|
+> | **One-shot YAML** | `manifests/13-one-shot-full-stack.yaml` | Quick start, single cluster, copy-paste |
+> | **Kustomize** | `kustomize/` | Multiple clusters, composable, maintainable |
+>
+> Both produce the same result. Choose the one that fits your workflow.
+
 This uses **ClusterResourceSet**, a CAPI-native mechanism that applies resources to a workload cluster after it's provisioned. This is the approach recommended by the [Rancher Turtles documentation](https://turtles.docs.rancher.com/turtles/stable/en/user/applications.html) for installing bootstrap applications (CNI, CCM, CSI) on Kubeadm-based CAPI clusters.
 
 > **ℹ️ RKE2 vs Kubeadm**
@@ -409,6 +418,67 @@ kubectl --kubeconfig=$KUBECONFIG wait --for=condition=ready pod -l app=cloudstac
 
 echo "✅ All components deployed successfully!"
 ```
+
+## Kustomize Approach (Recommended for Multiple Clusters)
+
+Instead of a 1650-line monolithic YAML, use Kustomize to compose clusters from small, focused files. Each overlay is a cluster-specific configuration (~150 lines).
+
+### Structure
+
+```
+kustomize/
+├── base/                          # Shared cluster template
+│   ├── kustomization.yaml         # Composes all base resources
+│   ├── namespace.yaml              # Namespace
+│   ├── cloudstack-credentials.yaml # CloudStack API credentials (placeholders)
+│   ├── cluster-infra.yaml          # Cluster + CloudStackCluster
+│   ├── control-plane.yaml          # KubeadmControlPlane + MachineTemplate
+│   ├── workers.yaml                # MachineDeployment + KubeadmConfigTemplate
+│   ├── cluster-resource-set.yaml   # ClusterResourceSet
+│   └── addons/                     # Workload cluster addons (auto-bundled into ConfigMap)
+│       ├── calico.yaml             # CNI: Calico v3.28.0
+│       ├── ccm.yaml                # CCM: CloudStack Kubernetes Provider
+│       └── csi.yaml                # CSI: CloudStack CSI Driver + StorageClass
+└── overlays/
+    └── cluster3/                   # Example: capc-cluster3
+        └── kustomization.yaml      # Patches base with cluster3-specific values
+```
+
+### How it works
+
+1. **Base** defines the cluster template with placeholders (`<reserved-public-ip>`, `<zone-name-or-id>`, etc.)
+2. **Overlay** patches the base with cluster-specific values (IP, network, zone, credentials)
+3. **configMapGenerator** auto-bundles `addons/*.yaml` into a ConfigMap — no manual inlining
+4. **ClusterResourceSet** applies the ConfigMap to the workload cluster after provisioning
+
+### Usage
+
+```bash
+# Build (dry-run)
+kubectl kustomize kustomize/overlays/cluster3
+
+# Apply
+kubectl kustomize kustomize/overlays/cluster3 | kubectl apply -f -
+```
+
+### Create a new cluster
+
+```bash
+cp -r kustomize/overlays/cluster3 kustomize/overlays/my-cluster
+# Edit kustomize/overlays/my-cluster/kustomization.yaml with your values
+kubectl kustomize kustomize/overlays/my-cluster | kubectl apply -f -
+```
+
+### Comparison: One-shot vs Kustomize
+
+| | One-shot (`13-one-shot-full-stack.yaml`) | Kustomize |
+|---|---|---|
+| **Lines** | ~1650 | ~150 per overlay + shared base |
+| **Addons** | Inlined in ConfigMap `data:` | Separate files, auto-bundled by `configMapGenerator` |
+| **New cluster** | Copy 1650 lines, find/replace 20+ values | Copy 150-line overlay, edit values |
+| **Maintenance** | Edit one giant file | Edit individual component files |
+| **Diff review** | Hard to see what changed | Clear: only overlay values change, base is shared |
+| **Credentials** | Mixed in with infra YAML | In overlay patch, easy to `.gitignore` |
 
 ## Troubleshooting
 
