@@ -1,0 +1,109 @@
+# CCM: CloudStack Kubernetes Provider
+# Secret + RBAC + Deployment
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: cloudstack-ccm-secret
+  namespace: kube-system
+type: Opaque
+stringData:
+  cloud-config: |
+    [Global]
+    api-url = <cloudstack-api-url>
+    api-key = "<api-key>"
+    secret-key = "<secret-key>"
+    ssl-no-verify = "false"
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: cloudstack-ccm
+  namespace: kube-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: cloudstack-ccm
+rules:
+  - apiGroups: [""]
+    resources: ["nodes", "pods", "services", "endpoints"]
+    verbs: ["get", "list", "watch", "update"]
+  - apiGroups: [""]
+    resources: ["namespaces"]
+    verbs: ["get", "list"]
+  - apiGroups: ["discovery.k8s.io"]
+    resources: ["endpointslices"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: cloudstack-ccm
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: cloudstack-ccm
+subjects:
+  - kind: ServiceAccount
+    name: cloudstack-ccm
+    namespace: kube-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: cloudstack-ccm
+  namespace: kube-system
+rules:
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["coordination.k8s.io"]
+    resources: ["leases"]
+    verbs: ["get", "list", "watch", "create", "update", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: cloudstack-ccm
+  namespace: kube-system
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: cloudstack-ccm
+subjects:
+  - kind: ServiceAccount
+    name: cloudstack-ccm
+    namespace: kube-system
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cloudstack-ccm
+  namespace: kube-system
+  labels:
+    app: cloudstack-ccm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: cloudstack-ccm
+  template:
+    metadata:
+      labels:
+        app: cloudstack-ccm
+    spec:
+      serviceAccountName: cloudstack-ccm
+      containers:
+        - name: cloudstack-ccm
+          image: apache/cloudstack-kubernetes-provider:latest
+          args:
+            - --cloud-provider=external-cloudstack
+            - --cloud-config=/etc/kubernetes/cloud-config/cloud-config
+          volumeMounts:
+            - name: cloud-config
+              mountPath: /etc/kubernetes/cloud-config
+      volumes:
+        - name: cloud-config
+          secret:
+            secretName: cloudstack-ccm-secret

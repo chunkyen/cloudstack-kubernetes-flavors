@@ -1,0 +1,13 @@
+# ClusterResourceSet — applies the auto-generated ConfigMap to the workload cluster
+apiVersion: addons.cluster.x-k8s.io/v1beta2
+kind: ClusterResourceSet
+metadata:
+  name: capc-cluster-1-full-stack
+spec:
+  strategy: Reconcile
+  clusterSelector:
+    matchLabels:
+      capc-one-shot: "full-stack"
+  resources:
+    - name: capc-cluster-1-addons
+      kind: ConfigMap

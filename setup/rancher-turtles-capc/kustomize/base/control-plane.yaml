@@ -1,0 +1,41 @@
+---
+apiVersion: controlplane.cluster.x-k8s.io/v1beta1
+kind: KubeadmControlPlane
+metadata:
+  name: capc-cluster-1-control-plane
+spec:
+  replicas: 1
+  version: v1.35.0
+  kubeadmConfigSpec:
+    initConfiguration:
+      nodeRegistration:
+        kubeletExtraArgs:
+          provider-id: "cloudstack:///'{{ ds.meta_data.instance_id }}'"
+        name: "{{ local_hostname }}"
+    joinConfiguration:
+      nodeRegistration:
+        kubeletExtraArgs:
+          provider-id: "cloudstack:///'{{ ds.meta_data.instance_id }}'"
+        name: "{{ local_hostname }}"
+    preKubeadmCommands:
+      - swapoff -a
+    postKubeadmCommands:
+      - echo "Control plane setup complete"
+  machineTemplate:
+    infrastructureRef:
+      apiVersion: infrastructure.cluster.x-k8s.io/v1beta3
+      kind: CloudStackMachineTemplate
+      name: capc-cluster-1-control-plane
+---
+apiVersion: infrastructure.cluster.x-k8s.io/v1beta3
+kind: CloudStackMachineTemplate
+metadata:
+  name: capc-cluster-1-control-plane
+spec:
+  template:
+    spec:
+      offering:
+        name: "kube control"
+      sshKey: "cylabnb-k1"
+      template:
+        name: "capc-ubuntu24-1.35"

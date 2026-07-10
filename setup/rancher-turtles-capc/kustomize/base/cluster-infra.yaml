@@ -1,0 +1,41 @@
+---
+apiVersion: cluster.x-k8s.io/v1beta1
+kind: Cluster
+metadata:
+  name: capc-cluster-1
+  labels:
+    cluster-api.cattle.io/rancher-auto-import: "true"
+spec:
+  clusterNetwork:
+    pods:
+      cidrBlocks:
+        - "10.168.0.0/16"
+    serviceDomain: cluster.local
+  controlPlaneRef:
+    apiVersion: controlplane.cluster.x-k8s.io/v1beta1
+    kind: KubeadmControlPlane
+    name: capc-cluster-1-control-plane
+  infrastructureRef:
+    apiVersion: infrastructure.cluster.x-k8s.io/v1beta3
+    kind: CloudStackCluster
+    name: capc-cluster-1
+---
+apiVersion: infrastructure.cluster.x-k8s.io/v1beta3
+kind: CloudStackCluster
+metadata:
+  name: capc-cluster-1
+spec:
+  controlPlaneEndpoint:
+    host: "<reserved-public-ip>"
+    port: 6443
+  failureDomains:
+    - name: "<zone-name-or-id>"
+      zone:
+        name: "<zone-name-or-id>"
+        network:
+          name: "<network-name-or-id>"
+      acsEndpoint:
+        name: cloudstack-credentials
+        namespace: capc-cluster-1
+      offering: DefaultNetworkOfferingforKubernetesService
+      syncWithACS: true

@@ -1,0 +1,567 @@
+# CSI: CloudStack CSI Driver
+# Secret + VolumeSnapshot CRDs + RBAC + Controller + Node DaemonSet + CSIDriver + StorageClass
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: cloudstack-secret
+  namespace: kube-system
+type: Opaque
+stringData:
+  cloud-config: |
+    [Global]
+    api-url = <cloudstack-api-url>
+    api-key = "<api-key>"
+    secret-key = "<secret-key>"
+    ssl-no-verify = "false"
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: volumesnapshotclasses.snapshot.storage.k8s.io
+spec:
+  group: snapshot.storage.k8s.io
+  names:
+    kind: VolumeSnapshotClass
+    listKind: VolumeSnapshotClassList
+    plural: volumesnapshotclasses
+    shortNames: [vsclass, vsclasses]
+    singular: volumesnapshotclass
+  scope: Cluster
+  versions:
+    - additionalPrinterColumns:
+        - jsonPath: .driver
+          name: Driver
+          type: string
+        - description: Determines whether a VolumeSnapshotContent created through the VolumeSnapshotClass should be deleted when its bound VolumeSnapshot is deleted.
+          jsonPath: .deletionPolicy
+          name: DeletionPolicy
+          type: string
+        - jsonPath: .metadata.creationTimestamp
+          name: Age
+          type: date
+      name: v1
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            deletionPolicy:
+              type: string
+              enum: [Delete, Retain]
+            driver:
+              type: string
+            parameters:
+              type: object
+              additionalProperties:
+                type: string
+      served: true
+      storage: true
+      subresources: {}
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: volumesnapshotcontents.snapshot.storage.k8s.io
+spec:
+  group: snapshot.storage.k8s.io
+  names:
+    kind: VolumeSnapshotContent
+    listKind: VolumeSnapshotContentList
+    plural: volumesnapshotcontents
+    shortNames: [vsc, vscs]
+    singular: volumesnapshotcontent
+  scope: Cluster
+  versions:
+    - additionalPrinterColumns:
+        - description: Indicates if the snapshot is ready to be used to restore a volume.
+          jsonPath: .status.readyToUse
+          name: ReadyToUse
+          type: boolean
+        - description: Represents the complete size of the snapshot in bytes
+          jsonPath: .status.restoreSize
+          name: RestoreSize
+          type: integer
+        - description: Determines whether this VolumeSnapshotContent and its physical snapshot on the underlying storage system should be deleted when its bound VolumeSnapshot is deleted.
+          jsonPath: .spec.deletionPolicy
+          name: DeletionPolicy
+          type: string
+        - description: Name of the CSI driver used to create the physical snapshot on the underlying storage system.
+          jsonPath: .spec.driver
+          name: Driver
+          type: string
+        - description: Name of the VolumeSnapshotClass to which this snapshot belongs.
+          jsonPath: .spec.volumeSnapshotClassName
+          name: VolumeSnapshotClass
+          type: string
+        - description: Name of the VolumeSnapshot object to which this VolumeSnapshotContent object is bound.
+          jsonPath: .spec.volumeSnapshotRef.name
+          name: VolumeSnapshot
+          type: string
+        - description: Namespace of the VolumeSnapshot object to which this VolumeSnapshotContent object is bound.
+          jsonPath: .spec.volumeSnapshotRef.namespace
+          name: VolumeSnapshotNamespace
+          type: string
+        - jsonPath: .metadata.creationTimestamp
+          name: Age
+          type: date
+      name: v1
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: object
+              properties:
+                deletionPolicy:
+                  type: string
+                  enum: [Delete, Retain]
+                driver:
+                  type: string
+                source:
+                  type: object
+                  properties:
+                    snapshotHandle:
+                      type: string
+                    volumeHandle:
+                      type: string
+                sourceVolumeMode:
+                  type: string
+                volumeSnapshotClassName:
+                  type: string
+                volumeSnapshotRef:
+                  type: object
+                  properties:
+                    apiVersion:
+                      type: string
+                    fieldPath:
+                      type: string
+                    kind:
+                      type: string
+                    name:
+                      type: string
+                    namespace:
+                      type: string
+            status:
+              type: object
+              properties:
+                creationTime:
+                  type: integer
+                error:
+                  type: object
+                  properties:
+                    message:
+                      type: string
+                    time:
+                      type: string
+                readyToUse:
+                  type: boolean
+                restoreSize:
+                  type: integer
+                snapshotHandle:
+                  type: string
+      served: true
+      storage: true
+      subresources:
+        status: {}
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: volumesnapshots.snapshot.storage.k8s.io
+spec:
+  group: snapshot.storage.k8s.io
+  names:
+    kind: VolumeSnapshot
+    listKind: VolumeSnapshotList
+    plural: volumesnapshots
+    shortNames: [vs]
+    singular: volumesnapshot
+  scope: Namespaced
+  versions:
+    - additionalPrinterColumns:
+        - description: Indicates if the snapshot is ready to be used to restore a volume.
+          jsonPath: .status.readyToUse
+          name: ReadyToUse
+          type: boolean
+        - description: If a new snapshot needs to be created, the name of the source PVC from which this snapshot was (or will be) created.
+          jsonPath: .spec.source.persistentVolumeClaimName
+          name: SourcePVC
+          type: string
+        - description: If a snapshot already exists, the name of the source VolumeSnapshotContent from which this snapshot was (or will be) created.
+          jsonPath: .spec.source.volumeSnapshotContentName
+          name: SourceSnapshotContent
+          type: string
+        - description: Represents the minimum size of the underlying volume required to re-create a volume from this snapshot.
+          jsonPath: .status.restoreSize
+          name: RestoreSize
+          type: string
+        - description: The name of the VolumeSnapshotClass requested by the VolumeSnapshot.
+          jsonPath: .spec.volumeSnapshotClassName
+          name: SnapshotClass
+          type: string
+        - description: Name of the VolumeSnapshotContent object to which the VolumeSnapshot object intends to bind to.
+          jsonPath: .status.boundVolumeSnapshotContentName
+          name: SnapshotContent
+          type: string
+        - description: Timestamp when the point-in-time snapshot was taken by the underlying storage system.
+          jsonPath: .status.creationTime
+          name: CreationTime
+          type: date
+        - jsonPath: .metadata.creationTimestamp
+          name: Age
+          type: date
+      name: v1
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: object
+              properties:
+                source:
+                  type: object
+                  properties:
+                    persistentVolumeClaimName:
+                      type: string
+                    volumeSnapshotContentName:
+                      type: string
+                volumeSnapshotClassName:
+                  type: string
+            status:
+              type: object
+              properties:
+                boundVolumeSnapshotContentName:
+                  type: string
+                creationTime:
+                  type: string
+                error:
+                  type: object
+                  properties:
+                    message:
+                      type: string
+                    time:
+                      type: string
+                readyToUse:
+                  type: boolean
+                restoreSize:
+                  type: string
+      served: true
+      storage: true
+      subresources:
+        status: {}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: cloudstack-csi-controller
+  namespace: kube-system
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: cloudstack-csi-node
+  namespace: kube-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: cloudstack-csi-controller-role
+rules:
+  - apiGroups: [""]
+    resources: ["persistentvolumes"]
+    verbs: ["get", "list", "watch", "create", "delete", "update", "patch"]
+  - apiGroups: [""]
+    resources: ["persistentvolumeclaims"]
+    verbs: ["get", "list", "watch", "update", "patch"]
+  - apiGroups: [""]
+    resources: ["persistentvolumeclaims/status"]
+    verbs: ["update", "patch"]
+  - apiGroups: ["storage.k8s.io"]
+    resources: ["storageclasses"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["storage.k8s.io"]
+    resources: ["csinodes"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["list", "watch", "create", "update", "patch"]
+  - apiGroups: ["snapshot.storage.k8s.io"]
+    resources: ["volumesnapshotclasses"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["snapshot.storage.k8s.io"]
+    resources: ["volumesnapshotcontents"]
+    verbs: ["create", "get", "list", "watch", "update", "delete", "patch"]
+  - apiGroups: ["snapshot.storage.k8s.io"]
+    resources: ["volumesnapshotcontents/status"]
+    verbs: ["update", "patch"]
+  - apiGroups: ["snapshot.storage.k8s.io"]
+    resources: ["volumesnapshots"]
+    verbs: ["get", "list", "watch", "update", "patch"]
+  - apiGroups: ["snapshot.storage.k8s.io"]
+    resources: ["volumesnapshots/status"]
+    verbs: ["update", "patch"]
+  - apiGroups: ["storage.k8s.io"]
+    resources: ["volumeattachments"]
+    verbs: ["get", "list", "watch", "update", "patch"]
+  - apiGroups: ["storage.k8s.io"]
+    resources: ["volumeattachments/status"]
+    verbs: ["patch"]
+  - apiGroups: [""]
+    resources: ["nodes"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["storage.k8s.io"]
+    resources: ["csistoragecapacities"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get"]
+  - apiGroups: ["apps"]
+    resources: ["replicasets"]
+    verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: cloudstack-csi-controller-binding
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: cloudstack-csi-controller-role
+subjects:
+  - kind: ServiceAccount
+    name: cloudstack-csi-controller
+    namespace: kube-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: cloudstack-csi-node-role
+rules:
+  - apiGroups: [""]
+    resources: ["persistentvolumes"]
+    verbs: ["get", "list", "watch", "update", "patch"]
+  - apiGroups: [""]
+    resources: ["nodes"]
+    verbs: ["get", "list", "watch", "update", "patch"]
+  - apiGroups: ["storage.k8s.io"]
+    resources: ["csinodes"]
+    verbs: ["get", "list", "watch", "update", "patch"]
+  - apiGroups: ["storage.k8s.io"]
+    resources: ["volumeattachments"]
+    verbs: ["get", "list", "watch", "update", "patch"]
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["get", "list", "watch", "create", "update", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: cloudstack-csi-node-binding
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: cloudstack-csi-node-role
+subjects:
+  - kind: ServiceAccount
+    name: cloudstack-csi-node
+    namespace: kube-system
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cloudstack-csi-controller
+  namespace: kube-system
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: cloudstack-csi-controller
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: cloudstack-csi-controller
+    spec:
+      serviceAccountName: cloudstack-csi-controller
+      containers:
+        - name: csi-provisioner
+          image: registry.k8s.io/sig-storage/csi-provisioner:v5.0.1
+          args:
+            - --csi-address=$(ADDRESS)
+            - --v=5
+            - --timeout=5m
+            - --feature-gates=Topology=true
+            - --extra-create-metadata
+            - --leader-election
+            - --default-fstype=ext4
+          env:
+            - name: ADDRESS
+              value: /var/lib/csi/sockets/plugin.io/csi.sock
+          volumeMounts:
+            - name: socket-dir
+              mountPath: /var/lib/csi/sockets/plugin.io
+        - name: csi-attacher
+          image: registry.k8s.io/sig-storage/csi-attacher:v4.6.1
+          args:
+            - --csi-address=$(ADDRESS)
+            - --v=5
+            - --timeout=5m
+            - --leader-election
+          env:
+            - name: ADDRESS
+              value: /var/lib/csi/sockets/plugin.io/csi.sock
+          volumeMounts:
+            - name: socket-dir
+              mountPath: /var/lib/csi/sockets/plugin.io
+        - name: csi-snapshotter
+          image: registry.k8s.io/sig-storage/csi-snapshotter:v6.3.0
+          args:
+            - --csi-address=$(ADDRESS)
+            - --v=5
+            - --timeout=5m
+            - --leader-election
+          env:
+            - name: ADDRESS
+              value: /var/lib/csi/sockets/plugin.io/csi.sock
+          volumeMounts:
+            - name: socket-dir
+              mountPath: /var/lib/csi/sockets/plugin.io
+        - name: csi-resizer
+          image: registry.k8s.io/sig-storage/csi-resizer:v1.11.1
+          args:
+            - --csi-address=$(ADDRESS)
+            - --v=5
+            - --timeout=5m
+            - --leader-election
+            - --handle-volume-inuse-error=true
+          env:
+            - name: ADDRESS
+              value: /var/lib/csi/sockets/plugin.io/csi.sock
+          volumeMounts:
+            - name: socket-dir
+              mountPath: /var/lib/csi/sockets/plugin.io
+        - name: cloudstack-csi-driver
+          image: ghcr.io/cloudstack/cloudstack-csi-driver:main
+          args:
+            - controller
+            - --endpoint=$(CSI_ENDPOINT)
+            - --cloudstack-config=/etc/cloudstack-csi-driver/cloud-config
+            - --logging-format=text
+            - --v=4
+          env:
+            - name: CSI_ENDPOINT
+              value: unix:///var/lib/csi/sockets/plugin.io/csi.sock
+          volumeMounts:
+            - name: socket-dir
+              mountPath: /var/lib/csi/sockets/plugin.io
+            - name: cloudstack-conf
+              mountPath: /etc/cloudstack-csi-driver
+      volumes:
+        - name: socket-dir
+          emptyDir: {}
+        - name: cloudstack-conf
+          secret:
+            secretName: cloudstack-secret
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: cloudstack-csi-node
+  namespace: kube-system
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: cloudstack-csi-node
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: cloudstack-csi-node
+    spec:
+      serviceAccountName: cloudstack-csi-node
+      hostNetwork: true
+      containers:
+        - name: cloudstack-csi-driver
+          image: ghcr.io/cloudstack/cloudstack-csi-driver:main
+          args:
+            - node
+            - --endpoint=$(CSI_ENDPOINT)
+            - --cloudstack-config=/etc/cloudstack-csi-driver/cloud-config
+            - --logging-format=text
+            - --node-name=$(NODE_NAME)
+            - --v=4
+          env:
+            - name: CSI_ENDPOINT
+              value: unix:///csi/csi.sock
+            - name: NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+          securityContext:
+            privileged: true
+          volumeMounts:
+            - name: plugin-dir
+              mountPath: /csi
+            - name: kubelet-dir
+              mountPath: /var/lib/kubelet
+              mountPropagation: Bidirectional
+            - name: device-dir
+              mountPath: /dev
+            - name: cloudstack-conf
+              mountPath: /etc/cloudstack-csi-driver
+        - name: node-driver-registrar
+          image: registry.k8s.io/sig-storage/csi-node-driver-registrar:v2.10.1
+          args:
+            - --csi-address=$(ADDRESS)
+            - --kubelet-registration-path=$(DRIVER_REG_SOCK_PATH)
+            - --v=5
+          env:
+            - name: ADDRESS
+              value: /csi/csi.sock
+            - name: DRIVER_REG_SOCK_PATH
+              value: /var/lib/kubelet/plugins/csi.cloudstack.apache.org/csi.sock
+          volumeMounts:
+            - name: plugin-dir
+              mountPath: /csi
+            - name: registration-dir
+              mountPath: /registration
+      volumes:
+        - name: plugin-dir
+          hostPath:
+            path: /var/lib/kubelet/plugins/csi.cloudstack.apache.org/
+            type: DirectoryOrCreate
+        - name: registration-dir
+          hostPath:
+            path: /var/lib/kubelet/plugins_registry/
+            type: Directory
+        - name: kubelet-dir
+          hostPath:
+            path: /var/lib/kubelet
+            type: Directory
+        - name: device-dir
+          hostPath:
+            path: /dev
+            type: Directory
+        - name: cloudstack-conf
+          secret:
+            secretName: cloudstack-secret
+---
+apiVersion: storage.k8s.io/v1
+kind: CSIDriver
+metadata:
+  name: csi.cloudstack.apache.org
+spec:
+  attachRequired: true
+  podInfoOnMount: true
+  fsGroupPolicy: File
+  volumeLifecycleModes:
+    - Persistent
+    - Ephemeral
+---
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: cloudstack-ssd
+provisioner: csi.cloudstack.apache.org
+parameters:
+  csi.cloudstack.apache.org/disk-offering-id: "<disk-offering-uuid>"
+volumeBindingMode: WaitForFirstConsumer
+reclaimPolicy: Delete

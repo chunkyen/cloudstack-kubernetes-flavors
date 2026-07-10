@@ -1,0 +1,29 @@
+# Base: Cluster infrastructure + addons
+# Override cluster-specific values in overlays/<name>/kustomization.yaml
+
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: capc-cluster-1
+
+resources:
+  - namespace.yaml
+  - cloudstack-credentials.yaml
+  - cluster-infra.yaml
+  - control-plane.yaml
+  - workers.yaml
+  - cluster-resource-set.yaml
+
+# Auto-generate ConfigMap from addon files
+configMapGenerator:
+  - name: capc-cluster-1-addons
+    options:
+      disableNameSuffixHash: true
+    files:
+      - addons/calico.yaml
+      - addons/ccm.yaml
+      - addons/csi.yaml
+
+# Labels applied to all resources
+commonLabels:
+  capc-one-shot: "full-stack"
