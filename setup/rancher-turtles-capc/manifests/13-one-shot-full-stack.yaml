@@ -8,7 +8,7 @@
 #
 # This is the CAPC equivalent of CKS's "one ISO, everything works" experience.
 #
-# CNI (Calico/Cilium), CCM, and CSI are all installed automatically via
+# CNI (Calico), CCM, and CSI are all installed automatically via
 # ClusterResourceSet (see Step 3 in full-stack-onboarding.md).
 #
 # IMPORTANT: Replace ALL of the following before applying:
@@ -37,9 +37,6 @@
 #
 # 8. <api-key> / <secret-key>  — CloudStack API credentials
 #    Get from CloudStack UI → Account → API Key
-#
-# 9. <disk-offering-uuid>   — CloudStack disk offering UUID for CSI
-#    List offerings: cmk list diskofferings listall=true
 #
 # ---
 # Usage:
@@ -228,123 +225,560 @@ metadata:
   labels:
     capc-one-shot: "full-stack"
 data:
-  # ─── CNI: Calico ───────────────────────────────────────────────
+  # ─── CNI: Calico v3.28.0 (official manifest, compact) ──────────
+  # Source: https://raw.githubusercontent.com/projectcalico/calico/v3.28.0/manifests/calico.yaml
+  # Note: This is a compact subset. For production, apply the full official manifest.
   cni-calico.yaml: |
-    apiVersion: policy/v1
-    kind: PodDisruptionBudget
+    # Calico CRDs
+    apiVersion: apiextensions.k8s.io/v1
+    kind: CustomResourceDefinition
     metadata:
-      name: calico-pdb
-      namespace: kube-system
+      name: ippools.crd.projectcalico.org
     spec:
-      minAvailable: 75%
-      selector:
-        matchLabels:
-          k8s-app: calico-node
+      group: crd.projectcalico.org
+      names:
+        kind: IPPool
+        listKind: IPPoolList
+        plural: ippools
+        singular: ippool
+      scope: Cluster
+      versions:
+        - name: v1
+          schema:
+            openAPIV3Schema:
+              type: object
+              properties:
+                spec:
+                  type: object
+                  properties:
+                    cidr:
+                      type: string
+                    ipipMode:
+                      type: string
+                      enum: [Always, CrossSubnet, Never]
+                    natOutgoing:
+                      type: boolean
+                    nodeSelector:
+                      type: string
+                    vxlanMode:
+                      type: string
+                      enum: [Always, CrossSubnet, Never]
+          served: true
+          storage: true
     ---
+    apiVersion: apiextensions.k8s.io/v1
+    kind: CustomResourceDefinition
+    metadata:
+      name: felixconfigurations.crd.projectcalico.org
+    spec:
+      group: crd.projectcalico.org
+      names:
+        kind: FelixConfiguration
+        listKind: FelixConfigurationList
+        plural: felixconfigurations
+        singular: felixconfiguration
+      scope: Cluster
+      versions:
+        - name: v1
+          schema:
+            openAPIV3Schema:
+              type: object
+              properties:
+                spec:
+                  type: object
+                  x-kubernetes-preserve-unknown-fields: true
+          served: true
+          storage: true
+    ---
+    apiVersion: apiextensions.k8s.io/v1
+    kind: CustomResourceDefinition
+    metadata:
+      name: clusterinformations.crd.projectcalico.org
+    spec:
+      group: crd.projectcalico.org
+      names:
+        kind: ClusterInformation
+        listKind: ClusterInformationList
+        plural: clusterinformations
+        singular: clusterinformation
+      scope: Cluster
+      versions:
+        - name: v1
+          schema:
+            openAPIV3Schema:
+              type: object
+              properties:
+                spec:
+                  type: object
+                  properties:
+                    calicoVersion:
+                      type: string
+                    clusterGUID:
+                      type: string
+                    clusterType:
+                      type: string
+                    datastoreReady:
+                      type: boolean
+          served: true
+          storage: true
+    ---
+    apiVersion: apiextensions.k8s.io/v1
+    kind: CustomResourceDefinition
+    metadata:
+      name: bgpconfigurations.crd.projectcalico.org
+    spec:
+      group: crd.projectcalico.org
+      names:
+        kind: BGPConfiguration
+        listKind: BGPConfigurationList
+        plural: bgpconfigurations
+        singular: bgpconfiguration
+      scope: Cluster
+      versions:
+        - name: v1
+          schema:
+            openAPIV3Schema:
+              type: object
+              properties:
+                spec:
+                  type: object
+                  x-kubernetes-preserve-unknown-fields: true
+          served: true
+          storage: true
+    ---
+    apiVersion: apiextensions.k8s.io/v1
+    kind: CustomResourceDefinition
+    metadata:
+      name: bgppeers.crd.projectcalico.org
+    spec:
+      group: crd.projectcalico.org
+      names:
+        kind: BGPPeer
+        listKind: BGPPeerList
+        plural: bgppeers
+        singular: bgppeer
+      scope: Cluster
+      versions:
+        - name: v1
+          schema:
+            openAPIV3Schema:
+              type: object
+              properties:
+                spec:
+                  type: object
+                  x-kubernetes-preserve-unknown-fields: true
+          served: true
+          storage: true
+    ---
+    apiVersion: apiextensions.k8s.io/v1
+    kind: CustomResourceDefinition
+    metadata:
+      name: hostendpoints.crd.projectcalico.org
+    spec:
+      group: crd.projectcalico.org
+      names:
+        kind: HostEndpoint
+        listKind: HostEndpointList
+        plural: hostendpoints
+        singular: hostendpoint
+      scope: Cluster
+      versions:
+        - name: v1
+          schema:
+            openAPIV3Schema:
+              type: object
+              properties:
+                spec:
+                  type: object
+                  x-kubernetes-preserve-unknown-fields: true
+          served: true
+          storage: true
+    ---
+    apiVersion: apiextensions.k8s.io/v1
+    kind: CustomResourceDefinition
+    metadata:
+      name: ipamblocks.crd.projectcalico.org
+    spec:
+      group: crd.projectcalico.org
+      names:
+        kind: IPAMBlock
+        listKind: IPAMBlockList
+        plural: ipamblocks
+        singular: ipamblock
+      scope: Cluster
+      versions:
+        - name: v1
+          schema:
+            openAPIV3Schema:
+              type: object
+              properties:
+                spec:
+                  type: object
+                  x-kubernetes-preserve-unknown-fields: true
+          served: true
+          storage: true
+    ---
+    apiVersion: apiextensions.k8s.io/v1
+    kind: CustomResourceDefinition
+    metadata:
+      name: blockaffinities.crd.projectcalico.org
+    spec:
+      group: crd.projectcalico.org
+      names:
+        kind: BlockAffinity
+        listKind: BlockAffinityList
+        plural: blockaffinities
+        singular: blockaffinity
+      scope: Cluster
+      versions:
+        - name: v1
+          schema:
+            openAPIV3Schema:
+              type: object
+              properties:
+                spec:
+                  type: object
+                  x-kubernetes-preserve-unknown-fields: true
+          served: true
+          storage: true
+    ---
+    apiVersion: apiextensions.k8s.io/v1
+    kind: CustomResourceDefinition
+    metadata:
+      name: ipamhandles.crd.projectcalico.org
+    spec:
+      group: crd.projectcalico.org
+      names:
+        kind: IPAMHandle
+        listKind: IPAMHandleList
+        plural: ipamhandles
+        singular: ipamhandle
+      scope: Cluster
+      versions:
+        - name: v1
+          schema:
+            openAPIV3Schema:
+              type: object
+              properties:
+                spec:
+                  type: object
+                  x-kubernetes-preserve-unknown-fields: true
+          served: true
+          storage: true
+    ---
+    apiVersion: apiextensions.k8s.io/v1
+    kind: CustomResourceDefinition
+    metadata:
+      name: ipamconfigs.crd.projectcalico.org
+    spec:
+      group: crd.projectcalico.org
+      names:
+        kind: IPAMConfig
+        listKind: IPAMConfigList
+        plural: ipamconfigs
+        singular: ipamconfig
+      scope: Cluster
+      versions:
+        - name: v1
+          schema:
+            openAPIV3Schema:
+              type: object
+              properties:
+                spec:
+                  type: object
+                  x-kubernetes-preserve-unknown-fields: true
+          served: true
+          storage: true
+    ---
+    apiVersion: apiextensions.k8s.io/v1
+    kind: CustomResourceDefinition
+    metadata:
+      name: globalnetworkpolicies.crd.projectcalico.org
+    spec:
+      group: crd.projectcalico.org
+      names:
+        kind: GlobalNetworkPolicy
+        listKind: GlobalNetworkPolicyList
+        plural: globalnetworkpolicies
+        singular: globalnetworkpolicy
+      scope: Cluster
+      versions:
+        - name: v1
+          schema:
+            openAPIV3Schema:
+              type: object
+              properties:
+                spec:
+                  type: object
+                  x-kubernetes-preserve-unknown-fields: true
+          served: true
+          storage: true
+    ---
+    apiVersion: apiextensions.k8s.io/v1
+    kind: CustomResourceDefinition
+    metadata:
+      name: globalnetworksets.crd.projectcalico.org
+    spec:
+      group: crd.projectcalico.org
+      names:
+        kind: GlobalNetworkSet
+        listKind: GlobalNetworkSetList
+        plural: globalnetworksets
+        singular: globalnetworkset
+      scope: Cluster
+      versions:
+        - name: v1
+          schema:
+            openAPIV3Schema:
+              type: object
+              properties:
+                spec:
+                  type: object
+                  x-kubernetes-preserve-unknown-fields: true
+          served: true
+          storage: true
+    ---
+    apiVersion: apiextensions.k8s.io/v1
+    kind: CustomResourceDefinition
+    metadata:
+      name: networkpolicies.crd.projectcalico.org
+    spec:
+      group: crd.projectcalico.org
+      names:
+        kind: NetworkPolicy
+        listKind: NetworkPolicyList
+        plural: networkpolicies
+        singular: networkpolicy
+      scope: Namespaced
+      versions:
+        - name: v1
+          schema:
+            openAPIV3Schema:
+              type: object
+              properties:
+                spec:
+                  type: object
+                  x-kubernetes-preserve-unknown-fields: true
+          served: true
+          storage: true
+    ---
+    apiVersion: apiextensions.k8s.io/v1
+    kind: CustomResourceDefinition
+    metadata:
+      name: networksets.crd.projectcalico.org
+    spec:
+      group: crd.projectcalico.org
+      names:
+        kind: NetworkSet
+        listKind: NetworkSetList
+        plural: networksets
+        singular: networkset
+      scope: Namespaced
+      versions:
+        - name: v1
+          schema:
+            openAPIV3Schema:
+              type: object
+              properties:
+                spec:
+                  type: object
+                  x-kubernetes-preserve-unknown-fields: true
+          served: true
+          storage: true
+    ---
+    # Calico ServiceAccounts
     apiVersion: v1
     kind: ServiceAccount
     metadata:
       name: calico-node
       namespace: kube-system
-      labels:
-        k8s-app: calico-node
-    ---
-    # Calico node DaemonSet
-    apiVersion: apps/v1
-    kind: DaemonSet
-    metadata:
-      name: calico-node
-      namespace: kube-system
-      labels:
-        k8s-app: calico-node
-    spec:
-      selector:
-        matchLabels:
-          k8s-app: calico-node
-      template:
-        metadata:
-          labels:
-            k8s-app: calico-node
-        spec:
-          nodeSelector:
-            kubernetes.io/os: linux
-          hostNetwork: true
-          tolerations:
-            - operator: Exists
-              effect: NoExecute
-            - operator: Exists
-              effect: NoSchedule
-          serviceAccountName: calico-node
-          containers:
-            - name: calico-node
-              image: docker.io/calico/node:v3.28.0
-              env:
-                - name: DATASTORE_TYPE
-                  value: "kubernetes"
-                - name: NODE_NODE_NAME
-                  valueFrom:
-                    fieldRef:
-                      fieldPath: spec.nodeName
-                - name: CALICO_IPV4POOL_IPIP
-                  value: "Always"
-                - name: FELIX_IPINIPMTU
-                  value: "1440"
-              securityContext:
-                privileged: true
-              volumeMounts:
-                - name: calico-cni
-                  mountPath: /host/etc/cni/net.d
-                - name: lib-modules
-                  mountPath: /lib/modules
-                  readOnly: true
-                - name: xtables-lock
-                  mountPath: /run/xtables.lock
-                  readOnly: false
-          volumes:
-            - name: calico-cni
-              hostPath:
-                path: /etc/cni/net.d
-            - name: lib-modules
-              hostPath:
-                path: /lib/modules
-            - name: xtables-lock
-              hostPath:
-                path: /run/xtables.lock
-                type: FileOrCreate
     ---
     apiVersion: v1
     kind: ServiceAccount
     metadata:
       name: calico-kube-controllers
       namespace: kube-system
-      labels:
-        k8s-app: calico-kube-controllers
     ---
-    apiVersion: apps/v1
-    kind: Deployment
+    # Calico ClusterRoles (full permissions matching official manifest)
+    apiVersion: rbac.authorization.k8s.io/v1
+    kind: ClusterRole
+    metadata:
+      name: calico-node
+    rules:
+      - apiGroups: [""]
+        resources:
+          - pods
+          - nodes
+          - namespaces
+          - configmaps
+          - serviceaccounts
+        verbs:
+          - get
+      - apiGroups: [""]
+        resources:
+          - pods/status
+          - nodes/status
+        verbs:
+          - update
+          - patch
+      - apiGroups: [""]
+        resources:
+          - endpoints
+          - services
+        verbs:
+          - get
+          - list
+          - watch
+      - apiGroups: [""]
+        resources:
+          - nodes
+        verbs:
+          - get
+          - list
+          - watch
+          - update
+          - patch
+      - apiGroups: ["networking.k8s.io"]
+        resources:
+          - networkpolicies
+        verbs:
+          - get
+          - list
+          - watch
+      - apiGroups: [""]
+        resources:
+          - pods
+          - namespaces
+          - serviceaccounts
+        verbs:
+          - get
+          - list
+          - watch
+      - apiGroups: [""]
+        resources:
+          - configmaps
+        verbs:
+          - get
+      - apiGroups: ["discovery.k8s.io"]
+        resources:
+          - endpointslices
+        verbs:
+          - get
+          - list
+          - watch
+      - apiGroups: ["crd.projectcalico.org"]
+        resources:
+          - globalfelixconfigs
+          - felixconfigurations
+          - bgppeers
+          - globalbgpconfigs
+          - bgpconfigurations
+          - ippools
+          - ipamblocks
+          - ipamhandles
+          - ipamconfigs
+          - blockaffinities
+          - clusterinformations
+          - hostendpoints
+          - caliconodestatuses
+        verbs:
+          - get
+          - list
+          - watch
+          - create
+          - update
+          - patch
+          - delete
+      - apiGroups: ["crd.projectcalico.org"]
+        resources:
+          - ipreservations
+        verbs:
+          - list
+      - apiGroups: ["crd.projectcalico.org"]
+        resources:
+          - globalnetworksets
+          - globalnetworkpolicies
+        verbs:
+          - get
+          - list
+          - watch
+      - apiGroups: ["crd.projectcalico.org"]
+        resources:
+          - tier.globalnetworkpolicies
+          - tier.globalnetworksets
+        verbs:
+          - get
+          - list
+          - watch
+    ---
+    apiVersion: rbac.authorization.k8s.io/v1
+    kind: ClusterRole
     metadata:
       name: calico-kube-controllers
-      namespace: kube-system
-      labels:
-        k8s-app: calico-kube-controllers
-    spec:
-      replicas: 1
-      selector:
-        matchLabels:
-          k8s-app: calico-kube-controllers
-      template:
-        metadata:
-          labels:
-            k8s-app: calico-kube-controllers
-        spec:
-          tolerations:
-            - operator: Exists
-              effect: NoSchedule
-          serviceAccountName: calico-kube-controllers
-          containers:
-            - name: calico-kube-controllers
-              image: docker.io/calico/kube-controllers:v3.28.0
+    rules:
+      - apiGroups: [""]
+        resources:
+          - nodes
+          - pods
+          - namespaces
+          - serviceaccounts
+        verbs:
+          - get
+          - list
+          - watch
+      - apiGroups: ["networking.k8s.io"]
+        resources:
+          - networkpolicies
+        verbs:
+          - get
+          - list
+          - watch
+      - apiGroups: ["crd.projectcalico.org"]
+        resources:
+          - globalfelixconfigs
+          - felixconfigurations
+          - bgppeers
+          - globalbgpconfigs
+          - bgpconfigurations
+          - ippools
+          - ipamblocks
+          - ipamhandles
+          - ipamconfigs
+          - blockaffinities
+          - clusterinformations
+          - hostendpoints
+          - caliconodestatuses
+        verbs:
+          - get
+          - list
+          - watch
+      - apiGroups: ["crd.projectcalico.org"]
+        resources:
+          - globalnetworkpolicies
+          - globalnetworksets
+          - networkpolicies
+          - networksets
+        verbs:
+          - get
+          - list
+          - watch
+      - apiGroups: [""]
+        resources:
+          - endpoints
+          - services
+        verbs:
+          - get
+          - list
+          - watch
+      - apiGroups: ["discovery.k8s.io"]
+        resources:
+          - endpointslices
+        verbs:
+          - get
+          - list
+          - watch
     ---
+    # Calico ClusterRoleBindings
     apiVersion: rbac.authorization.k8s.io/v1
     kind: ClusterRoleBinding
     metadata:
@@ -359,15 +793,6 @@ data:
         namespace: kube-system
     ---
     apiVersion: rbac.authorization.k8s.io/v1
-    kind: ClusterRole
-    metadata:
-      name: calico-node
-    rules:
-      - apiGroups: [""]
-        resources: ["nodes", "profiles"]
-        verbs: ["get"]
-    ---
-    apiVersion: rbac.authorization.k8s.io/v1
     kind: ClusterRoleBinding
     metadata:
       name: calico-kube-controllers
@@ -380,14 +805,159 @@ data:
         name: calico-kube-controllers
         namespace: kube-system
     ---
-    apiVersion: rbac.authorization.k8s.io/v1
-    kind: ClusterRole
+    # Calico DaemonSet
+    apiVersion: apps/v1
+    kind: DaemonSet
+    metadata:
+      name: calico-node
+      namespace: kube-system
+      labels:
+        k8s-app: calico-node
+    spec:
+      selector:
+        matchLabels:
+          k8s-app: calico-node
+      updateStrategy:
+        type: RollingUpdate
+        rollingUpdate:
+          maxUnavailable: 1
+      template:
+        metadata:
+          labels:
+            k8s-app: calico-node
+        spec:
+          nodeSelector:
+            kubernetes.io/os: linux
+          hostNetwork: true
+          tolerations:
+            - effect: NoSchedule
+              operator: Exists
+            - effect: NoExecute
+              operator: Exists
+            - key: CriticalAddonsOnly
+              operator: Exists
+          serviceAccountName: calico-node
+          priorityClassName: system-node-critical
+          containers:
+            - name: calico-node
+              image: docker.io/calico/node:v3.28.0
+              env:
+                - name: DATASTORE_TYPE
+                  value: kubernetes
+                - name: WAIT_FOR_DATASTORE
+                  value: "true"
+                - name: NODENAME
+                  valueFrom:
+                    fieldRef:
+                      fieldPath: spec.nodeName
+                - name: CALICO_NETWORKING_BACKEND
+                  value: bird
+                - name: CLUSTER_TYPE
+                  value: "k8s,bgp"
+                - name: IP
+                  value: autodetect
+                - name: CALICO_IPV4POOL_IPIP
+                  value: Always
+                - name: FELIX_IPINIPMTU
+                  value: "1440"
+                - name: CALICO_IPV4POOL_CIDR
+                  value: "10.168.0.0/16"
+                - name: CALICO_DISABLE_FILE_LOGGING
+                  value: "true"
+                - name: FELIX_DEFAULTENDPOINTTOHOSTACTION
+                  value: ACCEPT
+                - name: FELIX_IPV6SUPPORT
+                  value: "false"
+                - name: FELIX_HEALTHENABLED
+                  value: "true"
+              securityContext:
+                privileged: true
+              resources:
+                requests:
+                  cpu: 250m
+              livenessProbe:
+                exec:
+                  command:
+                    - /bin/calico-node
+                    - -felix-live
+                    - -bird-live
+                periodSeconds: 10
+                initialDelaySeconds: 10
+                failureThreshold: 6
+                timeoutSeconds: 10
+              readinessProbe:
+                exec:
+                  command:
+                    - /bin/calico-node
+                    - -felix-ready
+                    - -bird-ready
+                periodSeconds: 10
+                timeoutSeconds: 10
+              volumeMounts:
+                - mountPath: /var/lib/calico
+                  name: var-lib-calico
+                  readOnly: false
+                - mountPath: /var/run/calico
+                  name: var-run-calico
+                  readOnly: false
+                - mountPath: /var/log/calico
+                  name: var-log-calico
+                  readOnly: false
+          volumes:
+            - name: var-lib-calico
+              hostPath:
+                path: /var/lib/calico
+            - name: var-run-calico
+              hostPath:
+                path: /var/run/calico
+            - name: var-log-calico
+              hostPath:
+                path: /var/log/calico
+    ---
+    # Calico kube-controllers Deployment
+    apiVersion: apps/v1
+    kind: Deployment
     metadata:
       name: calico-kube-controllers
-    rules:
-      - apiGroups: [""]
-        resources: ["nodes"]
-        verbs: ["list", "watch"]
+      namespace: kube-system
+      labels:
+        k8s-app: calico-kube-controllers
+    spec:
+      replicas: 1
+      selector:
+        matchLabels:
+          k8s-app: calico-kube-controllers
+      strategy:
+        type: Recreate
+      template:
+        metadata:
+          name: calico-kube-controllers
+          namespace: kube-system
+          labels:
+            k8s-app: calico-kube-controllers
+        spec:
+          nodeSelector:
+            kubernetes.io/os: linux
+          tolerations:
+            - key: CriticalAddonsOnly
+              operator: Exists
+            - effect: NoSchedule
+              operator: Exists
+          serviceAccountName: calico-kube-controllers
+          priorityClassName: system-cluster-critical
+          containers:
+            - name: calico-kube-controllers
+              image: docker.io/calico/kube-controllers:v3.28.0
+              env:
+                - name: ENABLED_CONTROLLERS
+                  value: node
+                - name: DATASTORE_TYPE
+                  value: kubernetes
+              readinessProbe:
+                exec:
+                  command:
+                    - /usr/bin/check-status
+                    - -r
 
   # ─── CCM: CloudStack Kubernetes Provider ───────────────────────
   ccm-secret.yaml: |
@@ -404,7 +974,7 @@ data:
         api-key = "<api-key>"
         secret-key = "<secret-key>"
         ssl-no-verify = "false"
-  ccm-deployment.yaml: |
+  ccm-rbac.yaml: |
     apiVersion: v1
     kind: ServiceAccount
     metadata:
@@ -439,6 +1009,34 @@ data:
         name: cloudstack-ccm
         namespace: kube-system
     ---
+    # Role for kube-system namespace (configmaps + leases for leader election)
+    apiVersion: rbac.authorization.k8s.io/v1
+    kind: Role
+    metadata:
+      name: cloudstack-ccm
+      namespace: kube-system
+    rules:
+      - apiGroups: [""]
+        resources: ["configmaps"]
+        verbs: ["get", "list", "watch"]
+      - apiGroups: ["coordination.k8s.io"]
+        resources: ["leases"]
+        verbs: ["get", "list", "watch", "create", "update", "patch"]
+    ---
+    apiVersion: rbac.authorization.k8s.io/v1
+    kind: RoleBinding
+    metadata:
+      name: cloudstack-ccm
+      namespace: kube-system
+    roleRef:
+      apiGroup: rbac.authorization.k8s.io
+      kind: Role
+      name: cloudstack-ccm
+    subjects:
+      - kind: ServiceAccount
+        name: cloudstack-ccm
+        namespace: kube-system
+  ccm-deployment.yaml: |
     apiVersion: apps/v1
     kind: Deployment
     metadata:
@@ -459,7 +1057,7 @@ data:
           serviceAccountName: cloudstack-ccm
           containers:
             - name: cloudstack-ccm
-              image: apachecloudstack/cloudstack-kubernetes-provider:latest
+              image: apache/cloudstack-kubernetes-provider:latest
               args:
                 - --cloud-provider=external-cloudstack
                 - --cloud-config=/etc/kubernetes/cloud-config/cloud-config
@@ -471,12 +1069,13 @@ data:
               secret:
                 secretName: cloudstack-ccm-secret
 
-  # ─── CSI: CloudStack CSI Driver (patched for CAPC images) ──────
+  # ─── CSI: CloudStack CSI Driver ────────────────────────────────
+  # Source: https://github.com/cloudstack/cloudstack-csi-driver (main branch)
   csi-secret.yaml: |
     apiVersion: v1
     kind: Secret
     metadata:
-      name: cloudstack-csi-secret
+      name: cloudstack-secret
       namespace: kube-system
     type: Opaque
     stringData:
@@ -486,136 +1085,552 @@ data:
         api-key = "<api-key>"
         secret-key = "<secret-key>"
         ssl-no-verify = "false"
-  csi-snapshot-crd.yaml: |
-    # VolumeSnapshot CRDs — download from:
-    # https://github.com/kubernetes-csi/external-snapshotter/tree/v8.3.0/client/config/crd
-    apiVersion: snapshot.storage.k8s.io/v1
-    kind: VolumeSnapshotClass
+  csi-snapshot-crds.yaml: |
+    apiVersion: apiextensions.k8s.io/v1
+    kind: CustomResourceDefinition
     metadata:
-      name: cloudstack-snapshot-class
-      annotations:
-        snapshot.storage.kubernetes.io/is-default-class: "false"
-    driver: csi.cloudstack.apache.org
-    deletionPolicy: Delete
-  csi-driver.yaml: |
-    # CSI driver — patched for CAPC images (hostPath: /var/lib/kubelet)
+      name: volumesnapshotclasses.snapshot.storage.k8s.io
+    spec:
+      group: snapshot.storage.k8s.io
+      names:
+        kind: VolumeSnapshotClass
+        listKind: VolumeSnapshotClassList
+        plural: volumesnapshotclasses
+        shortNames:
+          - vsclass
+          - vsclasses
+        singular: volumesnapshotclass
+      scope: Cluster
+      versions:
+        - additionalPrinterColumns:
+            - jsonPath: .driver
+              name: Driver
+              type: string
+            - description: Determines whether a VolumeSnapshotContent created through the VolumeSnapshotClass should be deleted when its bound VolumeSnapshot is deleted.
+              jsonPath: .deletionPolicy
+              name: DeletionPolicy
+              type: string
+            - jsonPath: .metadata.creationTimestamp
+              name: Age
+              type: date
+          name: v1
+          schema:
+            openAPIV3Schema:
+              type: object
+              properties:
+                deletionPolicy:
+                  type: string
+                  enum: [Delete, Retain]
+                driver:
+                  type: string
+                parameters:
+                  type: object
+                  additionalProperties:
+                    type: string
+          served: true
+          storage: true
+          subresources: {}
+    ---
+    apiVersion: apiextensions.k8s.io/v1
+    kind: CustomResourceDefinition
+    metadata:
+      name: volumesnapshotcontents.snapshot.storage.k8s.io
+    spec:
+      group: snapshot.storage.k8s.io
+      names:
+        kind: VolumeSnapshotContent
+        listKind: VolumeSnapshotContentList
+        plural: volumesnapshotcontents
+        shortNames:
+          - vsc
+          - vscs
+        singular: volumesnapshotcontent
+      scope: Cluster
+      versions:
+        - additionalPrinterColumns:
+            - description: Indicates if the snapshot is ready to be used to restore a volume.
+              jsonPath: .status.readyToUse
+              name: ReadyToUse
+              type: boolean
+            - description: Represents the complete size of the snapshot in bytes
+              jsonPath: .status.restoreSize
+              name: RestoreSize
+              type: integer
+            - description: Determines whether this VolumeSnapshotContent and its physical snapshot on the underlying storage system should be deleted when its bound VolumeSnapshot is deleted.
+              jsonPath: .spec.deletionPolicy
+              name: DeletionPolicy
+              type: string
+            - description: Name of the CSI driver used to create the physical snapshot on the underlying storage system.
+              jsonPath: .spec.driver
+              name: Driver
+              type: string
+            - description: Name of the VolumeSnapshotClass to which this snapshot belongs.
+              jsonPath: .spec.volumeSnapshotClassName
+              name: VolumeSnapshotClass
+              type: string
+            - description: Name of the VolumeSnapshot object to which this VolumeSnapshotContent object is bound.
+              jsonPath: .spec.volumeSnapshotRef.name
+              name: VolumeSnapshot
+              type: string
+            - description: Namespace of the VolumeSnapshot object to which this VolumeSnapshotContent object is bound.
+              jsonPath: .spec.volumeSnapshotRef.namespace
+              name: VolumeSnapshotNamespace
+              type: string
+            - jsonPath: .metadata.creationTimestamp
+              name: Age
+              type: date
+          name: v1
+          schema:
+            openAPIV3Schema:
+              type: object
+              properties:
+                spec:
+                  type: object
+                  properties:
+                    deletionPolicy:
+                      type: string
+                      enum: [Delete, Retain]
+                    driver:
+                      type: string
+                    source:
+                      type: object
+                      properties:
+                        snapshotHandle:
+                          type: string
+                        volumeHandle:
+                          type: string
+                    sourceVolumeMode:
+                      type: string
+                    volumeSnapshotClassName:
+                      type: string
+                    volumeSnapshotRef:
+                      type: object
+                      properties:
+                        apiVersion:
+                          type: string
+                        fieldPath:
+                          type: string
+                        kind:
+                          type: string
+                        name:
+                          type: string
+                        namespace:
+                          type: string
+                status:
+                  type: object
+                  properties:
+                    creationTime:
+                      type: integer
+                    error:
+                      type: object
+                      properties:
+                        message:
+                          type: string
+                        time:
+                          type: string
+                    readyToUse:
+                      type: boolean
+                    restoreSize:
+                      type: integer
+                    snapshotHandle:
+                      type: string
+          served: true
+          storage: true
+          subresources:
+            status: {}
+    ---
+    apiVersion: apiextensions.k8s.io/v1
+    kind: CustomResourceDefinition
+    metadata:
+      name: volumesnapshots.snapshot.storage.k8s.io
+    spec:
+      group: snapshot.storage.k8s.io
+      names:
+        kind: VolumeSnapshot
+        listKind: VolumeSnapshotList
+        plural: volumesnapshots
+        shortNames:
+          - vs
+        singular: volumesnapshot
+      scope: Namespaced
+      versions:
+        - additionalPrinterColumns:
+            - description: Indicates if the snapshot is ready to be used to restore a volume.
+              jsonPath: .status.readyToUse
+              name: ReadyToUse
+              type: boolean
+            - description: If a new snapshot needs to be created, the name of the source PVC from which this snapshot was (or will be) created.
+              jsonPath: .spec.source.persistentVolumeClaimName
+              name: SourcePVC
+              type: string
+            - description: If a snapshot already exists, the name of the source VolumeSnapshotContent from which this snapshot was (or will be) created.
+              jsonPath: .spec.source.volumeSnapshotContentName
+              name: SourceSnapshotContent
+              type: string
+            - description: Represents the minimum size of the underlying volume required to re-create a volume from this snapshot.
+              jsonPath: .status.restoreSize
+              name: RestoreSize
+              type: string
+            - description: The name of the VolumeSnapshotClass requested by the VolumeSnapshot.
+              jsonPath: .spec.volumeSnapshotClassName
+              name: SnapshotClass
+              type: string
+            - description: Name of the VolumeSnapshotContent object to which the VolumeSnapshot object intends to bind to.
+              jsonPath: .status.boundVolumeSnapshotContentName
+              name: SnapshotContent
+              type: string
+            - description: Timestamp when the point-in-time snapshot was taken by the underlying storage system.
+              jsonPath: .status.creationTime
+              name: CreationTime
+              type: date
+            - jsonPath: .metadata.creationTimestamp
+              name: Age
+              type: date
+          name: v1
+          schema:
+            openAPIV3Schema:
+              type: object
+              properties:
+                spec:
+                  type: object
+                  properties:
+                    source:
+                      type: object
+                      properties:
+                        persistentVolumeClaimName:
+                          type: string
+                        volumeSnapshotContentName:
+                          type: string
+                    volumeSnapshotClassName:
+                      type: string
+                status:
+                  type: object
+                  properties:
+                    boundVolumeSnapshotContentName:
+                      type: string
+                    creationTime:
+                      type: string
+                    error:
+                      type: object
+                      properties:
+                        message:
+                          type: string
+                        time:
+                          type: string
+                    readyToUse:
+                      type: boolean
+                    restoreSize:
+                      type: string
+          served: true
+          storage: true
+          subresources:
+            status: {}
+  csi-rbac.yaml: |
+    apiVersion: v1
+    kind: ServiceAccount
+    metadata:
+      name: cloudstack-csi-controller
+      namespace: kube-system
+    ---
+    apiVersion: v1
+    kind: ServiceAccount
+    metadata:
+      name: cloudstack-csi-node
+      namespace: kube-system
+    ---
+    apiVersion: rbac.authorization.k8s.io/v1
+    kind: ClusterRole
+    metadata:
+      name: cloudstack-csi-controller-role
+    rules:
+      - apiGroups: [""]
+        resources: ["persistentvolumes"]
+        verbs: ["get", "list", "watch", "create", "delete", "update", "patch"]
+      - apiGroups: [""]
+        resources: ["persistentvolumeclaims"]
+        verbs: ["get", "list", "watch", "update", "patch"]
+      - apiGroups: [""]
+        resources: ["persistentvolumeclaims/status"]
+        verbs: ["update", "patch"]
+      - apiGroups: ["storage.k8s.io"]
+        resources: ["storageclasses"]
+        verbs: ["get", "list", "watch"]
+      - apiGroups: ["storage.k8s.io"]
+        resources: ["csinodes"]
+        verbs: ["get", "list", "watch"]
+      - apiGroups: [""]
+        resources: ["events"]
+        verbs: ["list", "watch", "create", "update", "patch"]
+      - apiGroups: ["snapshot.storage.k8s.io"]
+        resources: ["volumesnapshotclasses"]
+        verbs: ["get", "list", "watch"]
+      - apiGroups: ["snapshot.storage.k8s.io"]
+        resources: ["volumesnapshotcontents"]
+        verbs: ["create", "get", "list", "watch", "update", "delete", "patch"]
+      - apiGroups: ["snapshot.storage.k8s.io"]
+        resources: ["volumesnapshotcontents/status"]
+        verbs: ["update", "patch"]
+      - apiGroups: ["snapshot.storage.k8s.io"]
+        resources: ["volumesnapshots"]
+        verbs: ["get", "list", "watch", "update", "patch"]
+      - apiGroups: ["snapshot.storage.k8s.io"]
+        resources: ["volumesnapshots/status"]
+        verbs: ["update", "patch"]
+      - apiGroups: ["storage.k8s.io"]
+        resources: ["volumeattachments"]
+        verbs: ["get", "list", "watch", "update", "patch"]
+      - apiGroups: ["storage.k8s.io"]
+        resources: ["volumeattachments/status"]
+        verbs: ["patch"]
+      - apiGroups: [""]
+        resources: ["nodes"]
+        verbs: ["get", "list", "watch"]
+      - apiGroups: ["storage.k8s.io"]
+        resources: ["csistoragecapacities"]
+        verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+      - apiGroups: [""]
+        resources: ["pods"]
+        verbs: ["get"]
+      - apiGroups: ["apps"]
+        resources: ["replicasets"]
+        verbs: ["get"]
+    ---
+    apiVersion: rbac.authorization.k8s.io/v1
+    kind: ClusterRoleBinding
+    metadata:
+      name: cloudstack-csi-controller-binding
+    roleRef:
+      apiGroup: rbac.authorization.k8s.io
+      kind: ClusterRole
+      name: cloudstack-csi-controller-role
+    subjects:
+      - kind: ServiceAccount
+        name: cloudstack-csi-controller
+        namespace: kube-system
+    ---
+    apiVersion: rbac.authorization.k8s.io/v1
+    kind: ClusterRole
+    metadata:
+      name: cloudstack-csi-node-role
+    rules:
+      - apiGroups: [""]
+        resources: ["persistentvolumes"]
+        verbs: ["get", "list", "watch", "update", "patch"]
+      - apiGroups: [""]
+        resources: ["nodes"]
+        verbs: ["get", "list", "watch", "update", "patch"]
+      - apiGroups: ["storage.k8s.io"]
+        resources: ["csinodes"]
+        verbs: ["get", "list", "watch", "update", "patch"]
+      - apiGroups: ["storage.k8s.io"]
+        resources: ["volumeattachments"]
+        verbs: ["get", "list", "watch", "update", "patch"]
+      - apiGroups: [""]
+        resources: ["events"]
+        verbs: ["get", "list", "watch", "create", "update", "patch"]
+    ---
+    apiVersion: rbac.authorization.k8s.io/v1
+    kind: ClusterRoleBinding
+    metadata:
+      name: cloudstack-csi-node-binding
+    roleRef:
+      apiGroup: rbac.authorization.k8s.io
+      kind: ClusterRole
+      name: cloudstack-csi-node-role
+    subjects:
+      - kind: ServiceAccount
+        name: cloudstack-csi-node
+        namespace: kube-system
+  csi-controller.yaml: |
     apiVersion: apps/v1
     kind: Deployment
     metadata:
       name: cloudstack-csi-controller
       namespace: kube-system
-      labels:
-        app: cloudstack-csi
     spec:
-      replicas: 1
+      replicas: 2
       selector:
         matchLabels:
-          app: cloudstack-csi-controller
+          app.kubernetes.io/name: cloudstack-csi-controller
       template:
         metadata:
           labels:
-            app: cloudstack-csi-controller
+            app.kubernetes.io/name: cloudstack-csi-controller
         spec:
-          serviceAccountName: cloudstack-csi-controller-sa
+          serviceAccountName: cloudstack-csi-controller
           containers:
-            - name: cloudstack-csi-controller
-              image: apachecloudstack/cloudstack-csi-driver:latest
+            - name: csi-provisioner
+              image: registry.k8s.io/sig-storage/csi-provisioner:v5.0.1
               args:
-                - --endpoint=$(CSI_ENDPOINT)
-                - --cloud-config=/etc/cloudstack/config/cloud-config
+                - --csi-address=$(ADDRESS)
+                - --v=5
+                - --timeout=5m
+                - --feature-gates=Topology=true
+                - --extra-create-metadata
+                - --leader-election
+                - --default-fstype=ext4
               env:
-                - name: CSI_ENDPOINT
-                  value: "unix:///var/lib/csi/sockets/plugin.io/csi.sock"
+                - name: ADDRESS
+                  value: /var/lib/csi/sockets/plugin.io/csi.sock
               volumeMounts:
-                - name: cloud-config
-                  mountPath: /etc/cloudstack/config
                 - name: socket-dir
                   mountPath: /var/lib/csi/sockets/plugin.io
+            - name: csi-attacher
+              image: registry.k8s.io/sig-storage/csi-attacher:v4.6.1
+              args:
+                - --csi-address=$(ADDRESS)
+                - --v=5
+                - --timeout=5m
+                - --leader-election
+              env:
+                - name: ADDRESS
+                  value: /var/lib/csi/sockets/plugin.io/csi.sock
+              volumeMounts:
+                - name: socket-dir
+                  mountPath: /var/lib/csi/sockets/plugin.io
+            - name: csi-snapshotter
+              image: registry.k8s.io/sig-storage/csi-snapshotter:v6.3.0
+              args:
+                - --csi-address=$(ADDRESS)
+                - --v=5
+                - --timeout=5m
+                - --leader-election
+              env:
+                - name: ADDRESS
+                  value: /var/lib/csi/sockets/plugin.io/csi.sock
+              volumeMounts:
+                - name: socket-dir
+                  mountPath: /var/lib/csi/sockets/plugin.io
+            - name: csi-resizer
+              image: registry.k8s.io/sig-storage/csi-resizer:v1.11.1
+              args:
+                - --csi-address=$(ADDRESS)
+                - --v=5
+                - --timeout=5m
+                - --leader-election
+                - --handle-volume-inuse-error=true
+              env:
+                - name: ADDRESS
+                  value: /var/lib/csi/sockets/plugin.io/csi.sock
+              volumeMounts:
+                - name: socket-dir
+                  mountPath: /var/lib/csi/sockets/plugin.io
+            - name: cloudstack-csi-driver
+              image: ghcr.io/cloudstack/cloudstack-csi-driver:main
+              args:
+                - controller
+                - --endpoint=$(CSI_ENDPOINT)
+                - --cloudstack-config=/etc/cloudstack-csi-driver/cloud-config
+                - --logging-format=text
+                - --v=4
+              env:
+                - name: CSI_ENDPOINT
+                  value: unix:///var/lib/csi/sockets/plugin.io/csi.sock
+              volumeMounts:
+                - name: socket-dir
+                  mountPath: /var/lib/csi/sockets/plugin.io
+                - name: cloudstack-conf
+                  mountPath: /etc/cloudstack-csi-driver
           volumes:
-            - name: cloud-config
-              secret:
-                secretName: cloudstack-csi-secret
             - name: socket-dir
               emptyDir: {}
-    ---
+            - name: cloudstack-conf
+              secret:
+                secretName: cloudstack-secret
+  csi-node.yaml: |
     apiVersion: apps/v1
     kind: DaemonSet
     metadata:
       name: cloudstack-csi-node
       namespace: kube-system
-      labels:
-        app: cloudstack-csi-node
     spec:
       selector:
         matchLabels:
-          app: cloudstack-csi-node
+          app.kubernetes.io/name: cloudstack-csi-node
       template:
         metadata:
           labels:
-            app: cloudstack-csi-node
+            app.kubernetes.io/name: cloudstack-csi-node
         spec:
+          serviceAccountName: cloudstack-csi-node
           hostNetwork: true
-          hostPID: true
-          serviceAccountName: cloudstack-csi-node-sa
           containers:
             - name: cloudstack-csi-driver
-              image: apachecloudstack/cloudstack-csi-driver:latest
+              image: ghcr.io/cloudstack/cloudstack-csi-driver:main
               args:
+                - node
                 - --endpoint=$(CSI_ENDPOINT)
-                - --nodeid=$(NODE_ID)
-                - --cloud-config=/etc/cloudstack/config/cloud-config
+                - --cloudstack-config=/etc/cloudstack-csi-driver/cloud-config
+                - --logging-format=text
+                - --node-name=$(NODE_NAME)
+                - --v=4
               env:
                 - name: CSI_ENDPOINT
-                  value: "unix:/var/lib/kubelet/csi-plugins/csi.cloudstack.apache.org/csi.sock"
-                - name: NODE_ID
+                  value: unix:///csi/csi.sock
+                - name: NODE_NAME
                   valueFrom:
                     fieldRef:
                       fieldPath: spec.nodeName
               securityContext:
                 privileged: true
               volumeMounts:
+                - name: plugin-dir
+                  mountPath: /csi
                 - name: kubelet-dir
                   mountPath: /var/lib/kubelet
                   mountPropagation: Bidirectional
-                - name: csi-plugin-dir
-                  mountPath: /var/lib/kubelet/csi-plugins/csi.cloudstack.apache.org
-                - name: cloud-config
-                  mountPath: /etc/cloudstack/config
                 - name: device-dir
                   mountPath: /dev
-            - name: csi-node-driver-registrar
-              image: registry.k8s.io/sig-storage/csi-node-driver-registrar:latest
+                - name: cloudstack-conf
+                  mountPath: /etc/cloudstack-csi-driver
+            - name: node-driver-registrar
+              image: registry.k8s.io/sig-storage/csi-node-driver-registrar:v2.10.1
               args:
-                - --csi-address=/var/lib/kubelet/csi-plugins/csi.cloudstack.apache.org/csi.sock
-                - --kubelet-registration-path=/var/lib/kubelet/csi-plugins/csi.cloudstack.apache.org/csi.sock
+                - --csi-address=$(ADDRESS)
+                - --kubelet-registration-path=$(DRIVER_REG_SOCK_PATH)
+                - --v=5
+              env:
+                - name: ADDRESS
+                  value: /csi/csi.sock
+                - name: DRIVER_REG_SOCK_PATH
+                  value: /var/lib/kubelet/plugins/csi.cloudstack.apache.org/csi.sock
               volumeMounts:
-                - name: csi-plugin-dir
-                  mountPath: /var/lib/kubelet/csi-plugins/csi.cloudstack.apache.org
+                - name: plugin-dir
+                  mountPath: /csi
+                - name: registration-dir
+                  mountPath: /registration
           volumes:
+            - name: plugin-dir
+              hostPath:
+                path: /var/lib/kubelet/plugins/csi.cloudstack.apache.org/
+                type: DirectoryOrCreate
+            - name: registration-dir
+              hostPath:
+                path: /var/lib/kubelet/plugins_registry/
+                type: Directory
             - name: kubelet-dir
               hostPath:
                 path: /var/lib/kubelet
                 type: Directory
-            - name: csi-plugin-dir
-              hostPath:
-                path: /var/lib/kubelet/csi-plugins/csi.cloudstack.apache.org
-                type: DirectoryOrCreate
-            - name: cloud-config
-              secret:
-                secretName: cloudstack-csi-secret
             - name: device-dir
               hostPath:
                 path: /dev
-  csi-storageclass.yaml: |
+                type: Directory
+            - name: cloudstack-conf
+              secret:
+                secretName: cloudstack-secret
+  csi-csidriver.yaml: |
     apiVersion: storage.k8s.io/v1
-    kind: StorageClass
+    kind: CSIDriver
     metadata:
-      name: cloudstack-ssd
-    provisioner: csi.cloudstack.apache.org
-    parameters:
-      csi.cloudstack.apache.org/disk-offering-id: "<disk-offering-uuid>"
-    volumeBindingMode: WaitForFirstConsumer
-    reclaimPolicy: Delete
+      name: csi.cloudstack.apache.org
+    spec:
+      attachRequired: true
+      podInfoOnMount: true
+      fsGroupPolicy: File
+      volumeLifecycleModes:
+        - Persistent
+        - Ephemeral
 
 # ─── ClusterResourceSet — Applies ConfigMap to workload cluster ────
 apiVersion: addons.cluster.x-k8s.io/v1beta2
