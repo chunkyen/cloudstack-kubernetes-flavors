@@ -7,7 +7,7 @@ Deploy a CAPC cluster and get **CNI** (networking), **CCM** (CloudStack Kubernet
 > | Method | File | Best for |
 > |--------|------|----------|
 > | **One-shot YAML** | `manifests/13-one-shot-full-stack.yaml` | Quick start, single cluster, copy-paste |
-> | **Kustomize** | `kustomize/` | Multiple clusters, composable, maintainable |
+> | **Kustomize** | `manifests/kustomize/` | Multiple clusters, composable, maintainable |
 >
 > Both produce the same result. Choose the one that fits your workflow.
 
@@ -426,7 +426,7 @@ Instead of a 1650-line monolithic YAML, use Kustomize to compose clusters from s
 ### Structure
 
 ```
-kustomize/
+manifests/kustomize/
 ├── base/                          # Shared cluster template
 │   ├── kustomization.yaml         # Composes all base resources
 │   ├── namespace.yaml              # Namespace
@@ -455,18 +455,18 @@ kustomize/
 
 ```bash
 # Build (dry-run)
-kubectl kustomize kustomize/overlays/cluster3
+kubectl kustomize manifests/kustomize/overlays/cluster3
 
 # Apply
-kubectl kustomize kustomize/overlays/cluster3 | kubectl apply -f -
+kubectl kustomize manifests/kustomize/overlays/cluster3 | kubectl apply -f -
 ```
 
 ### Create a new cluster
 
 ```bash
-cp -r kustomize/overlays/cluster3 kustomize/overlays/my-cluster
-# Edit kustomize/overlays/my-cluster/kustomization.yaml with your values
-kubectl kustomize kustomize/overlays/my-cluster | kubectl apply -f -
+cp -r manifests/kustomize/overlays/cluster3 manifests/kustomize/overlays/my-cluster
+# Edit manifests/kustomize/overlays/my-cluster/kustomization.yaml with your values
+kubectl kustomize manifests/kustomize/overlays/my-cluster | kubectl apply -f -
 ```
 
 ### Comparison: One-shot vs Kustomize

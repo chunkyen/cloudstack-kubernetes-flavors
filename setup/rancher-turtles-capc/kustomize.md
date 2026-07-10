@@ -6,7 +6,7 @@ small, focused files. Each overlay is a cluster-specific configuration.
 ## Structure
 
 ```
-kustomize/
+manifests/kustomize/
 ├── base/                          # Shared cluster template
 │   ├── kustomization.yaml         # Composes all base resources
 │   ├── namespace.yaml              # Namespace
@@ -29,21 +29,21 @@ kustomize/
 ### Build (dry-run)
 
 ```bash
-kubectl kustomize kustomize/overlays/cluster3
+kubectl kustomize manifests/kustomize/overlays/cluster3
 ```
 
 ### Apply
 
 ```bash
-kubectl kustomize kustomize/overlays/cluster3 | kubectl apply -f -
+kubectl kustomize manifests/kustomize/overlays/cluster3 | kubectl apply -f -
 ```
 
 ### Create a new cluster
 
 ```bash
-cp -r overlays/cluster3 overlays/my-cluster
-# Edit overlays/my-cluster/kustomization.yaml with your values
-kubectl kustomize overlays/my-cluster | kubectl apply -f -
+cp -r manifests/kustomize/overlays/cluster3 manifests/kustomize/overlays/my-cluster
+# Edit manifests/kustomize/overlays/my-cluster/kustomization.yaml with your values
+kubectl kustomize manifests/kustomize/overlays/my-cluster | kubectl apply -f -
 ```
 
 ## How it works
