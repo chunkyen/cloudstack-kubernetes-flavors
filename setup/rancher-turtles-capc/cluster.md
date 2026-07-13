@@ -916,11 +916,12 @@ ipv4-native-routing-cidr: "10.168.0.0/16"
 
 #### CCM/CSI CrashLoopBackOff — Placeholder Credentials
 
-The CCM and CSI addon YAMLs in the base templates contain placeholder values (`<cloudstack-api-url>`, `<api-key>`, `<secret-key>`). These get applied to the workload cluster via ClusterResourceSet but are **never replaced** — the CRS applies the raw YAML as-is.
+The CCM and CSI addon YAMLs previously contained placeholder values (`<cloudstack-api-url>`, `<api-key>`, `<secret-key>`) that were applied to the workload cluster via ClusterResourceSet. These have been **removed** from the templates — the `cloudstack-secret` and `cloudstack-ccm-secret` are no longer created by the CRS.
 
-**Fix after cluster is provisioned:**
+**Post-deploy step (required for every new cluster):**
 
 ```bash
+# Create the CSI secret
 kubectl create secret generic cloudstack-secret -n kube-system \
   --from-literal=cloud-config="[Global]
 api-url = http://<mgmt-server>:8080/client/api
@@ -928,6 +929,7 @@ api-key = \"<your-api-key>\"
 secret-key = \"<your-secret-key>\"
 ssl-no-verify = \"false\""
 
+# Create the CCM secret
 kubectl create secret generic cloudstack-ccm-secret -n kube-system \
   --from-literal=cloud-config="[Global]
 api-url = http://<mgmt-server>:8080/client/api
@@ -935,11 +937,11 @@ api-key = \"<your-api-key>\"
 secret-key = \"<your-secret-key>\"
 ssl-no-verify = \"false\""
 
-# Restart CSI node pods
-kubectl delete pod -n kube-system -l app.kubernetes.io/name=cloudstack-csi-node
+# Restart CSI node DaemonSet to pick up the new secret
+kubectl rollout restart daemonset -n kube-system cloudstack-csi-node
 ```
 
-> **Note:** The CCM secret is also used by the CSI controller. Both secrets must be updated with the same real credentials.
+> **Note:** The CSI DaemonSet and CCM Deployment reference these secrets by name. If the secret doesn't exist at deploy time, the pods will fail to start until it's created. This is intentional — it prevents placeholder credentials from being applied.
 
 #### `syncWithACS` Not Working — Wrong Placement
 
