@@ -40,7 +40,7 @@ To switch CNI, copy the overlay and change the `configMapGenerator` file referen
 
 ## ⚠️  Credential Replacement
 
-The `addons/ccm.yaml` and `addons/csi.yaml` files contain **placeholder credentials** (`<cloudstack-api-url>`, `<api-key>`, `<secret-key>`). These must be replaced with real values before deployment.
+The `addons/ccm.yaml` and `addons/csi.yaml` files contain **placeholder credentials** (`<cloudstack-api-url>`, `<api-key>`, `<secret-key>`) and the `csi.yaml` also has a placeholder **disk-offering-id** (`<disk-offering-uuid>`). These must be replaced with real values before deployment.
 
 **For each new cluster overlay:**
 
