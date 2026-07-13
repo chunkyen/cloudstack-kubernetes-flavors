@@ -52,7 +52,14 @@ The `addons/ccm.yaml` and `addons/csi.yaml` files contain **placeholder credenti
 
 2. Replace the placeholder values with real CloudStack API credentials in both files.
 
-3. Add them to your overlay's `configMapGenerator`:
+3. In `csi.yaml`, also customize the **StorageClass** at the bottom of the file:
+   - Replace `<disk-offering-uuid>` with the actual disk offering ID (`cmk list diskofferings`)
+   - Adjust `volumeBindingMode` (`WaitForFirstConsumer` or `Immediate`)
+   - Adjust `reclaimPolicy` (`Delete` or `Retain`)
+   - Set `storageclass.kubernetes.io/is-default-class: "true"` to make it the default
+   - Set `allowVolumeExpansion: true` to enable volume resizing
+
+4. Add them to your overlay's `configMapGenerator`:
    ```yaml
    configMapGenerator:
      - name: capc-cluster-1-addons
@@ -63,7 +70,7 @@ The `addons/ccm.yaml` and `addons/csi.yaml` files contain **placeholder credenti
          - ccm.yaml
    ```
 
-4. Apply:
+5. Apply:
    ```bash
    kubectl apply -k overlays/my-cluster/
    ```
