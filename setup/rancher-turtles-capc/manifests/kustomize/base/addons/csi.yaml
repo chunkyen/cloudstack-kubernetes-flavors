@@ -573,10 +573,10 @@ kind: StorageClass
 metadata:
   name: cloudstack-ssd
   annotations:
-    storageclass.kubernetes.io/is-default-class: "true"  # Set as default
+    storageclass.kubernetes.io/is-default-class: "true"  # Set as default (customize to your preference)
 provisioner: csi.cloudstack.apache.org
 parameters:
   csi.cloudstack.apache.org/disk-offering-id: "<disk-offering-uuid>"
 volumeBindingMode: WaitForFirstConsumer
 reclaimPolicy: Delete
-allowVolumeExpansion: true
+allowVolumeExpansion: true  # Set to false if you don't need volume resizing
