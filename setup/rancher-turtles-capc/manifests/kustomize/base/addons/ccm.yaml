@@ -32,8 +32,8 @@ metadata:
   name: cloudstack-ccm
 rules:
   - apiGroups: [""]
-    resources: ["nodes", "pods", "services", "endpoints"]
-    verbs: ["get", "list", "watch", "update"]
+    resources: ["nodes", "pods", "services", "services/status", "endpoints", "events"]
+    verbs: ["get", "list", "watch", "create", "update", "patch"]
   - apiGroups: [""]
     resources: ["namespaces"]
     verbs: ["get", "list"]
