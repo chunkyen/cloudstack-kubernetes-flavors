@@ -567,6 +567,7 @@ spec:
 # WARNING: Replace <disk-offering-uuid> below with the actual disk offering ID
 # from CloudStack (e.g., 'cmk list diskofferings'). The overlay's copy of this
 # file should have the real disk-offering-id for your environment.
+# volumeBindingMode and reclaimPolicy can also be customized here.
 apiVersion: storage.k8s.io/v1
 kind: StorageClass
 metadata:
