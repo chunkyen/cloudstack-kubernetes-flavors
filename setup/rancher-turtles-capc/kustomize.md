@@ -38,7 +38,37 @@ The base includes **CCM + CSI only** — no CNI. Each overlay picks its CNI:
 
 To switch CNI, copy the overlay and change the `configMapGenerator` file reference.
 
-## Usage
+## ⚠️  Credential Replacement
+
+The `addons/ccm.yaml` and `addons/csi.yaml` files contain **placeholder credentials** (`<cloudstack-api-url>`, `<api-key>`, `<secret-key>`). These must be replaced with real values before deployment.
+
+**For each new cluster overlay:**
+
+1. Copy the base addon files into your overlay directory:
+   ```bash
+   cp manifests/kustomize/base/addons/csi.yaml overlays/my-cluster/
+   cp manifests/kustomize/base/addons/ccm.yaml overlays/my-cluster/
+   ```
+
+2. Replace the placeholder values with real CloudStack API credentials in both files.
+
+3. Add them to your overlay's `configMapGenerator`:
+   ```yaml
+   configMapGenerator:
+     - name: capc-cluster-1-addons
+       behavior: merge
+       files:
+         - cilium.yaml      # or calico.yaml
+         - csi.yaml
+         - ccm.yaml
+   ```
+
+4. Apply:
+   ```bash
+   kubectl apply -k overlays/my-cluster/
+   ```
+
+> **Keep secrets out of Git:** Store the overlay directory outside the cloned repo (e.g., `~/projects/capc-deployments/`) or add `csi.yaml` and `ccm.yaml` to `.gitignore`.
 
 ### Build (dry-run)
 

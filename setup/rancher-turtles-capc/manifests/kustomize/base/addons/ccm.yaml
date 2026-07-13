@@ -1,5 +1,10 @@
 # CCM: CloudStack Kubernetes Provider
 # Secret + RBAC + Deployment
+#
+# WARNING: Replace <cloudstack-api-url>, <api-key>, <secret-key> below
+# with real credentials before deployment. In the overlay, copy this file
+# and patch it — the overlay's configMapGenerator merge replaces the base
+# file entirely. Do NOT commit real credentials to Git.
 ---
 apiVersion: v1
 kind: Secret
