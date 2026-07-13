@@ -152,6 +152,8 @@ data:
   #   - vxlan (default)
   #   - geneve
   routing-mode: "native"
+  # ⚠️ Must match cluster.spec.clusterNetwork.pods.cidrBlocks — keep in sync!
+  ipv4-native-routing-cidr: "10.168.0.0/16"
   service-no-backend-response: "reject"
 
 

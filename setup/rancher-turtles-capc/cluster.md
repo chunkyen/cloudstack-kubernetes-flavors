@@ -478,7 +478,7 @@ kubectl --kubeconfig=kubeconfig apply -f https://raw.githubusercontent.com/proje
 
 ### 5.2 Cilium
 
-Install Cilium using Helm:
+Install Cilium using Helm. **Important:** When using `routing-mode: native` and `ipam: kubernetes`, you must set `ipv4-native-routing-cidr` to match your cluster's pod CIDR:
 
 ```bash
 # Add the Cilium Helm repo
@@ -487,7 +487,9 @@ helm repo update
 
 # Install Cilium in kube-system namespace
 helm install cilium cilium/cilium --namespace kube-system \
-  --set ipam.mode=kubernetes
+  --set ipam.mode=kubernetes \
+  --set routingMode=native \
+  --set ipv4NativeRoutingCIDR=10.168.0.0/16
 ```
 
 ### 5.3 Change CNI
@@ -884,6 +886,90 @@ kubectl --kubeconfig=kubeconfig get nodes
 CAPI upgrades the control plane first (one node at a time, waiting for etcd health), then rolls the workers. The entire process can take 10–30 minutes depending on VM provisioning time.
 
 ## 9. Troubleshooting
+
+### 9.0 Common Deployment Pitfalls
+
+#### Cilium CrashLoopBackOff — `ipv4-native-routing-cidr` Required
+
+When using Cilium with `routing-mode: native` and `ipam: kubernetes`, you **must** set `ipv4-native-routing-cidr` to match your cluster's pod CIDR. Without it, Cilium fails with:
+
+```
+fatal: invalid daemon configuration: native routing cidr must be configured
+```
+
+**⚠️ This value must match `cluster.spec.clusterNetwork.pods.cidrBlocks`** — if you change the pod CIDR in the cluster spec, update the Cilium config to match. They are two separate settings that must be kept in sync.
+
+**Fix:** Add to the Cilium ConfigMap in the workload cluster:
+
+```bash
+kubectl patch configmap -n kube-system cilium-config --type merge \
+  -p '{"data":{"ipv4-native-routing-cidr":"10.168.0.0/16"}}'
+kubectl delete pod -n kube-system -l k8s-app=cilium
+```
+
+Or add it to the Cilium Helm values / YAML template before deployment:
+
+```yaml
+routing-mode: "native"
+ipv4-native-routing-cidr: "10.168.0.0/16"
+```
+
+#### CCM/CSI CrashLoopBackOff — Placeholder Credentials
+
+The CCM and CSI addon YAMLs in the base templates contain placeholder values (`<cloudstack-api-url>`, `<api-key>`, `<secret-key>`). These get applied to the workload cluster via ClusterResourceSet but are **never replaced** — the CRS applies the raw YAML as-is.
+
+**Fix after cluster is provisioned:**
+
+```bash
+kubectl create secret generic cloudstack-secret -n kube-system \
+  --from-literal=cloud-config="[Global]
+api-url = http://<mgmt-server>:8080/client/api
+api-key = \"<your-api-key>\"
+secret-key = \"<your-secret-key>\"
+ssl-no-verify = \"false\""
+
+kubectl create secret generic cloudstack-ccm-secret -n kube-system \
+  --from-literal=cloud-config="[Global]
+api-url = http://<mgmt-server>:8080/client/api
+api-key = \"<your-api-key>\"
+secret-key = \"<your-secret-key>\"
+ssl-no-verify = \"false\""
+
+# Restart CSI node pods
+kubectl delete pod -n kube-system -l app.kubernetes.io/name=cloudstack-csi-node
+```
+
+> **Note:** The CCM secret is also used by the CSI controller. Both secrets must be updated with the same real credentials.
+
+#### `syncWithACS` Not Working — Wrong Placement
+
+The `syncWithACS` field must be at the **spec level** (`spec.syncWithACS: true`), not inside a failure domain. The base template places it inside the failure domain, which causes a strict decoding error. The overlay must:
+
+1. **Remove** it from the failure domain
+2. **Add** it at the spec level
+
+```yaml
+patches:
+  - target:
+      kind: CloudStackCluster
+      name: capc-cluster-1
+    patch: |-
+      - op: remove
+        path: /spec/failureDomains/0/offering
+      - op: remove
+        path: /spec/failureDomains/0/syncWithACS
+      - op: add
+        path: /spec/syncWithACS
+        value: true
+```
+
+#### Zone Name vs Network Name in Failure Domains
+
+The `zone/name` field in a failure domain must be the **CloudStack zone name** (e.g., `cyz1`), not the network name. Only `zone/network/name` should be the network name (e.g., `capcnet4`). Setting `zone/name` to the network name causes CAPC to fail with:
+
+```
+Required FailureDomain <name> not ready, requeueing.
+```
 
 ### 9.1 VM Deleted from CloudStack — Node Not Recreated
 
