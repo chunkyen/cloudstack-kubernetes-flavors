@@ -441,8 +441,8 @@ manifests/kustomize/
 │       ├── ccm.yaml                # CCM: CloudStack Kubernetes Provider
 │       └── csi.yaml                # CSI: CloudStack CSI Driver + StorageClass
 └── overlays/
-    └── cluster3/                   # Example: capc-cluster3
-        └── kustomization.yaml      # Patches base with cluster3-specific values
+    └── generic-cluster/                   # Example: capc-generic-cluster
+        └── kustomization.yaml      # Patches base with generic-cluster-specific values
 ```
 
 ### How it works
@@ -456,16 +456,16 @@ manifests/kustomize/
 
 ```bash
 # Build (dry-run)
-kubectl kustomize manifests/kustomize/overlays/cluster3
+kubectl kustomize manifests/kustomize/overlays/generic-cluster
 
 # Apply
-kubectl kustomize manifests/kustomize/overlays/cluster3 | kubectl apply -f -
+kubectl kustomize manifests/kustomize/overlays/generic-cluster | kubectl apply -f -
 ```
 
 ### Create a new cluster
 
 ```bash
-cp -r manifests/kustomize/overlays/cluster3 manifests/kustomize/overlays/my-cluster
+cp -r manifests/kustomize/overlays/generic-cluster manifests/kustomize/overlays/my-cluster
 # Edit manifests/kustomize/overlays/my-cluster/kustomization.yaml with your values
 kubectl kustomize manifests/kustomize/overlays/my-cluster | kubectl apply -f -
 ```
