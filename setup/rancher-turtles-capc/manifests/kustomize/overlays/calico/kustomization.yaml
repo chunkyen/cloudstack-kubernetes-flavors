@@ -1,0 +1,163 @@
+# Generic Template for CAPC Cluster (Cilium CNI)
+# Use this as the baseline for all new cluster deployments.
+# Replace placeholders with cluster-specific values.
+
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: {{CLUSTER_NAME}}
+
+resources:
+  - ../../base
+
+# Merge Cilium CNI into the base ConfigMap
+configMapGenerator:
+  - name: capc-cluster-1-addons
+    behavior: merge
+    files:
+      - calico.yaml
+
+patches:
+  # --- Namespace ---
+  - target:
+      kind: Namespace
+      name: capc-cluster-1
+    patch: |-
+      - op: replace
+        path: /metadata/name
+        value: {{CLUSTER_NAME}}
+
+  # --- Cluster ---
+  - target:
+      kind: Cluster
+      name: capc-cluster-1
+    patch: |-
+      - op: replace
+        path: /metadata/name
+        value: {{CLUSTER_NAME}}
+      - op: replace
+        path: /spec/controlPlaneRef/name
+        value: {{CLUSTER_NAME}}-control-plane
+      - op: replace
+        path: /spec/infrastructureRef/name
+        value: {{CLUSTER_NAME}}
+
+  # --- CloudStackCluster ---
+  - target:
+      kind: CloudStackCluster
+      name: capc-cluster-1
+    patch: |-
+      - op: replace
+        path: /metadata/name
+        value: {{CLUSTER_NAME}}
+      - op: replace
+        path: /spec/controlPlaneEndpoint/host
+        value: "{{CONTROL_PLANE_IP}}"
+      - op: replace
+        path: /spec/failureDomains/0/name
+        value: "{{NETWORK_NAME}}"
+      - op: replace
+        path: /spec/failureDomains/0/zone/name
+        value: "{{NETWORK_NAME}}"
+      - op: replace
+        path: /spec/failureDomains/0/zone/network/name
+        value: "{{NETWORK_NAME}}"
+      - op: replace
+        path: /spec/failureDomains/0/acsEndpoint/namespace
+        value: {{CLUSTER_NAME}}
+
+  # --- KubeadmControlPlane ---
+  - target:
+      kind: KubeadmControlPlane
+      name: capc-cluster-1-control-plane
+    patch: |-
+      - op: replace
+        path: /metadata/name
+        value: {{CLUSTER_NAME}}-control-plane
+      - op: replace
+        path: /spec/machineTemplate/infrastructureRef/name
+        value: {{CLUSTER_NAME}}-control-plane
+
+  # --- Control Plane MachineTemplate ---
+  - target:
+      kind: CloudStackMachineTemplate
+      name: capc-cluster-1-control-plane
+    patch: |-
+      - op: replace
+        path: /metadata/name
+        value: {{CLUSTER_NAME}}-control-plane
+
+  # --- MachineDeployment ---
+  - target:
+      kind: MachineDeployment
+      name: capc-cluster-1-md-0
+    patch: |-
+      - op: replace
+        path: /metadata/name
+        value: {{CLUSTER_NAME}}-md-0
+      - op: replace
+        path: /spec/clusterName
+        value: {{CLUSTER_NAME}}
+      - op: replace
+        path: /spec/template/spec/bootstrap/configRef/name
+        value: {{CLUSTER_NAME}}-md-0
+      - op: replace
+        path: /spec/template/spec/clusterName
+        value: {{CLUSTER_NAME}}
+      - op: replace
+        path: /spec/template/spec/infrastructureRef/name
+        value: {{CLUSTER_NAME}}-md-0
+
+  # --- Worker MachineTemplate ---
+  - target:
+      kind: CloudStackMachineTemplate
+      name: capc-cluster-1-md-0
+    patch: |-
+      - op: replace
+        path: /metadata/name
+        value: {{CLUSTER_NAME}}-md-0
+
+  # --- KubeadmConfigTemplate ---
+  - target:
+      kind: KubeadmConfigTemplate
+      name: capc-cluster-1-md-0
+    patch: |-
+      - op: replace
+        path: /metadata/name
+        value: {{CLUSTER_NAME}}-md-0
+
+  # --- ClusterResourceSet ---
+  - target:
+      kind: ClusterResourceSet
+      name: capc-cluster-1-full-stack
+    patch: |-
+      - op: replace
+        path: /metadata/name
+        value: {{CLUSTER_NAME}}-full-stack
+      - op: replace
+        path: /spec/resources/0/name
+        value: {{CLUSTER_NAME}}-addons
+
+  # --- ConfigMap (addons) ---
+  - target:
+      kind: ConfigMap
+      name: capc-cluster-1-addons
+    patch: |-
+      - op: replace
+        path: /metadata/name
+        value: {{CLUSTER_NAME}}-addons
+
+  # --- CloudStack Credentials Secret ---
+  - target:
+      kind: Secret
+      name: cloudstack-credentials
+    patch: |-
+      - op: replace
+        path: /stringData/api-url
+        value: "http://192.168.200.10:8080/client/api"
+      - op: replace
+        path: /stringData/api-key
+        value: "<api-key>"
+      - op: replace
+        path: /stringData/secret-key
+        value: "<secret-key>"
