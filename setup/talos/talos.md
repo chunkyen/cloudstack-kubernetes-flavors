@@ -267,25 +267,35 @@ cilium install
 kubectl apply -f https://github.com/flannel-io/flannel/releases/latest/download/kube-flannel.yml
 ```
 
-## Step 12: Install CCM and CSI (Optional)
+## Step 12: Install CloudStack Kubernetes Provider (CCM)
 
-### CloudStack Kubernetes Provider (CCM)
+The CloudStack external cloud controller manager is **required** for any Kubernetes cluster running on CloudStack. It provides:
 
-Deploy the CloudStack external cloud controller manager for `LoadBalancer` service support and node metadata:
+- `LoadBalancer` service type support via CloudStack load balancer rules
+- Node metadata labels (zone, region, instance type)
+- Firewall rule management for NodePort services
 
 ```bash
-# See setup/cloudstack-kubernetes-provider.md for details
+# See setup/cloudstack-kubernetes-provider.md for detailed configuration
 kubectl apply -f https://raw.githubusercontent.com/apache/cloudstack-kubernetes-provider/main/deployment.yaml
 ```
 
-### CloudStack CSI Driver
+> **Note:** Unlike CKS which auto-deploys the CCM, Talos requires manual installation. The CCM must be configured with your CloudStack API credentials (api-url, api-key, secret-key).
 
-Deploy the CSI driver for persistent storage:
+## Step 13: Install CloudStack CSI Driver
+
+The CloudStack CSI driver is **required** for persistent storage on CloudStack. It provides:
+
+- Dynamic provisioning of CloudStack volumes via StorageClasses
+- Volume lifecycle management (create, attach, detach, delete)
+- Volume snapshots and cloning
 
 ```bash
-# See setup/cloudstack-csi-driver.md for details
+# See setup/cloudstack-csi-driver.md for detailed configuration
 kubectl apply -f https://raw.githubusercontent.com/apache/cloudstack-csi-driver/main/deploy/kubernetes/csi.yaml
 ```
+
+> **Note:** The CSI driver requires CloudStack API credentials and must be configured with the appropriate disk offering for your workloads.
 
 ## Adding Worker Nodes
 

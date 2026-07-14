@@ -84,8 +84,8 @@ Talos manages:
 
 User deploys:
   ┌─ CNI plugin (Calico, Cilium, Flannel)
-  ├─ CCM (CloudStack Kubernetes Provider)
-  ├─ CSI driver (CloudStack CSI)
+  ├─ CCM (CloudStack Kubernetes Provider) — required
+  ├─ CSI driver (CloudStack CSI) — required
   └─ Workloads (Deployments, StatefulSets, etc.)
 ```
 
@@ -303,7 +303,7 @@ This is fundamentally different from package-based upgrades (apt/yum upgrade) us
 | **Security posture** | Traditional Linux hardening | Immutable, no shell, no SSH |
 | **Kubernetes version** | Tied to image-builder | Tied to Talos release |
 | **CNI** | Manual install | Manual install (no default) |
-| **CCM/CSI** | Manual install | Manual install |
+| **CCM/CSI** | Manual install (required on CloudStack) | Manual install (required on CloudStack) |
 | **ClusterClass (CAPI)** | Not supported (CAPC) | Supported (CAPI with Talos provider) |
 
 ## When to Use Talos
