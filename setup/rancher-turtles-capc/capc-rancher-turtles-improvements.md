@@ -335,8 +335,130 @@ spec:
   kubectl clusterclass validate capc-default -n capc-system
   ```
 
+---
+
+## 3. Power Cycle CAPC Clusters from the CloudStack UI
+
+### Problem
+
+When `syncWithACS: true` is set on a `CloudStackCluster`, CAPC registers the workload cluster as an `ExternalManaged` entry in CloudStack's **Compute → Kubernetes** UI. This makes the cluster visible alongside native CKS clusters, which is useful for operators who manage infrastructure through the CloudStack UI.
+
+However, the CloudStack Kubernetes UI exposes several lifecycle actions for each cluster:
+
+| Action | Native CKS | CAPC (ExternalManaged) |
+|--------|-----------|----------------------|
+| **View** | ✅ | ✅ |
+| **Delete** | ✅ | ✅ |
+| **Stop** | ✅ | ❌ (not available) |
+| **Start** | ✅ | ❌ (not available) |
+| **Scale** | ✅ | ❌ (not available) |
+| **Upgrade** | ✅ | ❌ (not available) |
+
+For native CKS clusters, CloudStack's built-in `CksClusterReconciler` handles all lifecycle operations. For CAPC-managed clusters, only **Delete** is available because CAPC registers the cluster as `ExternalManaged` and doesn't implement the lifecycle hooks that CloudStack calls when a user clicks Stop, Start, Scale, or Upgrade.
+
+The result: an operator who sees a CAPC cluster in the CloudStack UI can only **delete** it — they cannot stop it (e.g., to save resources overnight), start it back up, or scale it. This is a significant operational gap, especially in environments where CloudStack is the primary management plane.
+
+### Proposed Solution: CAPC Lifecycle Controller
+
+Introduce a **CAPC Lifecycle Controller** (either as a new controller in CAPC itself, or as a companion operator) that implements CloudStack's CKS lifecycle hooks for `ExternalManaged` clusters.
+
+#### How CloudStack CKS Lifecycle Works
+
+CloudStack's Kubernetes service exposes REST API endpoints for lifecycle operations. When a user clicks **Stop** in the UI, CloudStack calls the CKS provider's stop endpoint. For native CKS clusters, the built-in controller handles this. For `ExternalManaged` clusters, CloudStack expects the external provider (CAPC) to handle the operation.
+
+The lifecycle operations map to CAPI operations as follows:
+
+| CloudStack UI Action | CAPI Operation | CAPC Implementation |
+|---------------------|----------------|---------------------|
+| **Stop** | Scale control plane + workers to 0 | Set `KubeadmControlPlane.spec.replicas = 0` and `MachineDeployment.spec.replicas = 0` |
+| **Start** | Restore original replica counts | Set `KubeadmControlPlane.spec.replicas` and `MachineDeployment.spec.replicas` back to their pre-stop values |
+| **Scale** | Change replica counts | Update `KubeadmControlPlane.spec.replicas` and/or `MachineDeployment.spec.replicas` |
+| **Upgrade** | Change Kubernetes version | Update `KubeadmControlPlane.spec.version` and `MachineDeployment.spec.template.spec.version` |
+
+#### Architecture
+
+```
+┌─────────────────────┐     CloudStack API call      ┌──────────────────────┐
+│  CloudStack UI      │ ──────────────────────────▶  │  CAPC Lifecycle      │
+│  (Compute → K8s)    │     stop/start/scale/upgrade  │  Controller           │
+└─────────────────────┘                               │                      │
+                                                      │  Watches:            │
+                                                      │  - CksCluster CR     │
+                                                      │  - CloudStack API    │
+                                                      │    lifecycle events  │
+                                                      │                      │
+                                                      │  Acts on:            │
+                                                      │  - KubeadmControlPlane│
+                                                      │  - MachineDeployment │
+                                                      └──────────────────────┘
+```
+
+#### Option A — CAPC Controller Enhancement (Recommended)
+
+Add a new reconciler to CAPC that:
+
+1. **Registers lifecycle handlers** with CloudStack for the `ExternalManaged` cluster, so CloudStack knows CAPC can handle stop/start/scale/upgrade
+2. **Watches the `CksCluster` CR** (created by CAPC's `CksClusterReconciler` when `syncWithACS: true`) for state changes initiated from the CloudStack UI
+3. **Translates lifecycle events** to CAPI resource mutations:
+   - **Stop**: Scales `KubeadmControlPlane` and `MachineDeployment` replicas to 0, stores original replica counts in an annotation (e.g., `capc.cluster.x-k8s.io/original-replicas`)
+   - **Start**: Reads the stored replica counts from the annotation and restores them
+   - **Scale**: Updates the relevant replica counts directly
+   - **Upgrade**: Updates the Kubernetes version on both control plane and worker templates
+
+4. **Reports status back** to CloudStack via the `CksCluster` CR status, so the UI shows the correct state (Running, Stopped, Scaling, etc.)
+
+#### Option B — Standalone Companion Operator
+
+A separate operator (e.g., `capc-lifecycle-operator`) deployed alongside CAPC that:
+
+- Watches `CksCluster` CRs in the management cluster
+- Implements the same lifecycle translation logic as Option A
+- Is independent of CAPC release cycles — can be updated separately
+- Can be installed only when `syncWithACS` lifecycle support is needed
+
+#### Option C — CloudStack Webhook + CAPI Pause/Unpause
+
+A lighter-weight approach that doesn't require a new controller:
+
+1. **Stop**: A CloudStack plugin or webhook intercepts the stop request and calls the CAPI management cluster API to:
+   - Pause the CAPC cluster (`Cluster.Spec.Paused = true`)
+   - Scale down the `KubeadmControlPlane` and `MachineDeployment` to 0
+2. **Start**: The webhook scales back up and unpauses the cluster
+3. The webhook authenticates to the management cluster via a service account token stored in CloudStack
+
+This avoids modifying CAPC but requires a CloudStack-side component.
+
+### Key Design Decisions
+
+| Decision | Consideration |
+|----------|--------------|
+| **Store original replica counts** | Must survive controller restarts. Use an annotation on the `CloudStackCluster` or `Cluster` resource (e.g., `capc.cluster.x-k8s.io/control-plane-replicas`, `capc.cluster.x-k8s.io/worker-replicas-<md-name>`). |
+| **Graceful vs. forceful stop** | A graceful stop should `kubectl drain` nodes first, then scale down. A forceful stop just scales to 0. CloudStack's native CKS does a graceful stop. CAPC should match this behavior. |
+| **Startup ordering** | On start, the control plane must come up first (KCP replicas restored), then workers (MachineDeployment replicas restored). CAPI handles this ordering naturally since KCP and MachineDeployment are independent resources. |
+| **Concurrent operations** | If a user clicks Stop while an upgrade is in progress, the controller should either queue the operation or reject it with a clear error. Use CAPI's `Cluster.Status.Phase` to gate operations. |
+| **Idempotency** | Stopping an already-stopped cluster should be a no-op. Starting an already-running cluster should be a no-op. |
+
+### Implementation Notes
+
+- The `CksCluster` CR is created by CAPC's `CksClusterReconciler` when `syncWithACS: true` and `--enable-cloudstack-cks-sync=true`. The lifecycle controller would watch this CR for state transitions.
+- CloudStack's CKS API uses the `CksCluster` state to determine available actions. The controller must update `CksCluster.Status.State` to reflect the current cluster state (e.g., `Running`, `Stopped`, `Stopping`, `Starting`).
+- The controller needs RBAC permissions to read/update `KubeadmControlPlane`, `MachineDeployment`, `Cluster`, and `CloudStackCluster` resources.
+- For the **Upgrade** operation, the controller must also update the `MachineDeployment.spec.template.spec.version` field, not just the control plane version.
+- Consider adding a `capc.cluster.x-k8s.io/lifecycle-enabled: "true"` annotation on the `CloudStackCluster` to opt in to lifecycle management, so existing clusters aren't affected.
+
+### Open Questions
+
+| Question | Notes |
+|----------|-------|
+| **Does CloudStack's CKS API expose lifecycle endpoints for `ExternalManaged` clusters?** | Need to verify. The `CksCluster` CRD may have a `spec.action` field or similar that CloudStack sets when a user clicks Stop/Start. If not, CAPC would need to poll CloudStack's API for pending actions. |
+| **How does CloudStack authenticate the lifecycle request to CAPC?** | Native CKS uses CloudStack's internal API. For external providers, CloudStack may call a webhook URL registered by CAPC, or CAPC may poll the `CksCluster` CR status. |
+| **What happens to running workloads on stop?** | A graceful stop should drain nodes. But if the cluster has PVCs backed by CloudStack volumes, stopping the control plane may leave volumes in an inconsistent state. Consider adding a pre-stop hook that checks for attached volumes. |
+| **Should stop be allowed when the cluster has active workloads?** | CloudStack's native CKS allows stop regardless. CAPC could add a webhook that checks for non-system workloads and warns the user. |
+| **How to handle the `controlPlaneEndpoint` IP on restart?** | The public IP is reserved and stays allocated. On start, the control plane nodes come back with the same IP. This should work transparently as long as the IP isn't released between stop and start. |
+
 ### Related
 
 - [CAPI ClusterClass documentation](https://cluster-api.sigs.k8s.io/tasks/experimental-features/cluster-class/index.html)
 - [CAPC ClusterClass examples](https://github.com/apache/cloudstack-cluster-api-provider/tree/main/config/crd)
 - [Rancher Turtles + ClusterClass](https://turtles.docs.rancher.com/)
+- [CAPC CKS Sync documentation](./cluster.md#syncwithacs-true)
