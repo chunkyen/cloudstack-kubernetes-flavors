@@ -293,18 +293,21 @@ This is fundamentally different from package-based upgrades (apt/yum upgrade) us
 
 ## Key Differences from Other Flavors
 
-| Aspect | CKS / CAPC / Rancher+CAPC | Talos Linux |
-|--------|--------------------------|-------------|
-| **Node OS** | Ubuntu, Rocky Linux, etc. | Talos Linux (immutable) |
-| **Management** | SSH + kubectl | `talosctl` (gRPC API) |
-| **OS upgrades** | Package manager (apt/yum) | Image-based (atomic reboot) |
-| **Configuration** | cloud-init + kubeadm | Talos machine config (YAML) |
-| **Control plane** | Static pods (kubeadm) | System containers (Talos-managed) |
-| **Security posture** | Traditional Linux hardening | Immutable, no shell, no SSH |
-| **Kubernetes version** | Tied to image-builder | Tied to Talos release |
-| **CNI** | Manual install | Manual install (no default) |
-| **CCM/CSI** | Manual install (required on CloudStack) | Manual install (required on CloudStack) |
-| **ClusterClass (CAPI)** | Not supported (CAPC) | Supported (CAPI with Talos provider) |
+| Aspect | CKS | CAPC | Rancher+CAPC | Talos Linux |
+|--------|-----|------|-------------------|-------------|
+| **Node OS** | Ubuntu, Rocky Linux, etc. (user-defined) | Ubuntu, Rocky Linux, etc. (pre-built image) | Ubuntu, Rocky Linux, etc. (pre-built image) | Talos Linux (immutable) |
+| **Management** | CloudStack UI/API | `clusterctl` + `kubectl` (CAPI controllers) | Rancher UI + Fleet GitOps | `talosctl` (gRPC API) |
+| **OS upgrades** | Package manager (apt/yum) on running VMs | Image-based — new CAPC template with updated OS baked into the K8s image | Image-based — new CAPC template with updated OS baked into the K8s image | Image-based atomic reboot (`talosctl upgrade`) |
+| **K8s bootstrap** | kubeadm (managed by CKS plugin) | kubeadm (via CAPI KubeadmBootstrap provider) | kubeadm (via CAPI KubeadmBootstrap provider) | Talos-managed system containers |
+| **Configuration** | cloud-init + CKS ISO | cloud-init + kubeadm config (via CAPI) | cloud-init + kubeadm config (via CAPI) | Talos machine config (YAML) |
+| **Control plane** | kubeadm static pods | kubeadm static pods (managed by KubeadmControlPlane) | kubeadm static pods (managed by KubeadmControlPlane) | Talos-managed system containers |
+| **Security posture** | Traditional Linux hardening | Traditional Linux hardening | Traditional Linux hardening | Immutable, no shell, no SSH |
+| **Kubernetes version** | Tied to CKS ISO upload | Tied to image-builder template | Tied to image-builder template | Tied to Talos release |
+| **CNI** | Baked into CKS ISO (Calico) | Manual or ClusterResourceSet | Manual or ClusterResourceSet | Manual install (no default) |
+| **CCM/CSI** | Auto-deployed (CKS 4.16+) | Manual install (required on CloudStack) | Manual install or ClusterResourceSet (required on CloudStack) | Manual install (required on CloudStack) |
+| **ClusterClass (CAPI)** | N/A | Not supported (no CloudStackClusterTemplate) | Not supported (no CloudStackClusterTemplate) | Supported (CAPI with Talos provider) |
+| **GitOps** | No | Yes (CAPI native YAML) | Yes (Rancher Fleet) | Yes (talosctl + Git) |
+| **Multi-cluster** | Limited (per-account) | Yes (CAPI native) | Yes (CAPI + Rancher Turtles) | Manual / CAPI with Talos provider |
 
 ## When to Use Talos
 
