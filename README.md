@@ -29,7 +29,7 @@ These components are required or recommended for **every flavor**:
 - [CKS architecture](architecture/cks.md)
 - [CAPC architecture](architecture/capc.md)
 - [Rancher+CAPC architecture](architecture/rancher-turtles-capc.md)
-- Talos architecture (not yet documented)
+- [Talos architecture](architecture/talos.md)
 
 ### Setup Guides
 
@@ -77,7 +77,8 @@ The Rancher Turtles integration combines three layers — Rancher (management pl
 
 #### Talos Linux
 
-- Talos Linux standalone (with CAPI or bare-metal) — not yet documented
+- [Talos architecture](architecture/talos.md) — architecture overview
+- [Talos setup guide](setup/talos/talos.md) — deploy a Talos cluster on CloudStack
 
 ### Analysis
 
@@ -89,12 +90,12 @@ The Rancher Turtles integration combines three layers — Rancher (management pl
 | Feature | CKS | CAPC | Rancher+CAPC | Talos (standalone) |
 |---------|-----|------|-------------------|-------------------|
 | **Management** | Native CloudStack UI/API | Cluster API controllers | Rancher UI/API | Talos CLI / Tinkerbell |
-| **Node OS** | User-defined | User-defined | User-defined | Talos Linux (immutable) |
-| **GitOps** | No | Yes (CAPI native) | Yes (Rancher Fleet) | Yes (Terraform/Talos) |
-| **Multi-cluster** | Limited | Yes (CAPI native) | Yes (CAPI + Rancher Turtles) | Manual/CAPI |
-| **Upgrade Strategy** | Manual | Image-based rolling update | Image-based rolling update | Automated (Talos) |
-| **CNI/CCM/CSI** | Baked into ISO | Manual or ClusterResourceSet | Manual or ClusterResourceSet | Manual |
-| **ClusterClass** | N/A | Not supported (no CloudStackClusterTemplate) | Not supported (no CloudStackClusterTemplate) | Supported |
+| **Node OS** | User-defined | User-defined | User-defined | Talos Linux (immutable, no SSH) |
+| **GitOps** | No | Yes (CAPI native) | Yes (Rancher Fleet) | Yes (talosctl + Git) |
+| **Multi-cluster** | Limited | Yes (CAPI native) | Yes (CAPI + Rancher Turtles) | Manual / CAPI with Talos provider |
+| **Upgrade Strategy** | Manual | Image-based rolling update | Image-based rolling update | Image-based atomic (talosctl upgrade) |
+| **CNI/CCM/CSI** | Baked into ISO | Manual or ClusterResourceSet | Manual or ClusterResourceSet | Manual install |
+| **ClusterClass** | N/A | Not supported (no CloudStackClusterTemplate) | Not supported (no CloudStackClusterTemplate) | Supported (CAPI with Talos provider) |
 | **Complexity** | Low | Medium | High | Medium |
 
 ## Status
