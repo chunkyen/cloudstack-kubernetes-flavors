@@ -70,15 +70,15 @@ The Rancher Turtles integration combines three layers — Rancher (management pl
 >
 > **CNI/CCM/CSI:** For Kubeadm-based CAPC clusters (no built-in CNI), use [ClusterResourceSet](https://turtles.docs.rancher.com/turtles/stable/en/user/applications.html) — the approach recommended by the Rancher Turtles documentation — to auto-install bootstrap applications. See [Full-stack onboarding](setup/rancher-turtles-capc/full-stack-onboarding.md).
 
-#### Cross-Cutting Components
-
-- [CloudStack Kubernetes Provider (CCM)](setup/cloudstack-kubernetes-provider.md)
-- [CloudStack CSI Driver](setup/cloudstack-csi-driver.md)
-
 #### Talos Linux
 
 - [Talos architecture](architecture/talos.md) — architecture overview
 - [Talos setup guide](setup/talos/talos.md) — deploy a Talos cluster on CloudStack
+
+#### Cross-Cutting Components
+
+- [CloudStack Kubernetes Provider (CCM)](setup/cloudstack-kubernetes-provider.md)
+- [CloudStack CSI Driver](setup/cloudstack-csi-driver.md)
 
 ### Analysis
 
