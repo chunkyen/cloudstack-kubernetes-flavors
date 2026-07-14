@@ -129,30 +129,142 @@ Key differences from kubeadm-based configs:
 - **No cloud-init** — configuration is applied via `talosctl apply-config`
 - **Single config per node type** — one `controlplane.yaml` and one `worker.yaml`
 
-## Networking Model
+## CloudStack Integration
 
-### CloudStack Platform Support
+Talos has first-class support for Apache CloudStack as a deployment platform. The integration covers image provisioning, metadata retrieval, networking, and configuration injection — all without requiring SSH or cloud-init.
 
-Talos includes a built-in **CloudStack platform module** that:
-- Detects it's running on CloudStack via DMI/hypervisor metadata
-- Retrieves instance metadata (hostname, IP, network) from CloudStack's virtual router
-- Configures networking automatically (DHCP by default)
-- Supports user-data for machine configuration injection
+### Platform Module
 
-### Kubernetes API Endpoint
+Talos includes a built-in **CloudStack platform module** that activates when the kernel detects it is running on CloudStack (via DMI/hypervisor metadata). This module:
 
-The Kubernetes API server endpoint is exposed via a CloudStack **load balancer rule**:
-- Public IP allocated from the CloudStack zone
-- Load balancer rule forwards port 6443 → control plane node port 6443
-- For HA clusters, multiple control plane nodes are added as load balancer members
+| Capability | How it works |
+|------------|-------------|
+| **Platform detection** | Reads DMI system product/manufacturer info to identify CloudStack as the hypervisor |
+| **Metadata retrieval** | Queries the CloudStack virtual router (metadata server at `http://<gateway>/latest/`) for instance metadata |
+| **Hostname** | Sets the node hostname from CloudStack VM name |
+| **IP addressing** | Configures the primary NIC via DHCP (CloudStack virtual router provides DHCP) |
+| **User-data** | Fetches base64-encoded user-data from the metadata server and applies it as the Talos machine configuration |
+| **DNS** | Inherits DNS settings from the CloudStack network offering |
+
+### Deployment Flow on CloudStack
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    CloudStack Zone                                │
+│                                                                  │
+│  ┌─────────────────────────────────────────────────────────┐   │
+│  │  Virtual Router (per isolated network)                    │   │
+│  │  - DHCP server                                           │   │
+│  │  - Metadata server (http://<gateway>/latest/)            │   │
+│  │  - Port forwarding (SSH, etc.)                           │   │
+│  └────────────────────┬────────────────────────────────────┘   │
+│                       │                                          │
+│  ┌────────────────────▼────────────────────────────────────┐   │
+│  │  Talos VM (control plane / worker)                       │   │
+│  │                                                          │   │
+│  │  1. VM boots from Talos CloudStack image (.raw)          │   │
+│  │  2. Kernel detects CloudStack platform                   │   │
+│  │  3. machined starts, activates cloudstack platform       │   │
+│  │  4. Fetches metadata + user-data from virtual router     │   │
+│  │  5. Applies Talos machine config from user-data          │   │
+│  │  6. Configures networking via DHCP                       │   │
+│  │  7. Starts kubelet, joins cluster                        │   │
+│  └──────────────────────────────────────────────────────────┘   │
+│                                                                  │
+│  ┌─────────────────────────────────────────────────────────┐   │
+│  │  Load Balancer Rule (port 6443)                         │   │
+│  │  - Public IP → control plane node(s)                    │   │
+│  │  - Kubernetes API endpoint                              │   │
+│  └─────────────────────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### Image Format
+
+Talos provides a CloudStack-specific image format:
+
+| Detail | Value |
+|--------|-------|
+| **Image format** | `cloudstack-amd64.raw` (or `.raw.gz` compressed) |
+| **Source** | [Image Factory](https://factory.talos.dev) |
+| **Minimum version** | Talos v1.8.0 |
+| **Registration type** | RAW format in CloudStack |
+| **Hypervisor** | KVM (primary), VMware, XenServer |
+
+The image is a raw disk image containing the complete Talos OS — kernel, initramfs, and read-only root filesystem. No additional packages or updates are needed after deployment.
+
+### User-Data Configuration
+
+Unlike traditional Linux distributions that use cloud-init YAML, Talos uses its own machine configuration format passed as base64-encoded user-data:
+
+```yaml
+# This is Talos machine config, NOT cloud-init
+# Passed as: userdata=$(base64 controlplane.yaml | tr -d '\n')
+machine:
+  type: controlplane
+  install:
+    disk: /dev/sda
+    image: factory.talos.dev/installer/<version>
+  network:
+    interfaces:
+      - interface: eth0
+        dhcp: true
+cluster:
+  network:
+    dnsDomain: cluster.local
+    podSubnets:
+      - 10.244.0.0/16
+    serviceSubnets:
+      - 10.96.0.0/12
+```
+
+The user-data is injected at VM creation time via the `cmk deploy virtualmachine` command's `userdata` parameter. Talos fetches it from the CloudStack metadata server on first boot.
+
+### Networking on CloudStack
+
+| Aspect | Detail |
+|--------|--------|
+| **Network types** | Isolated (default), Shared, VPC |
+| **IP assignment** | DHCP from CloudStack virtual router |
+| **DNS** | From network offering (can be overridden in machine config) |
+| **API endpoint** | CloudStack load balancer rule (port 6443 → control plane) |
+| **Node-to-node** | Internal network IPs (CloudStack isolated network) |
+| **External access** | Via CloudStack port forwarding rules or load balancer |
+
+### Load Balancer for API Endpoint
+
+The Kubernetes API server is exposed through a CloudStack load balancer rule:
+
+1. Allocate a public IP from the zone
+2. Associate it with the cluster's network
+3. Create a load balancer rule: public port 6443 → private port 6443 (round-robin)
+4. Assign control plane VMs as load balancer members
+5. The `talosctl gen config` command uses this public IP as the API server endpoint
+
+For HA clusters, all control plane nodes are added to the same load balancer rule. Talos handles etcd cluster formation automatically — no manual etcd configuration is needed.
+
+### Comparison: Talos on CloudStack vs Other Platforms
+
+| Aspect | CloudStack | AWS | Bare Metal |
+|--------|-----------|-----|------------|
+| **Image format** | RAW disk image | AMI | ISO / PXE |
+| **Metadata** | Virtual router metadata server | EC2 metadata API | No metadata (static config) |
+| **User-data** | Base64-encoded in deploy API | cloud-init user-data | Kernel cmdline / config URL |
+| **Networking** | DHCP from virtual router | DHCP + ENI | Static or DHCP |
+| **API endpoint** | Load balancer rule | ELB/NLB | Keepalived VIP or external LB |
+| **Storage** | CloudStack CSI driver | EBS CSI driver | Local or external CSI |
+| **Platform module** | `cloudstack` | `aws` | `metal` (no platform) |
 
 ### CNI
 
 Talos does **not** include a default CNI. You must install one after cluster bootstrap:
-- **Calico** — recommended for on-prem/CloudStack environments
-- **Cilium** — advanced eBPF-based networking
-- **Flannel** — simple overlay networking
-- **kube-router** — integrated service proxy and network policy
+
+| CNI | Recommendation | Notes |
+|-----|---------------|-------|
+| **Calico** | Recommended for CloudStack | BGP or VXLAN overlay, network policies |
+| **Cilium** | Advanced eBPF | Hubble observability, L7 policies |
+| **Flannel** | Simple overlay | Minimal configuration, no network policies |
+| **kube-router** | All-in-one | Service proxy + network policy + CNI |
 
 ## Security Model
 
