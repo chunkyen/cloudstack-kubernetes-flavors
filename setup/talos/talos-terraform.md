@@ -376,13 +376,17 @@ Terraform **cannot** perform in-place upgrades — the Talos version is baked in
 
 ### Option A: `talosctl upgrade` (Recommended — No Terraform Changes)
 
+See the [Upgrading Talos section in talos.md](talos.md#upgrading-talos) for the full guide, including standard online upgrades and air-gapped options (local registry, pre-pull tarball, registry mirror).
+
+In short:
+
 ```bash
 # Upgrade each node in place
 talosctl --talosconfig talosconfig -n <node> upgrade \
   --image ghcr.io/siderolabs/installer:v1.14.0
 ```
 
-This is the standard Talos upgrade path. Terraform state stays unchanged. No infrastructure changes needed.
+Terraform state stays unchanged. No infrastructure changes needed.
 
 ### Option B: Template Swap (Full Rebuild)
 

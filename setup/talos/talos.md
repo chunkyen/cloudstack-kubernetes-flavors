@@ -601,7 +601,9 @@ Talos automatically discovers and joins additional control plane nodes to the et
 
 ## Upgrading Talos
 
-Talos upgrades are image-based and atomic:
+Talos upgrades are image-based and atomic. The upgrade replaces the installer image on each node and reboots into the new version.
+
+### Standard Upgrade (Online)
 
 ```bash
 # Check current version
@@ -616,6 +618,82 @@ talosctl --talosconfig talosconfig upgrade \
   --image=factory.talos.dev/installer/<new-version> \
   --nodes <node-ip>
 ```
+
+### Air-Gapped Upgrade
+
+In an air-gapped environment, nodes cannot reach `ghcr.io` or `factory.talos.dev`. There are three approaches:
+
+#### Option 1: Local Container Registry (Recommended)
+
+Set up a local registry (Harbor, Nexus, or plain Docker registry) accessible from the Talos nodes.
+
+**On an internet-connected machine:**
+```bash
+docker pull ghcr.io/siderolabs/installer:v1.14.0
+docker tag ghcr.io/siderolabs/installer:v1.14.0 registry.internal:5000/siderolabs/installer:v1.14.0
+docker push registry.internal:5000/siderolabs/installer:v1.14.0
+```
+
+**On the air-gapped management machine:**
+```bash
+talosctl --talosconfig talosconfig -n <node> upgrade \
+  --image registry.internal:5000/siderolabs/installer:v1.14.0
+```
+
+#### Option 2: Pre-Pull Image Tarball
+
+If you can transfer files to the Talos nodes:
+
+**On an internet-connected machine:**
+```bash
+docker pull ghcr.io/siderolabs/installer:v1.14.0
+docker save ghcr.io/siderolabs/installer:v1.14.0 | gzip > talos-installer-v1.14.0.tar.gz
+```
+
+**Transfer the tarball to a Talos node and import:**
+```bash
+scp talos-installer-v1.14.0.tar.gz <node-ip>:/tmp/
+talosctl -n <node> image pull /tmp/talos-installer-v1.14.0.tar.gz
+```
+
+**Then upgrade — the image is already cached locally:**
+```bash
+talosctl --talosconfig talosconfig -n <node> upgrade \
+  --image ghcr.io/siderolabs/installer:v1.14.0
+```
+
+#### Option 3: Registry Mirror in Talos Machine Config (Best for Ongoing)
+
+For long-term air-gapped operations, configure Talos to use a registry mirror at bootstrap time. Add this to both `controlplane.yaml` and `worker.yaml` **before** deploying VMs:
+
+```yaml
+machine:
+  registries:
+    mirrors:
+      ghcr.io:
+        endpoints:
+          - https://registry.internal:5000
+      registry-1.docker.io:
+        endpoints:
+          - https://registry.internal:5000
+```
+
+Then all image pulls (including the installer during upgrade) resolve through your local registry. No special upgrade commands needed — just:
+
+```bash
+talosctl --talosconfig talosconfig upgrade \
+  --image ghcr.io/siderolabs/installer:v1.14.0
+```
+
+The node pulls the image from the local mirror automatically.
+
+#### Summary
+
+| Method | Setup effort | Ongoing ease |
+|--------|-------------|-------------|
+| Local registry + mirror config | Medium (registry setup + config change) | ✅ Easiest — just `talosctl upgrade` |
+| Local registry (no mirror) | Medium (registry setup) | ✅ Easy — just change `--image` URL |
+| Pre-pull tarball per node | Low (one-time scp) | ❌ Tedious per-node per-upgrade |
 
 ## Troubleshooting
 
