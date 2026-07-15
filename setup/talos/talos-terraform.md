@@ -6,9 +6,60 @@ This guide shows how to deploy a complete Talos Kubernetes cluster on CloudStack
 
 | Tool | Purpose | Install |
 |------|---------|---------|
-| **Terraform** | Infrastructure as Code | [terraform.io/downloads](https://www.terraform.io/downloads) |
+| **Terraform** | Infrastructure as Code | See below |
 | **talosctl** | Talos management CLI | [Install guide](https://docs.siderolabs.com/talos/v1.13/getting-started/talosctl) |
 | **CloudStack API credentials** | API key + secret | CloudStack UI → Accounts → API Keys |
+
+## Terraform Setup
+
+### Install Terraform
+
+```bash
+# Linux (amd64) — download the latest binary
+wget https://releases.hashicorp.com/terraform/1.11.3/terraform_1.11.3_linux_amd64.zip
+unzip terraform_1.11.3_linux_amd64.zip
+sudo mv terraform /usr/local/bin/
+rm terraform_1.11.3_linux_amd64.zip
+
+# Verify
+terraform --version
+```
+
+> For other platforms, see [terraform.io/downloads](https://www.terraform.io/downloads).
+
+### Get CloudStack API Credentials
+
+1. Log in to the CloudStack UI
+2. Go to **Accounts** → find your account → **API Keys**
+3. Click **Generate API Key** (or copy existing ones)
+4. You'll get an **API Key** and **Secret Key**
+
+Also note your **CloudStack API URL**. This is typically:
+
+```
+http://<management-server-ip>:8080/client/api
+```
+
+### Set Environment Variables
+
+The Terraform provider reads credentials from environment variables. Set them before running any `terraform` command:
+
+```bash
+export CLOUDSTACK_API_URL=http://192.168.200.1:8080/client/api
+export CLOUDSTACK_API_KEY=your-api-key
+export CLOUDSTACK_SECRET_KEY=your-secret-key
+```
+
+> **Security tip:** Add these to a `.env` file or your shell profile so you don't have to type them every time. Never commit them to version control.
+
+### Initialize the Working Directory
+
+```bash
+cd setup/talos/manifests/terraform
+terraform init
+```
+
+This downloads the `cloudstack/cloudstack` provider plugin. Run this once per working directory.
 
 ## Provider: `cloudstack/cloudstack` v0.6.0
 
