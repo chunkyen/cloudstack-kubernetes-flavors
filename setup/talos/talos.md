@@ -458,14 +458,16 @@ kubectl -n kube-system create secret generic cloudstack-secret --from-file=cloud
 
 ### Install via Helm
 
+The CSI chart can reuse the existing `cloudstack-secret` that the CCM already created. No need to pass API keys again:
+
 ```bash
 helm install cloudstack-csi https://github.com/cloudstack/cloudstack-csi-driver/releases/download/cloudstack-csi-3.0.1/cloudstack-csi-3.0.1.tgz \
   --namespace kube-system \
-  --set global.cloudstack.apiUrl=<api-url> \
-  --set global.cloudstack.apiKey=<api-key> \
-  --set global.cloudstack.secretKey=<secret-key> \
-  --set global.cloudstack.zone=<zone-name>
+  --set secret.create=false \
+  --set secret.name=cloudstack-secret
 ```
+
+> **Note:** `secret.create=false` and `secret.name=cloudstack-secret` are the chart defaults, so the above is equivalent to just `helm install ... --namespace kube-system`. The chart will use the same secret that the CCM created in the previous step.
 
 ### ⚠️ Critical: Fix CSI Mount Path on Talos Immutable Root
 
