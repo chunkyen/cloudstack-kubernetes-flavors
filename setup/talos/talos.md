@@ -383,41 +383,63 @@ kubectl get nodes
 kubectl get pods -A
 ```
 
-## Step 12: Install CNI
+## Step 12: CNI (Container Network Interface)
 
-Talos does **not** include a default CNI. Install one after cluster bootstrap:
+Talos ships with **Flannel** as the default CNI. You have two options:
 
-### Calico
+### Option A: Use Flannel (Default — No Action Required)
+
+Flannel is installed automatically during bootstrap. No configuration changes or manual steps needed. The cluster will have pod networking working out of the box.
+
+If you want to verify:
+
+```bash
+kubectl get pods -n kube-system -l app=flannel
+```
+
+### Option B: Use a Different CNI (Calico, Cilium, etc.)
+
+To use a non-default CNI, you must **disable Flannel** in the Talos config **before** deploying VMs. Edit both `controlplane.yaml` and `worker.yaml`:
+
+```yaml
+cluster:
+  network:
+    cni:
+      name: none  # disable default Flannel
+    dnsDomain: cluster.local
+    podSubnets:
+      - 10.244.0.0/16
+    serviceSubnets:
+      - 10.96.0.0/12
+```
+
+Then deploy VMs and bootstrap as normal. After bootstrap, install your chosen CNI:
+
+#### Calico
 
 ```bash
 kubectl apply -f https://raw.githubusercontent.com/projectcalico/calico/v3.28/manifests/calico.yaml
 ```
 
-### Cilium
+#### Cilium
 
 ```bash
+# Create namespace with privileged PodSecurity label (required for Cilium)
+kubectl create ns cilium
+kubectl label ns cilium pod-security.kubernetes.io/enforce=privileged --overwrite
+kubectl label ns cilium pod-security.kubernetes.io/audit=privileged --overwrite
+kubectl label ns cilium pod-security.kubernetes.io/warn=privileged --overwrite
+
 # Install Cilium via Helm
 helm install cilium cilium/cilium \
-  --namespace cilium --create-namespace \
+  --namespace cilium \
   --set ipam.mode=kubernetes \
   --set kubeProxyReplacement=true \
   --set k8sServiceHost=${PUBLIC_IPADDRESS} \
   --set k8sServicePort=6443
 ```
 
-> **⚠️ PodSecurity Policy:** Talos v1.13 ships with PodSecurity admission enabled at the `baseline` level by default. Cilium requires `privileged` because it uses hostNetwork, hostPort, and privileged containers. Label the namespace before Cilium pods can start:
-> ```bash
-> kubectl label ns cilium pod-security.kubernetes.io/enforce=privileged --overwrite
-> kubectl label ns cilium pod-security.kubernetes.io/audit=privileged --overwrite
-> kubectl label ns cilium pod-security.kubernetes.io/warn=privileged --overwrite
-> kubectl delete pods -n cilium --all
-> ```
-
-### Flannel
-
-```bash
-kubectl apply -f https://github.com/flannel-io/flannel/releases/latest/download/kube-flannel.yml
-```
+> **⚠️ PodSecurity:** Talos v1.13 ships with PodSecurity admission at `baseline` by default. Cilium requires `privileged` because it uses hostNetwork, hostPort, and privileged containers. The namespace labels above are required before Cilium pods can start.
 
 ## Step 13: Install CloudStack Kubernetes Provider (CCM)
 
