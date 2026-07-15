@@ -372,9 +372,7 @@ Terraform destroys the VM, but the Kubernetes node object and etcd member are al
 
 ## Upgrading Talos
 
-Terraform **cannot** perform in-place upgrades — the Talos version is baked into the template/image at deploy time. Two approaches:
-
-### Option A: `talosctl upgrade` (Recommended — No Terraform Changes)
+Terraform **cannot** perform in-place upgrades — the Talos version is baked into the template/image at deploy time. Use `talosctl upgrade` instead.
 
 See the [Upgrading Talos section in talos.md](talos.md#upgrading-talos) for the full guide, including standard online upgrades and air-gapped options (local registry, pre-pull tarball, registry mirror).
 
@@ -387,19 +385,6 @@ talosctl --talosconfig talosconfig -n <node> upgrade \
 ```
 
 Terraform state stays unchanged. No infrastructure changes needed.
-
-### Option B: Template Swap (Full Rebuild)
-
-```hcl
-# terraform.tfvars
-template_id = "<new-talos-v1.14-template-uuid>"
-```
-
-```bash
-terraform apply
-```
-
-This destroys and recreates all VMs with the new template. You'd need to re-bootstrap etcd and re-join workers. This is a **full cluster rebuild**, not an upgrade — only useful when starting fresh.
 
 ### Summary
 
