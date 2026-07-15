@@ -28,17 +28,23 @@ resource "cloudstack_network" "talos" {
 }
 
 # ──────────────────────────────────────────────
-# Public IP
+# Public IP — use pre-allocated or create new
 # ──────────────────────────────────────────────
 
+data "cloudstack_ipaddress" "existing" {
+  count = var.public_ip_id != "" ? 1 : 0
+  id    = var.public_ip_id
+}
+
 resource "cloudstack_ipaddress" "talos" {
+  count      = var.public_ip_id != "" ? 0 : 1
   zone       = var.zone_id
   network_id = cloudstack_network.talos.id
 }
 
 locals {
-  public_ip_id = cloudstack_ipaddress.talos.id
-  public_ip    = cloudstack_ipaddress.talos.ip_address
+  public_ip_id = var.public_ip_id != "" ? var.public_ip_id : cloudstack_ipaddress.talos[0].id
+  public_ip    = var.public_ip_id != "" ? data.cloudstack_ipaddress.existing[0].ip_address : cloudstack_ipaddress.talos[0].ip_address
 }
 
 # ──────────────────────────────────────────────

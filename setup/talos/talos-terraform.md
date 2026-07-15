@@ -94,43 +94,44 @@ export CP_OFFERING_ID=<kube-control-uuid>
 export WORKER_OFFERING_ID=<kube-worker-uuid>
 ```
 
-## Step 2: Two-Phase Terraform Apply
+## Step 2: Pre-Allocate a Public IP
 
-Terraform needs to know the public IP to generate Talos configs, but the IP is created by Terraform. This creates a circular dependency. The solution is a **two-phase apply**:
-
-### Phase 1: Create Network + IP
+Terraform needs to know the public IP to generate Talos configs, but the IP is created by Terraform. The simplest solution is to **pre-allocate a free IP** with `cmk` first, then pass its ID to Terraform. This avoids the circular dependency and keeps it a single `terraform apply`.
 
 ```bash
-cd setup/talos/manifests/terraform
+# Find a free public IP
+cmk list publicipaddresses zoneid=${ZONE_ID} state=free forvirtualnetwork=true | \
+  jq -r '.publicipaddress[] | [.id, .ipaddress] | @tsv' | sort -k2
 
-# Set CloudStack API credentials
-export CLOUDSTACK_API_URL=http://192.168.200.1:8080/client/api
-export CLOUDSTACK_API_KEY=your-api-key
-export CLOUDSTACK_SECRET_KEY=your-secret-key
-
-terraform init
-terraform apply -target=cloudstack_network.talos -target=cloudstack_ipaddress.talos
+# Pick one and note its IP address
+export PUBLIC_IP=<ip-address>
+export PUBLIC_IP_ID=<ip-id>
 ```
 
-Note the public IP from the output:
+## Step 3: Generate Talos Configs
 
 ```bash
-terraform output public_ip   # e.g., 192.168.200.49
-```
-
-### Phase 2: Generate Configs + Apply Everything
-
-```bash
-# Generate Talos configs with the real IP
-talosctl gen config <cluster-name> https://$(terraform output -raw public_ip):6443 \
+talosctl gen config <cluster-name> https://${PUBLIC_IP}:6443 \
   --with-docs=false --with-examples=false --force
+```
 
-# Base64-encode for Terraform
+### Base64-encode for Terraform
+
+```bash
 export CP_USERDATA=$(base64 controlplane.yaml | tr -d '\n')
 export WORKER_USERDATA=$(base64 worker.yaml | tr -d '\n')
 ```
 
-Edit `terraform.tfvars` with your resource IDs and the base64-encoded userdata:
+## Step 4: Configure Terraform
+
+```bash
+cd setup/talos/manifests/terraform
+
+# Copy the example vars file
+cp terraform.tfvars.example terraform.tfvars
+```
+
+Edit `terraform.tfvars` with your resource IDs, the base64-encoded userdata, and the pre-allocated IP:
 
 ```hcl
 zone_id                    = "<zone-uuid>"
@@ -141,19 +142,37 @@ worker_offering_id         = "<kube-worker-uuid>"
 control_plane_userdata     = "<base64-controlplane.yaml>"
 worker_userdata            = "<base64-worker.yaml>"
 cluster_name               = "<cluster-name>"
-control_plane_count        = 1
-worker_count               = 1
+public_ip_id               = "<pre-allocated-ip-id>"
 ```
 
-Then apply the rest:
+Set CloudStack API credentials as environment variables:
 
 ```bash
-terraform apply
+export CLOUDSTACK_API_URL=http://192.168.200.1:8080/client/api
+export CLOUDSTACK_API_KEY=your-api-key
+export CLOUDSTACK_SECRET_KEY=your-secret-key
 ```
 
-This creates: VMs, load balancer rule, port forwarding, and firewall rules.
+## Step 5: Deploy (Single Apply)
 
-## Step 3: Bootstrap the Cluster
+```bash
+terraform init
+terraform plan   # review what will be created
+terraform apply  # type "yes" to confirm
+```
+
+This single command creates: network, load balancer, port forwarding, firewall rules, control plane VM, and worker VM — all in one shot.
+
+After apply completes, note the outputs:
+
+```bash
+terraform output public_ip          # e.g., 192.168.200.49
+terraform output control_plane_ips  # e.g., ["10.22.2.182"]
+terraform output worker_ips         # e.g., ["10.22.2.40"]
+terraform output k8s_api_endpoint   # e.g., 192.168.200.49:6443
+```
+
+## Step 6: Bootstrap the Cluster
 
 ```bash
 # Configure talosctl
@@ -288,4 +307,4 @@ The `cloudstack_loadbalancer_rule` and `cloudstack_port_forward` resources in pr
 
 ### Config Generation Ordering
 
-The Talos configs must be generated **after** the public IP is known but **before** the VMs are deployed. This is why a two-phase apply is required. There is no way to do this in a single `terraform apply` because `talosctl gen config` is not a Terraform resource.
+The Talos configs must be generated **before** `terraform apply` because the VMs need the configs embedded as userdata. Pre-allocating a free IP with `cmk` solves this — you know the IP upfront, generate configs, then a single `terraform apply` creates everything.
