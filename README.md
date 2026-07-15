@@ -73,7 +73,9 @@ The Rancher Turtles integration combines three layers — Rancher (management pl
 #### Talos Linux
 
 - [Talos architecture](architecture/talos.md) — architecture overview
-- [Talos setup guide](setup/talos/talos.md) — deploy a Talos cluster on CloudStack
+- [Talos setup guide](setup/talos/talos.md) — deploy a Talos cluster on CloudStack (manual `cmk` approach)
+- [Terraform deployment guide](setup/talos/talos-terraform.md) — one-shot deployment with Terraform (network, IP, LB, firewall, VMs)
+- [Terraform manifests](setup/talos/manifests/terraform/) — Terraform configs for the above
 
 #### Cross-Cutting Components
 
@@ -89,7 +91,7 @@ The Rancher Turtles integration combines three layers — Rancher (management pl
 
 | Feature | CKS | CAPC | Rancher+CAPC | Talos (standalone) |
 |---------|-----|------|-------------------|-------------------|
-| **Management** | Native CloudStack UI/API | Cluster API controllers | Rancher UI/API | Talos CLI / Tinkerbell |
+| **Management** | Native CloudStack UI/API | Cluster API controllers | Rancher UI/API | Talos CLI / Terraform |
 | **Node OS** | User-defined | User-defined | User-defined | Talos Linux (immutable, no SSH) |
 | **GitOps** | No | Yes (CAPI native) | Yes (Rancher Fleet) | Yes (talosctl + Git) |
 | **Multi-cluster** | Limited | Yes (CAPI native) | Yes (CAPI + Rancher Turtles) | Manual / CAPI with Talos provider |
