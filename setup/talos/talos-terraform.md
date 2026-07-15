@@ -335,7 +335,9 @@ control_plane_count = 3  # was 1
 terraform apply
 ```
 
-Terraform creates new CP VMs and adds them to the load balancer. However, etcd membership is **not** managed by Terraform. After apply, join the new CP nodes to the existing etcd cluster:
+Terraform creates new CP VMs and adds them to the load balancer automatically — `member_ids = cloudstack_instance.control_plane[*].id` ensures all CP nodes are behind the single LB rule on port 6443. Port forwarding for talosctl (50000+) also scales automatically via `count = var.control_plane_count`.
+
+However, etcd membership is **not** managed by Terraform. After apply, join the new CP nodes to the existing etcd cluster:
 
 ```bash
 # Get the existing CP node IP
