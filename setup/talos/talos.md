@@ -13,9 +13,27 @@ Ensure these exist in your CloudStack environment:
 | Resource | Details |
 |----------|---------|
 | **Zone** | A zone with available compute resources |
-| **Network** | An isolated or shared network for the cluster VMs |
+| **Network** | An isolated network using the **Kubernetes network offering** (see below) |
 | **Public IP** | An unused public IP for the Kubernetes API endpoint load balancer |
 | **Compute Offering** | At least 2 vCPU, 2 GB RAM (minimum for control plane) |
+
+### Network Offering: Use the Kubernetes Service Offering
+
+Talos clusters on CloudStack **must** use the `DefaultNetworkOfferingforKubernetesService` (or equivalent) for the isolated network. This offering provides:
+
+- **Source NAT** — outbound internet access for the VMs (NTP, image pulls, etc.)
+- **Load Balancer** — for the Kubernetes API endpoint
+- **Port Forwarding** — for `talosctl` API access (port 50000)
+- **Egress default allow** (`egressdefaultpolicy=true`) — no need for explicit egress firewall rules
+
+> **Why not the default isolated offering?** The standard `DefaultIsolatedNetworkOfferingWithSourceNatService` also works, but the Kubernetes-specific offering is purpose-built for Kubernetes workloads and is the recommended choice.
+
+To find the offering ID:
+
+```bash
+cmk list networkofferings | jq -r '.networkoffering[] | select(.name | test("KubernetesService")) | [.id, .name] | @tsv'
+export NETWORK_OFFERING_ID=<kubernetes-offering-id>
+```
 
 ### Local Tools
 
@@ -147,6 +165,26 @@ cmk register template \
 
 Export the required CloudStack resource IDs as environment variables for use in subsequent commands.
 
+### Create the Isolated Network
+
+Create a new isolated network using the Kubernetes network offering:
+
+```bash
+cmk create network \
+  name=talosnet \
+  displaytext="Talos cluster network" \
+  networkofferingid=${NETWORK_OFFERING_ID} \
+  zoneid=${ZONE_ID} \
+  gateway=10.22.2.1 \
+  netmask=255.255.255.0 \
+  startip=10.22.2.2 \
+  endip=10.22.2.200
+
+export NETWORK_ID=<network-id-from-output>
+```
+
+> **Note:** The `DefaultNetworkOfferingforKubernetesService` has `egressdefaultpolicy=true`, meaning outbound traffic is allowed by default. No explicit egress firewall rules are needed.
+
 ### Get Zone ID
 
 ```bash
@@ -253,6 +291,8 @@ cluster:
 
 Create the control plane VM with the Talos configuration as base64-encoded user-data.
 
+> **⚠️ Critical: Guest CPU mode must be `host-passthrough`.** Talos requires CPU features (e.g., AMD64 v2 instruction set) that QEMU's default virtual CPU model may not expose. Without this setting, the VM will boot-loop. Set it via the `details` parameter:
+
 ```bash
 cmk deploy virtualmachine \
   zoneid=${ZONE_ID} \
@@ -260,6 +300,7 @@ cmk deploy virtualmachine \
   serviceofferingid=${SERVICEOFFERING_ID} \
   networkids=${NETWORK_ID} \
   name=talos-cp-1 \
+  'details[0].guest.cpu.mode=host-passthrough' \
   userdata=$(base64 controlplane.yaml | tr -d '\n')
 ```
 
@@ -280,7 +321,24 @@ export LB_RULE_ID=<k8s-api-lb-rule-id>
 cmk assigntoloadbalancerrule id=${LB_RULE_ID} virtualmachineids=${VM_ID}
 ```
 
-## Step 8: Bootstrap the Cluster
+## Step 8: Create Port Forwarding for talosctl API
+
+Talos uses port 50000 for its gRPC API. Create a port forwarding rule so `talosctl` can reach the control plane from outside the isolated network:
+
+```bash
+cmk create portforwardingrule \
+  ipaddressid=${PUBLIC_IPADDRESS_ID} \
+  privateport=50000 \
+  publicport=50000 \
+  protocol=tcp \
+  virtualmachineid=${VM_ID} \
+  openfirewall=true \
+  cidrlist=0.0.0.0/0
+```
+
+> **Note:** The Talos API endpoint (`192.168.200.49:50000` in this example) is separate from the Kubernetes API endpoint (`192.168.200.49:6443`). The load balancer handles 6443; port forwarding handles 50000.
+
+## Step 9: Bootstrap the Cluster
 
 ### Configure talosctl
 
@@ -301,13 +359,13 @@ talosctl --talosconfig talosconfig bootstrap
 talosctl --talosconfig talosconfig dashboard
 ```
 
-## Step 9: Retrieve kubeconfig
+## Step 10: Retrieve kubeconfig
 
 ```bash
 talosctl --talosconfig talosconfig kubeconfig .
 ```
 
-## Step 10: Verify the Cluster
+## Step 11: Verify the Cluster
 
 ```bash
 # Check cluster health
@@ -320,7 +378,7 @@ kubectl get nodes
 kubectl get pods -A
 ```
 
-## Step 11: Install CNI
+## Step 12: Install CNI
 
 Talos does **not** include a default CNI. Install one after cluster bootstrap:
 
@@ -333,8 +391,22 @@ kubectl apply -f https://raw.githubusercontent.com/projectcalico/calico/v3.28/ma
 ### Cilium
 
 ```bash
-cilium install
+# Install Cilium via Helm
+helm install cilium cilium/cilium \
+  --namespace cilium --create-namespace \
+  --set ipam.mode=kubernetes \
+  --set kubeProxyReplacement=true \
+  --set k8sServiceHost=${PUBLIC_IPADDRESS} \
+  --set k8sServicePort=6443
 ```
+
+> **⚠️ PodSecurity Policy:** Talos v1.13 ships with PodSecurity admission enabled at the `baseline` level by default. Cilium requires `privileged` because it uses hostNetwork, hostPort, and privileged containers. Label the namespace before Cilium pods can start:
+> ```bash
+> kubectl label ns cilium pod-security.kubernetes.io/enforce=privileged --overwrite
+> kubectl label ns cilium pod-security.kubernetes.io/audit=privileged --overwrite
+> kubectl label ns cilium pod-security.kubernetes.io/warn=privileged --overwrite
+> kubectl delete pods -n cilium --all
+> ```
 
 ### Flannel
 
@@ -342,7 +414,7 @@ cilium install
 kubectl apply -f https://github.com/flannel-io/flannel/releases/latest/download/kube-flannel.yml
 ```
 
-## Step 12: Install CloudStack Kubernetes Provider (CCM)
+## Step 13: Install CloudStack Kubernetes Provider (CCM)
 
 The CloudStack external cloud controller manager is **required** for any Kubernetes cluster running on CloudStack. It provides:
 
@@ -357,7 +429,7 @@ kubectl apply -f https://raw.githubusercontent.com/apache/cloudstack-kubernetes-
 
 > **Note:** Unlike CKS which auto-deploys the CCM, Talos requires manual installation. The CCM must be configured with your CloudStack API credentials (api-url, api-key, secret-key).
 
-## Step 13: Install CloudStack CSI Driver
+## Step 14: Install CloudStack CSI Driver
 
 The CloudStack CSI driver is **required** for persistent storage on CloudStack. It provides:
 
@@ -365,12 +437,69 @@ The CloudStack CSI driver is **required** for persistent storage on CloudStack. 
 - Volume lifecycle management (create, attach, detach, delete)
 - Volume snapshots and cloning
 
-```bash
-# See setup/cloudstack-csi-driver.md for detailed configuration
-kubectl apply -f https://raw.githubusercontent.com/apache/cloudstack-csi-driver/main/deploy/kubernetes/csi.yaml
+### Create cloud-config
+
+```ini
+[Global]
+api-url = <CloudStack API URL>
+api-key = <CloudStack API Key>
+secret-key = <CloudStack API Secret>
+zone = <CloudStack Zone Name>
+ssl-no-verify = true
 ```
 
-> **Note:** The CSI driver requires CloudStack API credentials and must be configured with the appropriate disk offering for your workloads.
+### Create Kubernetes Secret
+
+If you already deployed the CCM, you can reuse the same `cloudstack-secret` in `kube-system`. Otherwise:
+
+```bash
+kubectl -n kube-system create secret generic cloudstack-secret --from-file=cloud-config
+```
+
+### Install via Helm
+
+```bash
+helm install cloudstack-csi https://github.com/cloudstack/cloudstack-csi-driver/releases/download/cloudstack-csi-3.0.1/cloudstack-csi-3.0.1.tgz \
+  --namespace kube-system \
+  --set global.cloudstack.apiUrl=<api-url> \
+  --set global.cloudstack.apiKey=<api-key> \
+  --set global.cloudstack.secretKey=<secret-key> \
+  --set global.cloudstack.zone=<zone-name>
+```
+
+### ⚠️ Critical: Fix CSI Mount Path on Talos Immutable Root
+
+Talos Linux uses an **immutable root filesystem** — directories like `/run/metadata` do not exist at runtime. The CSI node DaemonSet includes a hostPath volume for `ignition-dir` that references `/run/metadata`, which causes the pod to fail with:
+
+```
+MountVolume.SetUp failed for volume "ignition-dir" : hostPath type check failed: /run/metadata is not a directory
+```
+
+**Fix:** Patch the DaemonSet to replace the hostPath volume with an `emptyDir`:
+
+```bash
+kubectl patch daemonset -n kube-system cloudstack-csi-node --type='json' -p='[
+  {"op": "replace", "path": "/spec/template/spec/volumes/5", "value": {"name": "ignition-dir", "emptyDir": {}}}
+]'
+```
+
+Then delete the existing pods to restart them with the fix:
+
+```bash
+kubectl delete pods -n kube-system -l app=cloudstack-csi-node
+```
+
+> **Note:** The volume index (`5` in the path above) may vary by CSI driver version. To find the correct index:
+> ```bash
+> kubectl get daemonset -n kube-system cloudstack-csi-node -o yaml | grep -n 'ignition-dir'
+> ```
+
+### Verify
+
+```bash
+kubectl get pods -n kube-system -l app=cloudstack-csi
+kubectl get sc
+```
 
 ## Adding Worker Nodes
 
@@ -472,6 +601,31 @@ talosctl --talosconfig talosconfig upgrade \
 - Check `talosctl --talosconfig talosconfig dashboard` for errors
 - Verify etcd bootstrap: `talosctl --talosconfig talosconfig etcd status`
 - Check kubelet logs: `talosctl --talosconfig talosconfig logs kubelet`
+
+### Bootstrap fails with "time is not in sync yet"
+
+Talos requires accurate time before etcd can bootstrap. If the VM cannot reach NTP servers (e.g., in an isolated network without internet access):
+
+```bash
+# Check NTP status
+talosctl --talosconfig talosconfig time
+
+# Add an egress firewall rule for NTP (UDP 123)
+cmk create egressfirewallrule networkid=${NETWORK_ID} protocol=udp startport=123 endport=123 cidrlist=0.0.0.0/0
+
+# Wait ~30 seconds for NTP sync, then retry bootstrap
+talosctl --talosconfig talosconfig bootstrap
+```
+
+> **Note:** The `DefaultNetworkOfferingforKubernetesService` has `egressdefaultpolicy=true`, so NTP should work without explicit rules. If using a different network offering with egress blocked by default, add the NTP rule above.
+
+### CSI node pod fails with "ignition-dir" mount error
+
+```
+MountVolume.SetUp failed for volume "ignition-dir" : hostPath type check failed: /run/metadata is not a directory
+```
+
+This is a known issue on Talos immutable root. See [Step 14](#step-14-install-cloudstack-csi-driver) for the fix.
 
 ## References
 
