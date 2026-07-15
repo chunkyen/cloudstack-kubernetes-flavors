@@ -1,6 +1,6 @@
 # Terraform: One-Shot Talos Cluster on CloudStack
 
-This guide shows how to deploy a complete Talos Kubernetes cluster on CloudStack using **Terraform** — network, public IP, load balancer, port forwarding, and all VMs in a single `terraform apply`.
+This guide shows how to deploy a complete Talos Kubernetes cluster on CloudStack using **Terraform** — network, public IP, load balancer, port forwarding, firewall rules, and all VMs in a single `terraform apply`.
 
 ## Prerequisites
 
@@ -9,6 +9,18 @@ This guide shows how to deploy a complete Talos Kubernetes cluster on CloudStack
 | **Terraform** | Infrastructure as Code | [terraform.io/downloads](https://www.terraform.io/downloads) |
 | **talosctl** | Talos management CLI | [Install guide](https://docs.siderolabs.com/talos/v1.13/getting-started/talosctl) |
 | **CloudStack API credentials** | API key + secret | CloudStack UI → Accounts → API Keys |
+
+## Provider: `cloudstack/cloudstack` v0.6.0
+
+The Terraform provider for CloudStack is published at `cloudstack/cloudstack` (not `apache/cloudstack`). The latest version is **0.6.0**. Key differences from the older `apache/cloudstack` provider:
+
+- Resource names use `cloudstack_loadbalancer_rule` (not `cloudstack_lb_rule`)
+- No separate `cloudstack_lb_rule_member` — members are set via `member_ids` on the rule itself
+- Port forwarding uses a nested `forward { ... }` block, not flat arguments
+- Firewall rules use a nested `rule { ... }` block with `ports` as a set of strings
+- Network uses `zone` (not `zone_id`), `network_offering` (not `network_offering_id`)
+- Instance uses `zone` (not `zone_id`), `service_offering` (not `service_offering_id`)
+- No `openfirewall` parameter — firewall rules must be created as separate `cloudstack_firewall` resources
 
 ## Step 1: Gather CloudStack Resource IDs
 
@@ -31,46 +43,40 @@ export CP_OFFERING_ID=<kube-control-uuid>
 export WORKER_OFFERING_ID=<kube-worker-uuid>
 ```
 
-## Step 2: Generate Talos Configs
+## Step 2: Two-Phase Terraform Apply
 
-```bash
-# Use the public IP that will be allocated (or a placeholder — you'll update later)
-export PUBLIC_IP="10.22.2.1"  # placeholder, will be replaced after apply
+Terraform needs to know the public IP to generate Talos configs, but the IP is created by Terraform. This creates a circular dependency. The solution is a **two-phase apply**:
 
-talosctl gen config talos-cluster https://${PUBLIC_IP}:6443 \
-  --with-docs=false --with-examples=false --force
-```
-
-### Disable Default CNI
-
-Edit both `controlplane.yaml` and `worker.yaml` to add `cni: name: none`:
-
-```yaml
-cluster:
-  network:
-    cni:
-      name: none  # <-- add this line
-    dnsDomain: cluster.local
-    podSubnets:
-      - 10.244.0.0/16
-    serviceSubnets:
-      - 10.96.0.0/12
-```
-
-### Base64-encode for Terraform
-
-```bash
-export CP_USERDATA=$(base64 controlplane.yaml | tr -d '\n')
-export WORKER_USERDATA=$(base64 worker.yaml | tr -d '\n')
-```
-
-## Step 3: Configure Terraform
+### Phase 1: Create Network + IP
 
 ```bash
 cd setup/talos/manifests/terraform
 
-# Copy the example vars file
-cp terraform.tfvars.example terraform.tfvars
+# Set CloudStack API credentials
+export CLOUDSTACK_API_URL=http://192.168.200.1:8080/client/api
+export CLOUDSTACK_API_KEY=your-api-key
+export CLOUDSTACK_SECRET_KEY=your-secret-key
+
+terraform init
+terraform apply -target=cloudstack_network.talos -target=cloudstack_ipaddress.talos
+```
+
+Note the public IP from the output:
+
+```bash
+terraform output public_ip   # e.g., 192.168.200.49
+```
+
+### Phase 2: Generate Configs + Apply Everything
+
+```bash
+# Generate Talos configs with the real IP
+talosctl gen config <cluster-name> https://$(terraform output -raw public_ip):6443 \
+  --with-docs=false --with-examples=false --force
+
+# Base64-encode for Terraform
+export CP_USERDATA=$(base64 controlplane.yaml | tr -d '\n')
+export WORKER_USERDATA=$(base64 worker.yaml | tr -d '\n')
 ```
 
 Edit `terraform.tfvars` with your resource IDs and the base64-encoded userdata:
@@ -83,35 +89,20 @@ control_plane_offering_id  = "<kube-control-uuid>"
 worker_offering_id         = "<kube-worker-uuid>"
 control_plane_userdata     = "<base64-controlplane.yaml>"
 worker_userdata            = "<base64-worker.yaml>"
+cluster_name               = "<cluster-name>"
+control_plane_count        = 1
+worker_count               = 1
 ```
 
-Set CloudStack API credentials as environment variables:
+Then apply the rest:
 
 ```bash
-export CLOUDSTACK_API_URL=http://192.168.200.1:8080/client/api
-export CLOUDSTACK_API_KEY=your-api-key
-export CLOUDSTACK_SECRET_KEY=your-secret-key
+terraform apply
 ```
 
-## Step 4: Deploy
+This creates: VMs, load balancer rule, port forwarding, and firewall rules.
 
-```bash
-terraform init
-terraform plan   # review what will be created
-terraform apply  # type "yes" to confirm
-```
-
-After apply completes, note the outputs:
-
-```bash
-terraform output public_ip          # e.g., 192.168.200.49
-terraform output control_plane_ips # e.g., ["10.22.2.197"]
-terraform output worker_ips        # e.g., ["10.22.2.52"]
-terraform output k8s_api_endpoint  # e.g., 192.168.200.49:6443
-terraform output talos_api_endpoints # e.g., ["192.168.200.49:50000"]
-```
-
-## Step 5: Bootstrap the Cluster
+## Step 3: Bootstrap the Cluster
 
 ```bash
 # Configure talosctl
@@ -125,21 +116,13 @@ talosctl --talosconfig talosconfig bootstrap
 talosctl --talosconfig talosconfig kubeconfig .
 ```
 
-## Step 6: Install Addons
+## Step 4: Install Addons
 
-### CNI (Cilium)
+### CNI
 
-```bash
-kubectl create ns cilium
-kubectl label ns cilium pod-security.kubernetes.io/enforce=privileged --overwrite
+Talos ships with **Flannel** as the default CNI. No action needed — it installs automatically during bootstrap.
 
-helm install cilium cilium/cilium \
-  --namespace cilium \
-  --set ipam.mode=kubernetes \
-  --set kubeProxyReplacement=true \
-  --set k8sServiceHost=$(terraform output -raw public_ip) \
-  --set k8sServicePort=6443
-```
+If you want a different CNI (Cilium, Calico), you must disable Flannel **before** deploying VMs by adding `cni: name: none` to both `controlplane.yaml` and `worker.yaml`, then install your CNI post-bootstrap.
 
 ### CCM (CloudStack Kubernetes Provider)
 
@@ -165,24 +148,44 @@ kubectl patch daemonset -n kube-system cloudstack-csi-node --type='json' -p='[
 kubectl delete pods -n kube-system -l app=cloudstack-csi-node
 ```
 
+### StorageClass
+
+```bash
+cat <<EOF | kubectl apply -f -
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: cloudstack-ssd
+  annotations:
+    storageclass.kubernetes.io/is-default-class: "true"
+provisioner: csi.cloudstack.apache.org
+parameters:
+  csi.cloudstack.apache.org/disk-offering-id: "<custom-disk-offering-uuid>"
+volumeBindingMode: WaitForFirstConsumer
+reclaimPolicy: Delete
+allowVolumeExpansion: true
+EOF
+```
+
 ## What Terraform Creates
 
 | Resource | Count | Purpose |
 |----------|-------|---------|
 | `cloudstack_network` | 1 | Isolated network with Kubernetes offering |
 | `cloudstack_ipaddress` | 1 | Public IP for API endpoints |
-| `cloudstack_lb_rule` | 1 | Load balancer for K8s API (6443) |
-| `cloudstack_lb_rule_member` | N | Assigns CP VMs to the load balancer |
+| `cloudstack_loadbalancer_rule` | 1 | Load balancer for K8s API (6443) with `cidrlist` |
 | `cloudstack_port_forward` | N | Port forwarding for talosctl (50000+) |
+| `cloudstack_firewall` | 2 | Firewall rules for 6443 and 50000 |
 | `cloudstack_instance` (CP) | N | Control plane VMs with `host-passthrough` |
 | `cloudstack_instance` (worker) | N | Worker VMs with `host-passthrough` |
 
 ## What Terraform Does NOT Do
 
-- **Generate Talos configs** — `talosctl gen config` must be run first
+- **Generate Talos configs** — `talosctl gen config` must be run between Phase 1 and Phase 2
 - **Bootstrap etcd** — `talosctl bootstrap` is manual
 - **Install CNI, CCM, CSI** — these are post-bootstrap steps
 - **Create the Talos template** — the image must already exist in CloudStack
+- **Patch CSI ignition-dir** — the DaemonSet patch is still manual (Talos immutable root issue)
 
 ## Multi-Node Clusters
 
@@ -201,4 +204,37 @@ Terraform will create 3 CP VMs, assign all 3 to the load balancer, and create po
 terraform destroy
 ```
 
-This removes all VMs, the load balancer, port forwarding rules, the public IP, and the network — everything Terraform created.
+This removes all VMs, the load balancer, port forwarding rules, firewall rules, the public IP, and the network — everything Terraform created.
+
+## Known Issues & Workarounds
+
+### CSI `ignition-dir` on Talos Immutable Root
+
+Talos Linux has an immutable root filesystem — `/run/metadata` does not exist. The CSI node DaemonSet includes a `hostPath` volume for `ignition-dir` that references `/run/metadata`, causing pods to fail with:
+
+```
+MountVolume.SetUp failed for volume "ignition-dir" : hostPath type check failed: /run/metadata is not a directory
+```
+
+**Fix:** Patch the DaemonSet to replace `hostPath` with `emptyDir`:
+
+```bash
+kubectl patch daemonset -n kube-system cloudstack-csi-node --type='json' -p='[
+  {"op": "replace", "path": "/spec/template/spec/volumes/5", "value": {"name": "ignition-dir", "emptyDir": {}}}
+]'
+kubectl delete pods -n kube-system -l app=cloudstack-csi-node
+```
+
+The volume index (`5` in the path above) may vary by CSI driver version. To find the correct index:
+
+```bash
+kubectl get daemonset -n kube-system cloudstack-csi-node -o yaml | grep -n 'ignition-dir'
+```
+
+### Firewall Rules
+
+The `cloudstack_loadbalancer_rule` and `cloudstack_port_forward` resources in provider v0.6.0 do **not** auto-create firewall rules, even with `cidrlist` set. You must create separate `cloudstack_firewall` resources for each port.
+
+### Config Generation Ordering
+
+The Talos configs must be generated **after** the public IP is known but **before** the VMs are deployed. This is why a two-phase apply is required. There is no way to do this in a single `terraform apply` because `talosctl gen config` is not a Terraform resource.
