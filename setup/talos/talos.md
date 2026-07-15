@@ -46,6 +46,9 @@ Install these on the machine where you'll manage the cluster:
 | **talosctl** | Talos management CLI | [Install guide](https://docs.siderolabs.com/talos/v1.13/getting-started/talosctl) |
 | **jq** | JSON processing | `apt install jq` / `yum install jq` |
 | **base64** | Config encoding | Usually pre-installed |
+| **terraform** | Infrastructure as Code (optional) | [terraform.io/downloads](https://www.terraform.io/downloads) |
+
+> **One-shot deployment with Terraform:** See [talos-terraform.md](talos-terraform.md) for a Terraform-based approach that creates the network, public IP, load balancer, port forwarding, and all VMs in a single `terraform apply`.
 
 ## Step 1: Obtain the Talos CloudStack Image
 
