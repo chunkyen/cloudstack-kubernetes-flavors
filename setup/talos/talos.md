@@ -24,9 +24,9 @@ Talos clusters on CloudStack **must** use the `DefaultNetworkOfferingforKubernet
 - **Source NAT** — outbound internet access for the VMs (NTP, image pulls, etc.)
 - **Load Balancer** — for the Kubernetes API endpoint
 - **Port Forwarding** — for `talosctl` API access (port 50000)
-- **Egress default allow** (`egressdefaultpolicy=true`) — no need for explicit egress firewall rules
+- **Egress default allow** (`egressdefaultpolicy=true`) — outbound traffic is allowed without explicit firewall rules
 
-> **Why not the default isolated offering?** The standard `DefaultIsolatedNetworkOfferingWithSourceNatService` also works, but the Kubernetes-specific offering is purpose-built for Kubernetes workloads and is the recommended choice.
+> **⚠️ Critical: Egress policy differs between offerings.** The standard `DefaultIsolatedNetworkOfferingWithSourceNatService` has `egressdefaultpolicy=false`, meaning **all outbound traffic is blocked by default** and every protocol/port needs an explicit egress firewall rule. The Kubernetes offering (`DefaultNetworkOfferingforKubernetesService`) has `egressdefaultpolicy=true`, so outbound traffic flows freely. This matters because Talos VMs need NTP (UDP 123) for time sync before etcd bootstrap, and need to pull container images from the internet. Using the wrong offering means you must add egress rules for NTP, HTTP/HTTPS, DNS, and anything else the cluster needs.
 
 To find the offering ID:
 
@@ -617,7 +617,7 @@ cmk create egressfirewallrule networkid=${NETWORK_ID} protocol=udp startport=123
 talosctl --talosconfig talosconfig bootstrap
 ```
 
-> **Note:** The `DefaultNetworkOfferingforKubernetesService` has `egressdefaultpolicy=true`, so NTP should work without explicit rules. If using a different network offering with egress blocked by default, add the NTP rule above.
+> **Note:** The `DefaultNetworkOfferingforKubernetesService` has `egressdefaultpolicy=true`, so NTP should work without explicit rules. If using a different network offering (e.g., `DefaultIsolatedNetworkOfferingWithSourceNatService` which has `egressdefaultpolicy=false`), you **must** add the NTP rule above, plus rules for DNS (UDP 53), HTTP/HTTPS (TCP 80, 443), and any other outbound traffic the cluster needs.
 
 ### CSI node pod fails with "ignition-dir" mount error
 
