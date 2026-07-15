@@ -308,3 +308,98 @@ The `cloudstack_loadbalancer_rule` and `cloudstack_port_forward` resources in pr
 ### Config Generation Ordering
 
 The Talos configs must be generated **before** `terraform apply` because the VMs need the configs embedded as userdata. Pre-allocating a free IP with `cmk` solves this — you know the IP upfront, generate configs, then a single `terraform apply` creates everything.
+
+## Scaling the Cluster
+
+### Add Workers (Simple)
+
+```hcl
+# terraform.tfvars
+worker_count = 3  # was 1
+```
+
+```bash
+terraform apply
+```
+
+Terraform creates new VMs with the existing `worker.yaml` config. The bootstrap token in that config is valid indefinitely, so new nodes join the cluster automatically. No manual steps needed.
+
+### Add Control Plane Nodes (Requires etcd Recovery)
+
+```hcl
+# terraform.tfvars
+control_plane_count = 3  # was 1
+```
+
+```bash
+terraform apply
+```
+
+Terraform creates new CP VMs and adds them to the load balancer. However, etcd membership is **not** managed by Terraform. After apply, join the new CP nodes to the existing etcd cluster:
+
+```bash
+# Get the existing CP node IP
+export EXISTING_CP=<existing-cp-ip>
+
+# Join each new CP node to etcd
+talosctl --talosconfig talosconfig -n <new-cp-ip> bootstrap --recover-from=${EXISTING_CP}
+```
+
+> **Note:** For production multi-CP clusters, generate the initial configs with `--with-secrets` and save the secrets file. When scaling CP nodes later, regenerate configs using the same secrets so all nodes share the same etcd identity:
+> ```bash
+> talosctl gen config <cluster> https://<ip>:6443 \
+>   --with-secrets=secrets.yaml \
+>   --with-docs=false --with-examples=false --force
+> ```
+
+### Remove Nodes
+
+Terraform can destroy the VM, but you must drain and remove the node from Kubernetes first:
+
+```bash
+# Before terraform apply
+kubectl drain <node> --ignore-daemonsets --delete-emptydir-data
+kubectl delete node <node>
+talosctl --talosconfig talosconfig -n <node> reset
+
+# Then reduce count and apply
+terraform apply
+```
+
+Terraform destroys the VM, but the Kubernetes node object and etcd member are already cleaned up.
+
+## Upgrading Talos
+
+Terraform **cannot** perform in-place upgrades — the Talos version is baked into the template/image at deploy time. Two approaches:
+
+### Option A: `talosctl upgrade` (Recommended — No Terraform Changes)
+
+```bash
+# Upgrade each node in place
+talosctl --talosconfig talosconfig -n <node> upgrade \
+  --image ghcr.io/siderolabs/installer:v1.14.0
+```
+
+This is the standard Talos upgrade path. Terraform state stays unchanged. No infrastructure changes needed.
+
+### Option B: Template Swap (Full Rebuild)
+
+```hcl
+# terraform.tfvars
+template_id = "<new-talos-v1.14-template-uuid>"
+```
+
+```bash
+terraform apply
+```
+
+This destroys and recreates all VMs with the new template. You'd need to re-bootstrap etcd and re-join workers. This is a **full cluster rebuild**, not an upgrade — only useful when starting fresh.
+
+### Summary
+
+| Operation | Terraform handles | Manual steps needed |
+|-----------|------------------|---------------------|
+| Add workers | ✅ VM creation | None (auto-joins) |
+| Add CP nodes | ✅ VM creation + LB | `talosctl bootstrap --recover-from` for etcd |
+| Remove nodes | ✅ VM destruction | `kubectl drain/delete`, `talosctl reset` first |
+| Upgrade Talos | ❌ | `talosctl upgrade` per node |
