@@ -30,22 +30,97 @@ Install these on the machine where you'll manage the cluster:
 
 ## Step 1: Obtain the Talos CloudStack Image
 
-Download the Talos CloudStack image from the [Image Factory](https://factory.talos.dev).
+Talos provides CloudStack-specific images via the [Image Factory](https://factory.talos.dev) — a service that generates boot assets on demand. You can download images entirely via CLI, no browser needed.
 
 > **Minimum version:** Talos v1.8.0 or later is required for CloudStack support.
 
-```bash
-# Option A: Direct download (if CloudStack can fetch from URL)
-# Register template in CloudStack UI with URL:
-# https://factory.talos.dev/image/<channel>/<version>/cloudstack-amd64.raw.gz
+### Option A: Download via CLI (Recommended)
 
-# Option B: Download locally, decompress, host on a web server
-curl -LO https://factory.talos.dev/image/<channel>/<version>/cloudstack-amd64.raw.gz
+The Image Factory serves images at predictable URLs. The "vanilla" schematic (no custom extensions) has a well-known ID:
+
+```bash
+# Set variables
+SCHEMATIC_ID="376567988ad370138ad8b2698212367b8edcb69b5fd68c80be1f2ec7d603b4ba"
+TALOS_VERSION="v1.8.0"
+
+# Download the CloudStack image
+curl -LO "https://factory.talos.dev/image/${SCHEMATIC_ID}/${TALOS_VERSION}/cloudstack-amd64.raw.gz"
+
+# Verify checksum
+curl -LO "https://factory.talos.dev/image/${SCHEMATIC_ID}/${TALOS_VERSION}/cloudstack-amd64.raw.gz.sha256"
+sha256sum -c cloudstack-amd64.raw.gz.sha256
+
+# Decompress
 gunzip cloudstack-amd64.raw.gz
-# Host the .raw file on a local web server, then register template from that URL
 ```
 
-> **Note:** CloudStack may not handle compressed images well. If the direct URL fails, download the image, decompress it, host it on a local web server, and register the template from there. Alternatively, try removing `.gz` from the URL to fetch an uncompressed image.
+### Option B: With Custom Extensions (via Schematic)
+
+If you need system extensions (e.g. GPU drivers, custom kernel modules, Intel/AMD microcode), create a schematic and upload it to the Image Factory:
+
+```bash
+# 1. Create schematic YAML
+cat > schematic.yaml << 'EOF'
+customization:
+  systemExtensions:
+    officialExtensions:
+      - siderolabs/gvisor
+      - siderolabs/intel-ucode
+EOF
+
+# 2. Upload to Image Factory — returns a content-addressable schematic ID
+SCHEMATIC_ID=$(curl -s -X POST \
+  --data-binary @schematic.yaml \
+  https://factory.talos.dev/schematics | jq -r '.id')
+
+echo "Schematic ID: $SCHEMATIC_ID"
+
+# 3. Download the custom CloudStack image
+curl -LO "https://factory.talos.dev/image/${SCHEMATIC_ID}/v1.8.0/cloudstack-amd64.raw.gz"
+
+# 4. Verify and decompress
+sha256sum -c cloudstack-amd64.raw.gz.sha256
+gunzip cloudstack-amd64.raw.gz
+```
+
+### Option C: Direct URL Registration
+
+If your CloudStack environment can fetch images directly from URLs, register the template using the Image Factory URL:
+
+```
+https://factory.talos.dev/image/376567988ad370138ad8b2698212367b8edcb69b5fd68c80be1f2ec7d603b4ba/v1.8.0/cloudstack-amd64.raw.gz
+```
+
+> **Note:** CloudStack may not handle compressed images well. If the direct URL fails, download the image locally, decompress it, host it on a local web server, and register the template from there. Alternatively, try removing `.gz` from the URL to fetch an uncompressed image.
+
+### List Available Versions
+
+```bash
+curl -s https://factory.talos.dev/versions | jq
+```
+
+### Image Factory URL Structure
+
+```
+https://factory.talos.dev/image/<schematic-id>/<version>/cloudstack-amd64.raw.gz
+```
+
+| Component | Description |
+|-----------|-------------|
+| `schematic-id` | Content-addressable hash of customizations. Vanilla: `376567988ad370138ad8b2698212367b8edcb69b5fd68c80be1f2ec7d603b4ba` |
+| `version` | Talos version, e.g. `v1.8.0`, `v1.9.0` |
+| `cloudstack-amd64.raw.gz` | CloudStack-specific RAW disk image (gzip compressed) |
+
+### Build Locally with imager (Advanced)
+
+If you need to build images entirely offline without the Image Factory service, run the `imager` container directly:
+
+```bash
+docker run --rm -v $(pwd)/_out:/out ghcr.io/siderolabs/imager:v1.8.0 \
+  image --platform cloudstack --arch amd64
+```
+
+This produces the raw disk image locally using the same engine the Image Factory uses under the hood.
 
 ### Register the Template
 
