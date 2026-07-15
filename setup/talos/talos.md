@@ -15,7 +15,8 @@ Ensure these exist in your CloudStack environment:
 | **Zone** | A zone with available compute resources |
 | **Network** | An isolated network using the **Kubernetes network offering** (see below) |
 | **Public IP** | An unused public IP for the Kubernetes API endpoint load balancer |
-| **Compute Offering** | At least 2 vCPU, 2 GB RAM (minimum for control plane) |
+| **Compute Offering (Control Plane)** | At least 2 vCPU, 2 GB RAM (e.g., `kube control`) |
+| **Compute Offering (Worker)** | At least 2 vCPU, 4 GB RAM (e.g., `kube worker1`) |
 
 ### Network Offering: Use the Kubernetes Service Offering
 
@@ -199,11 +200,12 @@ cmk list templates templatefilter=self | jq -r '.template[] | [.id, .name] | @ts
 export IMAGE_ID=<your-talos-template-id>
 ```
 
-### Get Service Offering ID
+### Get Service Offering IDs
 
 ```bash
 cmk list serviceofferings | jq -r '.serviceoffering[] | [.id, .memory, .cpunumber, .name] | @tsv' | sort -k4
-export SERVICEOFFERING_ID=<your-offering-id>
+export SERVICEOFFERING_ID=<kube-control-offering-id>
+export WORKER_OFFERING_ID=<kube-worker-offering-id>
 ```
 
 ### Get Network ID
@@ -516,13 +518,20 @@ talosctl gen config talos-cloudstack https://${PUBLIC_IPADDRESS}:6443 \
 
 ### Deploy Worker VM
 
+Use the **worker-specific compute offering** (e.g., `kube worker1`) and apply the same `guest.cpu.mode=host-passthrough` setting:
+
 ```bash
+# Get the worker offering ID
+cmk list serviceofferings | jq -r '.serviceoffering[] | select(.name | test("kube worker")) | [.id, .name] | @tsv'
+export WORKER_OFFERING_ID=<kube-worker-offering-id>
+
 cmk deploy virtualmachine \
   zoneid=${ZONE_ID} \
   templateid=${IMAGE_ID} \
   serviceofferingid=${WORKER_OFFERING_ID} \
   networkids=${NETWORK_ID} \
   name=talos-worker-1 \
+  'details[0].guest.cpu.mode=host-passthrough' \
   userdata=$(base64 worker.yaml | tr -d '\n')
 ```
 
