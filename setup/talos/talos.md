@@ -504,6 +504,8 @@ Talos Linux uses an **immutable root filesystem** — directories like `/run/met
 MountVolume.SetUp failed for volume "ignition-dir" : hostPath type check failed: /run/metadata is not a directory
 ```
 
+> **Why this happens:** The `ignition-dir` volume is a **legacy remnant** from the CSI driver's CoreOS/Ignition origins. On CoreOS, `/run/metadata` is populated by Ignition at boot and contains metadata the CSI driver uses. Talos has no Ignition system and no `/run/metadata` — the CSI driver doesn't actually need it because it reads metadata from the CloudStack API directly. The volume is vestigial.
+
 **Fix:** Patch the DaemonSet to replace the hostPath volume with an `emptyDir`:
 
 ```bash
@@ -739,7 +741,7 @@ talosctl --talosconfig talosconfig bootstrap
 MountVolume.SetUp failed for volume "ignition-dir" : hostPath type check failed: /run/metadata is not a directory
 ```
 
-This is a known issue on Talos immutable root. See [Step 14](#step-14-install-cloudstack-csi-driver) for the fix.
+This is a **legacy remnant** from the CSI driver's CoreOS/Ignition origins — Talos has no `/run/metadata` and the CSI driver doesn't actually need it. See [Step 14](#step-14-install-cloudstack-csi-driver) for the fix and explanation.
 
 ## References
 
