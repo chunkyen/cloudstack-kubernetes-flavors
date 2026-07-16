@@ -205,11 +205,11 @@ kubectl apply -f https://raw.githubusercontent.com/apache/cloudstack-kubernetes-
 
 ### CSI Driver
 
+Use the raw manifest (same approach as CKS/CAPC) — this includes the VolumeSnapshot CRDs and controller that the Helm chart skips. The secret was already created in the CCM step above, so no need to recreate it:
+
 ```bash
-helm install cloudstack-csi https://github.com/cloudstack/cloudstack-csi-driver/releases/download/cloudstack-csi-3.0.1/cloudstack-csi-3.0.1.tgz \
-  --namespace kube-system \
-  --set secret.create=false \
-  --set secret.name=cloudstack-secret
+# Deploy the CSI driver (includes snapshot CRDs + controller)
+kubectl apply -f https://github.com/cloudstack/cloudstack-csi-driver/releases/latest/download/manifest.yaml
 
 # ⚠️ Fix ignition-dir for Talos immutable root
 kubectl patch daemonset -n kube-system cloudstack-csi-node --type='json' -p='[

@@ -483,18 +483,15 @@ If you already deployed the CCM, you can reuse the same `cloudstack-secret` in `
 kubectl -n kube-system create secret generic cloudstack-secret --from-file=cloud-config
 ```
 
-### Install via Helm
+### Install via Raw Manifest (Recommended)
 
-The CSI chart can reuse the existing `cloudstack-secret` that the CCM already created. No need to pass API keys again:
+Use the raw manifest instead of Helm — this includes the VolumeSnapshot CRDs and controller that the Helm chart skips. The secret was already created in the CCM step above:
 
 ```bash
-helm install cloudstack-csi https://github.com/cloudstack/cloudstack-csi-driver/releases/download/cloudstack-csi-3.0.1/cloudstack-csi-3.0.1.tgz \
-  --namespace kube-system \
-  --set secret.create=false \
-  --set secret.name=cloudstack-secret
+kubectl apply -f https://github.com/cloudstack/cloudstack-csi-driver/releases/latest/download/manifest.yaml
 ```
 
-> **Note:** `secret.create=false` and `secret.name=cloudstack-secret` are the chart defaults, so the above is equivalent to just `helm install ... --namespace kube-system`. The chart will use the same secret that the CCM created in the previous step.
+> **Note:** The Helm chart (`helm install cloudstack-csi ...`) is an alternative but does **not** include VolumeSnapshot CRDs or the snapshot controller. The raw manifest above is the same approach used for CKS and CAPC clusters.
 
 ### ⚠️ Critical: Fix CSI Mount Path on Talos Immutable Root
 
