@@ -205,17 +205,15 @@ kubectl apply -f https://raw.githubusercontent.com/apache/cloudstack-kubernetes-
 
 ### CSI Driver
 
-Use the raw manifest (same approach as CKS/CAPC) — this includes the VolumeSnapshot CRDs and controller that the Helm chart skips. The secret was already created in the CCM step above, so no need to recreate it:
+Use the raw manifest (same approach as CKS/CAPC) — this includes the VolumeSnapshot CRDs and controller that the Helm chart skips. The secret was already created in the CCM step above:
 
 ```bash
 # Deploy the CSI driver (includes snapshot CRDs + controller)
 kubectl apply -f https://github.com/cloudstack/cloudstack-csi-driver/releases/latest/download/manifest.yaml
 
-# ⚠️ Fix ignition-dir for Talos immutable root
-kubectl patch daemonset -n kube-system cloudstack-csi-node --type='json' -p='[
-  {"op": "replace", "path": "/spec/template/spec/volumes/5", "value": {"name": "ignition-dir", "emptyDir": {}}}
-]'
-kubectl delete pods -n kube-system -l app=cloudstack-csi-node
+# ⚠️ Apply the Talos-patched node DaemonSet (replaces hostPath with emptyDir
+#    for cloud-init-dir — Talos immutable root doesn't have /run/cloud-init/)
+kubectl apply -f manifests/csi-node-daemonset-talos.yaml
 ```
 
 ### StorageClass
@@ -278,28 +276,23 @@ This removes all VMs, the load balancer, port forwarding rules, firewall rules, 
 
 ## Known Issues & Workarounds
 
-### CSI `ignition-dir` on Talos Immutable Root
+### CSI `cloud-init-dir` on Talos Immutable Root
 
-Talos Linux has an immutable root filesystem — `/run/metadata` does not exist. The CSI node DaemonSet includes a `hostPath` volume for `ignition-dir` that references `/run/metadata`, causing pods to fail with:
+Talos Linux has an immutable root filesystem — directories like `/run/cloud-init/` do not exist. The upstream CSI node DaemonSet includes a `hostPath` volume for `cloud-init-dir` that references `/run/cloud-init/`, causing pods to fail with:
 
 ```
-MountVolume.SetUp failed for volume "ignition-dir" : hostPath type check failed: /run/metadata is not a directory
+MountVolume.SetUp failed for volume "cloud-init-dir" : hostPath type check failed: /run/cloud-init/ is not a directory
 ```
 
-**Fix:** Patch the DaemonSet to replace `hostPath` with `emptyDir`:
+> **Why this happens:** The `cloud-init-dir` volume is a **legacy remnant** from the CSI driver's cloud-init origins. On Ubuntu/CoreOS, `/run/cloud-init/` is populated by cloud-init at boot and contains metadata the CSI driver uses. Talos has no cloud-init system and no `/run/cloud-init/` — the CSI driver doesn't actually need it because it reads metadata from the CloudStack API directly. The volume is vestigial.
+
+**Fix:** A pre-patched DaemonSet manifest is included in this repo at `manifests/csi-node-daemonset-talos.yaml`. Apply it after the upstream manifest:
 
 ```bash
-kubectl patch daemonset -n kube-system cloudstack-csi-node --type='json' -p='[
-  {"op": "replace", "path": "/spec/template/spec/volumes/5", "value": {"name": "ignition-dir", "emptyDir": {}}}
-]'
-kubectl delete pods -n kube-system -l app=cloudstack-csi-node
+kubectl apply -f manifests/csi-node-daemonset-talos.yaml
 ```
 
-The volume index (`5` in the path above) may vary by CSI driver version. To find the correct index:
-
-```bash
-kubectl get daemonset -n kube-system cloudstack-csi-node -o yaml | grep -n 'ignition-dir'
-```
+This replaces the `hostPath` volumes with `emptyDir` so the pods start on Talos without errors.
 
 ### Firewall Rules
 

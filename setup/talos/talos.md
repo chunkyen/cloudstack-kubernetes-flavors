@@ -488,39 +488,39 @@ kubectl -n kube-system create secret generic cloudstack-secret --from-file=cloud
 Use the raw manifest instead of Helm — this includes the VolumeSnapshot CRDs and controller that the Helm chart skips. The secret was already created in the CCM step above:
 
 ```bash
+# Deploy the CSI driver (includes snapshot CRDs + controller)
 kubectl apply -f https://github.com/cloudstack/cloudstack-csi-driver/releases/latest/download/manifest.yaml
+
+# ⚠️ Apply the Talos-patched node DaemonSet (replaces hostPath with emptyDir
+#    for cloud-init-dir — Talos immutable root doesn't have /run/cloud-init/)
+kubectl apply -f manifests/csi-node-daemonset-talos.yaml
 ```
 
 > **Note:** The Helm chart (`helm install cloudstack-csi ...`) is an alternative but does **not** include VolumeSnapshot CRDs or the snapshot controller. The raw manifest above is the same approach used for CKS and CAPC clusters.
 
 ### ⚠️ Critical: Fix CSI Mount Path on Talos Immutable Root
 
-Talos Linux uses an **immutable root filesystem** — directories like `/run/metadata` do not exist at runtime. The CSI node DaemonSet includes a hostPath volume for `ignition-dir` that references `/run/metadata`, which causes the pod to fail with:
+Talos Linux uses an **immutable root filesystem** — directories like `/run/cloud-init/` do not exist at runtime. The CSI node DaemonSet includes a hostPath volume for `cloud-init-dir` that references `/run/cloud-init/`, which causes the pod to fail with:
 
 ```
-MountVolume.SetUp failed for volume "ignition-dir" : hostPath type check failed: /run/metadata is not a directory
+MountVolume.SetUp failed for volume "cloud-init-dir" : hostPath type check failed: /run/cloud-init/ is not a directory
 ```
 
-> **Why this happens:** The `ignition-dir` volume is a **legacy remnant** from the CSI driver's CoreOS/Ignition origins. On CoreOS, `/run/metadata` is populated by Ignition at boot and contains metadata the CSI driver uses. Talos has no Ignition system and no `/run/metadata` — the CSI driver doesn't actually need it because it reads metadata from the CloudStack API directly. The volume is vestigial.
+> **Why this happens:** The `cloud-init-dir` volume is a **legacy remnant** from the CSI driver's cloud-init origins. On Ubuntu/CoreOS, `/run/cloud-init/` is populated by cloud-init at boot and contains metadata the CSI driver uses. Talos has no cloud-init system and no `/run/cloud-init/` — the CSI driver doesn't actually need it because it reads metadata from the CloudStack API directly. The volume is vestigial. (The raw manifest also has a commented-out `ignition-dir` volume for the same reason — both are artifacts of non-Talos environments.)
 
-**Fix:** Patch the DaemonSet to replace the hostPath volume with an `emptyDir`:
+**Fix:** A pre-patched DaemonSet manifest is included in this repo at `manifests/csi-node-daemonset-talos.yaml`. Apply it after the upstream manifest to override the node DaemonSet:
 
 ```bash
-kubectl patch daemonset -n kube-system cloudstack-csi-node --type='json' -p='[
-  {"op": "replace", "path": "/spec/template/spec/volumes/5", "value": {"name": "ignition-dir", "emptyDir": {}}}
-]'
+kubectl apply -f manifests/csi-node-daemonset-talos.yaml
 ```
+
+This replaces the `hostPath` volumes with `emptyDir` so the pods start on Talos without errors.
 
 Then delete the existing pods to restart them with the fix:
 
 ```bash
 kubectl delete pods -n kube-system -l app=cloudstack-csi-node
 ```
-
-> **Note:** The volume index (`5` in the path above) may vary by CSI driver version. To find the correct index:
-> ```bash
-> kubectl get daemonset -n kube-system cloudstack-csi-node -o yaml | grep -n 'ignition-dir'
-> ```
 
 ### Verify
 
@@ -732,13 +732,13 @@ talosctl --talosconfig talosconfig bootstrap
 
 > **Note:** The `DefaultNetworkOfferingforKubernetesService` has `egressdefaultpolicy=true`, so NTP should work without explicit rules. If using a different network offering (e.g., `DefaultIsolatedNetworkOfferingWithSourceNatService` which has `egressdefaultpolicy=false`), you **must** add the NTP rule above, plus rules for DNS (UDP 53), HTTP/HTTPS (TCP 80, 443), and any other outbound traffic the cluster needs.
 
-### CSI node pod fails with "ignition-dir" mount error
+### CSI node pod fails with "cloud-init-dir" mount error
 
 ```
-MountVolume.SetUp failed for volume "ignition-dir" : hostPath type check failed: /run/metadata is not a directory
+MountVolume.SetUp failed for volume "cloud-init-dir" : hostPath type check failed: /run/cloud-init/ is not a directory
 ```
 
-This is a **legacy remnant** from the CSI driver's CoreOS/Ignition origins — Talos has no `/run/metadata` and the CSI driver doesn't actually need it. See [Step 14](#step-14-install-cloudstack-csi-driver) for the fix and explanation.
+This is a **legacy remnant** from the CSI driver's cloud-init origins — Talos has no `/run/cloud-init/` and the CSI driver doesn't actually need it. A pre-patched DaemonSet manifest is included in this repo at `manifests/csi-node-daemonset-talos.yaml`. See [Step 14](#step-14-install-cloudstack-csi-driver) for the fix.
 
 ## References
 
