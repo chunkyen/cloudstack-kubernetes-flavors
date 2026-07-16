@@ -700,6 +700,180 @@ Back up the Omni VM regularly. VM snapshots are sufficient since Omni stores sta
 
 ---
 
+## Part 8: Adding Users and LDAP/AD Integration
+
+### Adding More Static Users
+
+To add additional users to the current Dex config, add entries to the `staticPasswords` array in `dex.yaml`:
+
+```bash
+cd ~/omni-setup
+
+# Generate a bcrypt hash for the new user's password
+python3 -c "
+import bcrypt
+password = b'user2-password'  # change this
+salt = bcrypt.gensalt(rounds=10)
+hashed = bcrypt.hashpw(password, salt).decode()
+hashed = hashed.replace('\$2b\$', '\$2a\$')
+print(hashed)
+"
+```
+
+Then edit `dex.yaml` and add the new user under `staticPasswords`:
+
+```yaml
+staticPasswords:
+  - email: "admin@omni.internal"
+    username: "admin"
+    preferredUsername: "admin"
+    hash: "$2a$10$..."
+  - email: "user2@omni.internal"
+    username: "user2"
+    preferredUsername: "user2"
+    hash: "$2a$10$..."  # paste the hash generated above
+```
+
+Restart Dex and add the user to Omni:
+
+```bash
+docker restart dex
+
+# Add the user to Omni (run from the admin machine)
+omnictl create user --email user2@omni.internal --name user2
+```
+
+### Integrating with Active Directory via LDAP
+
+Dex supports LDAP as a connector, which means you can authenticate users against Active Directory (or any LDAP-compatible directory like FreeIPA, OpenLDAP). Users log in with their AD credentials, and Omni receives their identity via OIDC — no changes needed on the Omni side.
+
+#### Dex LDAP Configuration for Active Directory
+
+Replace the `staticPasswords` section in `dex.yaml` with an LDAP connector:
+
+```yaml
+# dex.yaml
+issuer: https://192.168.188.204:5556
+
+storage:
+  type: memory
+
+web:
+  https: 0.0.0.0:5556
+  tlsCert: /etc/dex/tls/server-chain.pem
+  tlsKey: /etc/dex/tls/server-key.pem
+
+enablePasswordDB: false  # disable local password auth
+
+connectors:
+  - type: ldap
+    id: ad
+    name: ActiveDirectory
+    config:
+      # AD server with LDAPS (port 636) — never use plain LDAP (389)
+      host: ad.example.com:636
+
+      # ⚠️ For testing only — remove in production
+      insecureSkipVerify: true
+
+      # Read-only service account for searching AD
+      bindDN: cn=Administrator,cn=users,dc=example,dc=com
+      bindPW: <ad-service-account-password>
+
+      usernamePrompt: Email Address
+
+      userSearch:
+        baseDN: cn=Users,dc=example,dc=com
+        filter: "(objectClass=person)"
+        username: userPrincipalName
+        idAttr: DN
+        emailAttr: userPrincipalName
+        nameAttr: cn
+
+      groupSearch:
+        baseDN: cn=Users,dc=example,dc=com
+        filter: "(objectClass=group)"
+        userMatchers:
+          - userAttr: DN
+            groupAttr: member
+        nameAttr: cn
+
+staticClients:
+  - name: Omni
+    id: omni
+    secret: omni-dex-secret
+    redirectURIs:
+      - https://192.168.188.204:443/oidc/consume
+```
+
+> **Security note:** Dex binds with the end user's plaintext password to verify credentials. Always use LDAPS (port 636) — never port 389. Dex may remove insecure connection support in future releases.
+
+#### Apply the LDAP Config
+
+```bash
+cd ~/omni-setup
+# Edit dex.yaml with the LDAP config above
+docker rm -f dex
+docker run -d --name dex --restart=unless-stopped \
+  -p 5556:5556 \
+  -v $(pwd)/dex.yaml:/etc/dex/dex.yaml:ro,Z \
+  -v $(pwd)/server-key.pem:/etc/dex/tls/server-key.pem:ro,Z \
+  -v $(pwd)/server-chain.pem:/etc/dex/tls/server-chain.pem:ro,Z \
+  ghcr.io/dexidp/dex:v2.41.1 \
+    dex serve /etc/dex/dex.yaml
+```
+
+Users now authenticate with their AD email/password through Dex. Omni receives their identity via OIDC and authorizes them based on the `--initial-users` list or via `omnictl create user`.
+
+#### LDAP Configuration for FreeIPA
+
+```yaml
+connectors:
+  - type: ldap
+    id: freeipa
+    name: FreeIPA
+    config:
+      host: freeipa.example.com:636
+      rootCA: /etc/dex/ca.crt  # FreeIPA server's CA
+      userSearch:
+        baseDN: cn=users,dc=freeipa,dc=example,dc=com
+        filter: "(objectClass=posixAccount)"
+        username: uid
+        idAttr: uid
+        emailAttr: mail
+      groupSearch:
+        baseDN: cn=groups,dc=freeipa,dc=example,dc=com
+        filter: "(objectClass=group)"
+        userMatchers:
+          - userAttr: uid
+            groupAttr: member
+        nameAttr: name
+```
+
+#### Nested Groups (Recursive Group Lookup)
+
+If your LDAP schema supports group nesting (groups containing other groups), enable recursive lookup with `recursionGroupAttr`:
+
+```yaml
+groupSearch:
+  baseDN: cn=groups,dc=example,dc=com
+  filter: "(objectClass=group)"
+  userMatchers:
+    - userAttr: DN
+      groupAttr: member
+      recursionGroupAttr: member  # follow nested group references
+  nameAttr: cn
+```
+
+Dex includes built-in cycle detection to prevent infinite loops.
+
+#### Reference
+
+- [Dex LDAP Connector Documentation](https://dexidp.io/docs/connectors/ldap/) — full config reference with examples for AD, FreeIPA, and nested groups
+- [Dex Connector Overview](https://dexidp.io/docs/connectors/) — other supported connectors (GitHub, SAML, OIDC, Google, etc.)
+
+---
+
 ## Comparison: Manual vs Terraform vs Self-Hosted Omni
 
 | Aspect | Manual (`cmk`) | Terraform | Self-Hosted Omni |
