@@ -36,6 +36,54 @@
 | Upgrades | `talosctl upgrade` per node | Automatic rolling upgrades |
 | Scaling | Terraform + manual etcd | `omnictl update` |
 | Monitoring | Manual | Omni UI |
+| talosctl access | Direct to node IPs | Via Omni through SideroLink |
+
+### What is SideroLink?
+
+SideroLink is the **management overlay network** that connects Talos nodes to Omni. It's a WireGuard-based tunnel that replaces the need for direct network access to each node.
+
+**Without Omni**, you need:
+- Port forwarding (50000) to each node for `talosctl`
+- A load balancer (6443) for the Kubernetes API
+- Direct network access to every node's IP
+
+**With Omni**, SideroLink handles all of this:
+- `talosctl` talks to Omni, which proxies through the tunnel
+- The Kubernetes API is exposed through Omni's workload proxy (no LB needed)
+- Nodes register themselves — you don't need to know their IPs
+
+**How the connection works:**
+
+```
+Talos Node                    Omni VM
+    │                            │
+    │  1. gRPC connect (8090)    │
+    │  ─────────────────────────►│
+    │  (sends WireGuard pub key  │
+    │   + join token)            │
+    │                            │
+    │  2. Omni responds          │
+    │  ◄─────────────────────────│
+    │  (sends its WireGuard key  │
+    │   + overlay IPv6 addrs)    │
+    │                            │
+    │  3. WireGuard tunnel up    │
+    │  ◄═══════ encrypted ═════►│
+    │  (all management traffic   │
+    │   flows through tunnel)    │
+    │                            │
+```
+
+**Two transport modes:**
+
+| Mode | How | When to Use |
+|------|-----|-------------|
+| **Direct WireGuard (UDP)** | WireGuard over UDP (port 50180) | Nodes can send/receive UDP directly to Omni |
+| **gRPC tunnel** | WireGuard tunneled over the same gRPC connection (port 8090) | UDP is restricted or nodes are behind NAT |
+
+Enable gRPC tunnel mode with `--siderolink-use-grpc-tunnel` on Omni. This adds overhead but works through NAT.
+
+**TLS requirement:** The initial gRPC connection uses HTTPS by default. If you use a self-signed CA, the Talos nodes will reject the connection. Use `grpc://` scheme in the machine API URL to skip TLS, or use a publicly trusted certificate (see [TLS Certificate Trust](#2-tls-certificate-trust-the-real-blocker)).
 
 ### Architecture
 
@@ -67,7 +115,7 @@
 
 Key architectural points:
 
-- **SideroLink** — Omni establishes a WireGuard-encrypted tunnel to each registered machine. No public load balancer or port forwarding rules needed for the cluster nodes.
+- **SideroLink** — Omni establishes a WireGuard-encrypted tunnel to each registered machine. See [What is SideroLink?](#what-is-siderolink) for a detailed explanation of how the connection works.
 - **No LB for cluster** — Omni provides the Kubernetes API endpoint through the SideroLink tunnel. You don't need a CloudStack load balancer rule for port 6443.
 - **No port forwarding for talosctl** — `talosctl` communicates through Omni, not directly to nodes.
 - **Private IP only** — on a shared CloudStack network, all VMs (Omni + Talos nodes) can be on the same L2 segment, but they don't have to be. The Talos nodes just need L3 reachability to the Omni VM (routing between networks works fine). No public IP or port forwarding is required for Omni to function. The Omni UI is accessed directly at the private IP.

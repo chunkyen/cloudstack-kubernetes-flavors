@@ -295,6 +295,33 @@ This is fundamentally different from package-based upgrades (apt/yum upgrade) us
 
 Sidero Omni is a Kubernetes lifecycle management platform for Talos clusters. It can be self-hosted or used as a SaaS service.
 
+#### What is SideroLink?
+
+SideroLink is the **management overlay network** that connects Talos nodes to Omni. It's a WireGuard-based tunnel that provides:
+
+- **Secure management channel** — Omni uses SideroLink to push configs, run upgrades, and monitor nodes
+- **Kubernetes API proxy** — Omni exposes the cluster's Kubernetes API through the SideroLink tunnel (no load balancer needed)
+- **Talos API access** — `talosctl` communicates through Omni, which proxies requests through SideroLink
+
+**How it works:**
+
+1. The Talos node generates an ephemeral WireGuard key
+2. The node establishes a gRPC connection to Omni's SideroLink API (port 8090), sending its WireGuard public key and a join token
+3. Omni responds with its WireGuard public key and two overlay IPv6 addresses (one for the node, one for Omni)
+4. The node configures a WireGuard interface (`siderolinktun`) with the received settings
+5. All subsequent management traffic flows through this encrypted tunnel
+
+**Two transport modes:**
+
+| Mode | Description | When to Use |
+|------|-------------|-------------|
+| **Direct WireGuard (UDP)** | WireGuard traffic goes over plain UDP (port 50180) | Nodes can send/receive UDP directly to Omni |
+| **gRPC tunnel** | WireGuard traffic is tunneled over the same gRPC connection (port 8090) | UDP is restricted or nodes are behind NAT |
+
+The gRPC tunnel mode adds overhead but works through NAT and firewalls that block UDP. It's enabled with `--siderolink-use-grpc-tunnel` on Omni.
+
+**TLS requirement:** The initial gRPC connection to the SideroLink API uses HTTPS by default. If you use a self-signed CA, the Talos nodes will reject the connection. Use `grpc://` scheme in the machine API URL to skip TLS, or use a publicly trusted certificate.
+
 #### Architecture
 
 ```
