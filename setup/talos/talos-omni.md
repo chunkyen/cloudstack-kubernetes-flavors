@@ -1066,7 +1066,9 @@ We successfully imported the cluster but hit two blockers:
 
    After import, Omni can still manage the cluster through the SideroLink tunnel — the health check is only needed during import to validate the cluster state.
 
-3. **Socat tunnels for import** — When importing from the Omni VM, the Talos nodes are on a different network. You need socat tunnels on the Omni VM to reach the nodes' Talos APIs:
+3. **Socat tunnels for import (workaround)** — When importing from the Omni VM, `omnictl` needs to reach all Talos nodes to discover the cluster state. Talos's request forwarding only works when the request comes from within the cluster network. If the Omni VM is on a different network, the CP node refuses to forward requests (`no request forwarding`).
+
+   The socat workaround makes the nodes appear as localhost on the Omni VM, bypassing the request forwarding check:
 
    ```bash
    socat TCP-LISTEN:50000,fork TCP:<public-ip>:50000 &
@@ -1080,7 +1082,7 @@ We successfully imported the cluster but hit two blockers:
    talosctl config node 10.22.2.224 10.22.2.40 10.22.2.107
    ```
 
-   These tunnels are only needed for the import step — after import, the SideroLink tunnel handles all communication.
+   **This is a workaround, not a requirement.** If the Omni VM and Talos nodes are on the same network (or have direct routing), there is no "no request forwarding" issue and socat is unnecessary. The tunnels are only needed for the import step — after import, the SideroLink tunnel handles all communication.
 
 #### Recommendation
 
