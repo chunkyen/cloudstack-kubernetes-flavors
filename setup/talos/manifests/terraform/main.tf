@@ -45,6 +45,9 @@ resource "cloudstack_ipaddress" "talos" {
 locals {
   public_ip_id = var.public_ip_id != "" ? var.public_ip_id : cloudstack_ipaddress.talos[0].id
   public_ip    = var.public_ip_id != "" ? data.cloudstack_ipaddress.existing[0].ip_address : cloudstack_ipaddress.talos[0].ip_address
+  # Talos API ports: 50000 to 50000 + control_plane_count - 1
+  talos_api_port_start = 50000
+  talos_api_port_end   = 50000 + var.control_plane_count - 1
 }
 
 # ──────────────────────────────────────────────
@@ -81,7 +84,7 @@ resource "cloudstack_firewall" "talos_api" {
 
   rule {
     protocol  = "tcp"
-    ports     = ["50000"]
+    ports     = ["${local.talos_api_port_start}-${local.talos_api_port_end}"]
     cidr_list = ["0.0.0.0/0"]
   }
 }

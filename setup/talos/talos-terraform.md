@@ -339,7 +339,7 @@ resource "cloudstack_loadbalancer_rule" "k8s_api" {
 
 The `[*]` splat operator evaluates to a list of all `cloudstack_instance.control_plane` instances — when `control_plane_count` increases, the new VMs are automatically included in the next `terraform apply`. One LB rule, one public port (6443), all CP nodes behind it. No additional LB rules needed.
 
-Port forwarding for talosctl (50000+) also scales automatically via `count = var.control_plane_count` with `public_port = 50000 + count.index`.
+Port forwarding for talosctl (50000+) also scales automatically via `count = var.control_plane_count` with `public_port = 50000 + count.index`. The firewall rule for the Talos API uses a **dynamic port range** — `"${local.talos_api_port_start}-${local.talos_api_port_end}"` — so it automatically covers all CP nodes' ports (e.g., `50000-50002` for 3 CP nodes).
 
 However, etcd membership is **not** managed by Terraform. After apply, join the new CP nodes to the existing etcd cluster:
 
