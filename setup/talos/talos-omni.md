@@ -71,6 +71,7 @@ Key architectural points:
 - **No LB for cluster** — Omni provides the Kubernetes API endpoint through the SideroLink tunnel. You don't need a CloudStack load balancer rule for port 6443.
 - **No port forwarding for talosctl** — `talosctl` communicates through Omni, not directly to nodes.
 - **Private IP only** — on a shared CloudStack network, all VMs (Omni + Talos nodes) are on the same L2 segment. No public IP or port forwarding is required for Omni to function. The Omni UI is accessed directly at the private IP.
+- **IP vs hostname** — the official Sidero guide uses hostnames like `omni.internal` and `auth.internal` with entries in `/etc/hosts`. This guide uses the private IP directly instead, which works without any DNS or hosts file configuration. If you prefer hostnames, you can substitute the IP with your chosen FQDN throughout — just ensure DNS (or `/etc/hosts` on every client) resolves it to the Omni VM's IP.
 - **Full HTTPS** — both Omni (port 443) and Dex (port 5556) serve HTTPS using the same self-signed CA. Install the CA certificate in your browser's trust store to avoid TLS warnings.
 
 ---
@@ -143,6 +144,8 @@ newgrp docker
 ## Part 2: Deploy Omni (Single VM)
 
 All commands below run on the Omni VM. Both Omni and Dex serve HTTPS using the same self-signed CA. Install the CA certificate in your browser's trust store to avoid TLS warnings (see [Step 7](#step-7-access-the-omni-ui)).
+
+> **Hostname vs IP:** The official Sidero guide uses `omni.internal` and `auth.internal` hostnames with `/etc/hosts` entries. This guide uses the private IP (`${OMNI_IP}`) directly — no DNS or hosts file needed. If you prefer hostnames, replace `${OMNI_IP}` with your FQDN throughout and ensure DNS (or `/etc/hosts` on every client) resolves it to the Omni VM's IP.
 
 ### Step 1: Install cfssl
 
