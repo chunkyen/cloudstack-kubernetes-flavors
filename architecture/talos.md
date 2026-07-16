@@ -296,7 +296,7 @@ This is fundamentally different from package-based upgrades (apt/yum upgrade) us
 | Aspect | CKS | CAPC | Rancher+CAPC | Talos Linux |
 |--------|-----|------|-------------------|-------------|
 | **Node OS** | Ubuntu, Rocky Linux, etc. (user-defined) | Ubuntu, Rocky Linux, etc. (pre-built image) | Ubuntu, Rocky Linux, etc. (pre-built image) | Talos Linux (immutable) |
-| **Management** | CloudStack UI/API | `clusterctl` + `kubectl` (CAPI controllers) | Rancher UI + Fleet GitOps | `talosctl` (gRPC API) |
+| **Management** | CloudStack UI/API | `clusterctl` + `kubectl` (CAPI controllers) | Rancher UI + Fleet GitOps | `talosctl` / Terraform / Omni |
 | **OS upgrades** | Package manager (apt/yum) on running VMs | Image-based — new CAPC template with updated OS baked into the K8s image | Image-based — new CAPC template with updated OS baked into the K8s image | Image-based atomic reboot (`talosctl upgrade`) |
 | **K8s bootstrap** | kubeadm (managed by CKS plugin) | kubeadm (via CAPI KubeadmBootstrap provider) | kubeadm (via CAPI KubeadmBootstrap provider) | Talos-managed system containers |
 | **Configuration** | cloud-init + CKS ISO | cloud-init + kubeadm config (via CAPI) | cloud-init + kubeadm config (via CAPI) | Talos machine config (YAML) |
