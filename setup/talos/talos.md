@@ -451,12 +451,29 @@ The CloudStack external cloud controller manager is **required** for any Kuberne
 - Node metadata labels (zone, region, instance type)
 - Firewall rule management for NodePort services
 
+### Create cloud-config Secret
+
+Both the CCM and CSI driver need CloudStack API credentials. Create a shared secret that both will use:
+
 ```bash
-# See setup/cloudstack-kubernetes-provider.md for detailed configuration
+cat > cloud-config << 'EOF'
+[Global]
+api-url = <CloudStack API URL>
+api-key = <CloudStack API Key>
+secret-key = <CloudStack API Secret>
+ssl-no-verify = true
+EOF
+
+kubectl -n kube-system create secret generic cloudstack-secret --from-file=cloud-config
+```
+
+### Deploy the CCM
+
+```bash
 kubectl apply -f https://raw.githubusercontent.com/apache/cloudstack-kubernetes-provider/main/deployment.yaml
 ```
 
-> **Note:** Unlike CKS which auto-deploys the CCM, Talos requires manual installation. The CCM must be configured with your CloudStack API credentials (api-url, api-key, secret-key).
+> **Note:** Unlike CKS which auto-deploys the CCM, Talos requires manual installation. The CCM reads credentials from the `cloudstack-secret` created above.
 
 ## Step 14: Install CloudStack CSI Driver
 
@@ -466,24 +483,7 @@ The CloudStack CSI driver is **required** for persistent storage on CloudStack. 
 - Volume lifecycle management (create, attach, detach, delete)
 - Volume snapshots and cloning
 
-### Create cloud-config
-
-```ini
-[Global]
-api-url = <CloudStack API URL>
-api-key = <CloudStack API Key>
-secret-key = <CloudStack API Secret>
-zone = <CloudStack Zone Name>
-ssl-no-verify = true
-```
-
-### Create Kubernetes Secret
-
-If you already deployed the CCM, you can reuse the same `cloudstack-secret` in `kube-system`. Otherwise:
-
-```bash
-kubectl -n kube-system create secret generic cloudstack-secret --from-file=cloud-config
-```
+The `cloudstack-secret` was already created in Step 13 — the CSI driver reuses the same secret. No need to recreate it.
 
 ### Install via Raw Manifest (Recommended)
 
