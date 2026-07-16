@@ -768,9 +768,17 @@ Back up the Omni VM regularly. VM snapshots are sufficient since Omni stores sta
 
 ## Part 8: Adding Users and LDAP/AD Integration
 
-### Adding More Static Users
+### Adding More Users
 
-To add additional users to the current Dex config, add entries to the `staticPasswords` array in `dex.yaml`:
+The easiest way is through the **Omni UI**:
+
+1. Log in as admin
+2. Go to **Settings → Users**
+3. Click **Add User** and set their email/username/password
+
+This automatically configures both Dex and Omni — no need to edit files or restart containers.
+
+Alternatively, you can add users manually via the Dex config and omnictl:
 
 ```bash
 cd ~/omni-setup
