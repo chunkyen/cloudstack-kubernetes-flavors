@@ -33,7 +33,10 @@ resource "cloudstack_network" "talos" {
 
 data "cloudstack_ipaddress" "existing" {
   count = var.public_ip_id != "" ? 1 : 0
-  id    = var.public_ip_id
+  filter {
+    name  = "id"
+    value = var.public_ip_id
+  }
 }
 
 resource "cloudstack_ipaddress" "talos" {
