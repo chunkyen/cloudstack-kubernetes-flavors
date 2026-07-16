@@ -55,7 +55,7 @@
 │  │  │ (WireGuard)       │  │    │  │ (Talos Linux)        │    │   │
 │  │  ├─────────────────┤  │    │  └──────────────────────┘    │   │
 │  │  │ Dex (OIDC)       │  │    │         │                   │   │
-│  │  │ port 5556 (HTTP) │  │    │ SideroLink│                  │   │
+│  │  │ port 5556 (HTTPS)│  │    │ SideroLink│                  │   │
 │  │  └─────────────────┘  │    │ (WireGuard)│                 │   │
 │  │         │              │    │         │                   │   │
 │  │         └──────────────┼────┼───────────┘                 │   │
@@ -71,7 +71,7 @@ Key architectural points:
 - **No LB for cluster** — Omni provides the Kubernetes API endpoint through the SideroLink tunnel. You don't need a CloudStack load balancer rule for port 6443.
 - **No port forwarding for talosctl** — `talosctl` communicates through Omni, not directly to nodes.
 - **Private IP only** — on a shared CloudStack network, all VMs (Omni + Talos nodes) are on the same L2 segment. No public IP or port forwarding is required for Omni to function. The Omni UI is accessed directly at the private IP.
-- **Dex over HTTP** — the browser connects to Dex directly during the OIDC login flow. If Dex used HTTPS with the same self-signed CA, the browser would hit a second TLS warning. Dex serves HTTP to avoid this, which is acceptable since the login form is submitted over the local network.
+- **Full HTTPS** — both Omni (port 443) and Dex (port 5556) serve HTTPS using the same self-signed CA. Install the CA certificate in your browser's trust store to avoid TLS warnings.
 
 ---
 
@@ -104,7 +104,7 @@ Same prerequisites as [talos.md](talos.md#prerequisites):
 | 8090 | TCP | SideroLink gRPC API |
 | 8091 | TCP | Event sink |
 | 8100 | TCP | Kubernetes proxy |
-| 5556 | TCP | Dex OIDC (HTTP, no TLS) |
+| 5556 | TCP | Dex OIDC (HTTPS, same self-signed cert) |
 | 50180 | UDP | WireGuard (SideroLink) |
 
 ---
@@ -142,7 +142,7 @@ newgrp docker
 
 ## Part 2: Deploy Omni (Single VM)
 
-All commands below run on the Omni VM. We use a self-signed CA for Omni's HTTPS and Dex over HTTP (no TLS) to avoid a second browser certificate warning during the OIDC redirect.
+All commands below run on the Omni VM. Both Omni and Dex serve HTTPS using the same self-signed CA. Install the CA certificate in your browser's trust store to avoid TLS warnings (see [Step 7](#step-7-access-the-omni-ui)).
 
 ### Step 1: Install cfssl
 
@@ -245,16 +245,16 @@ gpg --export-secret-key --armor omni@internal.local > omni.asc
 
 ### Step 4: Set Up Dex (OIDC Provider)
 
-Dex serves over **HTTP** (no TLS). The OIDC flow works like this:
+Dex serves over **HTTPS** using the same self-signed CA and certificate as Omni. The OIDC flow works like this:
 
 ```
 Browser ──HTTPS──→ Omni (port 443, self-signed cert)
-Browser ──HTTP───→ Dex  (port 5556, no TLS)  ← browser connects directly
-Dex     ──HTTP───→ Browser (redirect back to Omni)
+Browser ──HTTPS──→ Dex  (port 5556, same self-signed cert)
+Dex     ──HTTPS──→ Browser (redirect back to Omni)
 Browser ──HTTPS──→ Omni (port 443, /oidc/consume)
 ```
 
-If Dex used HTTPS with the same self-signed CA, the browser would show a second TLS warning during the redirect to the login page. Using HTTP avoids this — the login form is submitted over the local network, which is acceptable for a lab/self-hosted setup.
+Both services use the same CA, so installing the CA cert in your browser's trust store eliminates all TLS warnings.
 
 ```bash
 cd ~/omni-setup
@@ -278,9 +278,13 @@ with open('/tmp/dex-hash.txt') as f:
     hashed = f.read().strip()
 
 config = {
-    'issuer': 'http://${OMNI_IP}:5556',
+    'issuer': 'https://${OMNI_IP}:5556',
     'storage': {'type': 'memory'},
-    'web': {'http': '0.0.0.0:5556'},
+    'web': {
+        'https': '0.0.0.0:5556',
+        'tlsCert': '/etc/dex/tls/server-chain.pem',
+        'tlsKey': '/etc/dex/tls/server-key.pem'
+    },
     'enablePasswordDB': True,
     'staticClients': [{
         'name': 'Omni',
@@ -299,12 +303,14 @@ with open('dex.yaml', 'w') as f:
     yaml.dump(config, f, default_flow_style=False)
 "
 
-# Run Dex
+# Run Dex with TLS certs mounted
 docker run -d \
   --name dex \
   --restart=unless-stopped \
   -p 5556:5556 \
   -v $(pwd)/dex.yaml:/etc/dex/dex.yaml:ro,Z \
+  -v $(pwd)/server-key.pem:/etc/dex/tls/server-key.pem:ro,Z \
+  -v $(pwd)/server-chain.pem:/etc/dex/tls/server-chain.pem:ro,Z \
   ghcr.io/dexidp/dex:v2.41.1 \
     dex serve /etc/dex/dex.yaml
 ```
@@ -347,7 +353,7 @@ docker run -d \
     --siderolink-wireguard-bind-addr=0.0.0.0:50180 \
     --advertised-api-url=https://${OMNI_IP}:443 \
     --auth-oidc-enabled \
-    --auth-oidc-provider-url=http://${OMNI_IP}:5556 \
+    --auth-oidc-provider-url=https://${OMNI_IP}:5556 \
     --auth-oidc-client-id=omni \
     --auth-oidc-client-secret=omni-dex-secret \
     --auth-oidc-scopes=openid,profile,email \
@@ -384,15 +390,33 @@ curl -sk https://${OMNI_IP}:443/ | head -5
 # Should return HTML (Omni UI)
 
 # Test Dex OIDC endpoint
-curl -s http://${OMNI_IP}:5556/.well-known/openid-configuration | head -5
+curl -sk https://${OMNI_IP}:5556/.well-known/openid-configuration | head -5
 ```
 
 ### Step 7: Access the Omni UI
 
-Open `https://<omni-private-ip>:443` in your browser. You'll see a TLS warning because the certificate is self-signed — accept the risk and proceed.
+Open `https://<omni-private-ip>:443` in your browser. You'll see a TLS warning because the certificate is self-signed — accept the risk and proceed. You'll see a second TLS warning when redirected to Dex on port 5556 — accept that too.
+
+**To eliminate both warnings**, install the self-signed CA certificate in your browser's trust store:
+
+```bash
+# On your admin machine, copy ca.pem from the Omni VM
+scp toor@<omni-ip>:~/omni-setup/ca.pem /tmp/omni-ca.crt
+
+# On Linux (system-wide trust store)
+sudo cp /tmp/omni-ca.crt /usr/local/share/ca-certificates/omni-ca.crt
+sudo update-ca-certificates
+
+# On Firefox: Settings → Privacy & Security → Certificates → View Certificates
+#   → Authorities → Import → select /tmp/omni-ca.crt
+#   → Check "Trust this CA to identify websites" → OK
+
+# On Chrome/Edge: uses the system trust store (update-ca-certificates above covers it)
+# Restart your browser after installing
+```
 
 **Login flow:**
-1. Omni redirects to `http://<omni-ip>:5556/auth?...` (Dex login page)
+1. Omni redirects to `https://<omni-ip>:5556/auth?...` (Dex login page, HTTPS)
 2. Enter **Email:** `admin@omni.internal` / **Password:** `omni-admin-password`
 3. Click "Grant Access" on the approval page
 4. On the "authenticate UI access" page, click to confirm — your browser's public key is registered
@@ -639,7 +663,7 @@ omnictl import talosconfig --cluster-name terra-talos ./talosconfig
 
 ### 1. Self-Signed TLS and Browser Trust
 
-The Omni UI uses a self-signed certificate. Your browser will show a warning — accept it to proceed. The OIDC redirect to Dex uses **HTTP** (not HTTPS) to avoid a second browser TLS warning. This is acceptable because the login form is submitted over the local network.
+Both Omni (port 443) and Dex (port 5556) use the same self-signed CA certificate. Your browser will show TLS warnings for both. Install the CA certificate in your browser's trust store to eliminate all warnings (see [Step 7](#step-7-access-the-omni-ui) for instructions).
 
 ### 2. Dex Bcrypt Hash Cost
 
