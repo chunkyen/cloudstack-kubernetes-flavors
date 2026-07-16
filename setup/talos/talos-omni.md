@@ -6,6 +6,26 @@
 
 [Sidero Omni](https://www.siderolabs.com/platform/sidero-omni/) is a Kubernetes management platform by Sidero Labs that automates the creation, scaling, and lifecycle management of Talos Linux clusters. This guide covers deploying a **self-hosted** Omni instance on CloudStack and using it to manage Talos clusters — also running on CloudStack.
 
+### Omni Deployment Options
+
+Omni can be deployed in several ways, each with different trade-offs:
+
+| Option | Description | Complexity | Best For |
+|--------|-------------|------------|----------|
+| **Omni SaaS** | Fully managed by Sidero Labs. No infrastructure to manage. | None | Most users; quick start, no ops overhead |
+| **Self-hosted (Docker)** | Single VM running Omni as a Docker container with embedded etcd. | Low | Most self-hosted environments; home labs, dev, production up to ~200 nodes |
+| **Self-hosted (Kubernetes)** | Omni deployed on a separate Kubernetes cluster (not managed by Omni). | Medium | Environments needing faster pod recovery or standardized K8s operations |
+| **Self-hosted (HA)** | Multiple Omni instances backed by external etcd, HA registry, HA Image Factory, HA auth. | Very high | Strict uptime requirements (~99.99%); mature ops teams |
+
+**This guide focuses on the self-hosted Docker (single VM) approach** for the following reasons:
+
+- **Simple and dependable** — Omni runs as a single Docker container with embedded etcd. No Kubernetes cluster to maintain, no external database to manage.
+- **VM snapshots are sufficient for backup** — since all state is stored locally (embedded etcd + SQLite), a VM-level snapshot is usually enough for recovery.
+- **Downtime has no effect on your clusters** — Omni is not part of the Kubernetes control plane. If the Omni VM goes offline, your Talos clusters continue running normally. Talos machines reconnect automatically when Omni comes back. Only external access (`kubectl`, `omnictl`) is temporarily unavailable.
+- **No circular dependency** — deploying Omni on Kubernetes requires a separate K8s cluster that is *not* managed by Omni. The Docker approach avoids this entirely.
+- **Proven at scale** — a single VM handles up to ~200 managed nodes with modest resources (4 vCPUs, 8–16 GB RAM, 500 GB SSD).
+- **Recommended by Sidero Labs** — the official documentation recommends the single VM deployment as the preferred on-premises setup for most environments.
+
 ### How Omni Changes the Workflow
 
 Compared to the manual ([talos.md](talos.md)) or Terraform ([talos-terraform.md](talos-terraform.md)) approaches, Omni eliminates most operational overhead:
