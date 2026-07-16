@@ -341,7 +341,7 @@ The SideroLink connection from Talos nodes to Omni uses HTTPS. If you use a **se
 
 #### Import vs Create
 
-When you import an existing Talos cluster into Omni, the cluster is **locked** — you can view and access it, but you cannot scale, upgrade, or modify it through Omni. For full lifecycle management, create new clusters through Omni's machine registration workflow.
+When you import an existing Talos cluster into Omni, the cluster is initially **locked** as a safety measure. Once you verify the import, unlock it with `omnictl cluster unlock <cluster-name>` — after that, Omni takes over full lifecycle management (scaling, upgrades, config changes). The lock is not a permanent limitation; it's a safety step before handing over control.
 
 #### SaaS vs Self-Hosted
 

@@ -949,33 +949,31 @@ To use Let's Encrypt:
 
 If a public IP is not available, use the **DNS-01 challenge** with a DNS provider that supports it (e.g., Cloudflare, AWS Route53). This works with private IPs.
 
-### 3. Importing Existing Clusters is Read-Only
+### 3. Importing Existing Clusters
 
-#### The Problem
+#### How It Works
 
-When you import an existing Talos cluster into Omni, the cluster is **locked**:
+When you import an existing Talos cluster into Omni, the cluster is initially **locked** as a safety measure:
 
 ```
 cluster "terra-talos" is imported successfully but marked as 'locked' to prevent changes done by Omni
 ```
 
-This means:
-- You can **view** the cluster in the Omni UI
-- You can **access** the cluster through Omni (kubeconfig proxy)
-- You **cannot** scale, upgrade, or modify the cluster through Omni
-- The cluster's lifecycle remains fully manual
+This prevents Omni from making any changes until you explicitly unlock it. Once you've verified the import was successful, unlock the cluster:
 
-#### Why This Matters
+```bash
+omnictl cluster unlock <cluster-name>
+```
 
-If your goal is to **manage** existing clusters through Omni (scaling, upgrades, etc.), importing is not sufficient. You need to either:
-- **Create new clusters through Omni** (using machine registration)
-- **Accept that imported clusters are read-only** and use Omni only for visibility
+After unlocking, Omni takes over full lifecycle management — scaling, upgrades, and configuration changes all work through Omni.
+
+#### What We Encountered
+
+We successfully imported the cluster but never got to the unlock step because the SideroLink connection failed (TLS cert issue). The cluster remained locked because the nodes couldn't establish the SideroLink tunnel to Omni.
 
 #### Recommendation
 
-Use Omni for **new clusters** created through the machine registration workflow. For existing clusters, either:
-- Keep managing them manually (or with Terraform)
-- Tear them down and recreate them through Omni
+The import → unlock workflow works as designed. The lock is a safety feature, not a limitation. The real blocker is getting the SideroLink connection working first (see [Network Topology](#1-network-topology-the-critical-requirement) and [TLS Certificate Trust](#2-tls-certificate-trust)).
 
 ### 4. Omni Flag Drift Between Versions
 
