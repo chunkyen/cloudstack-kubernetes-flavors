@@ -620,9 +620,14 @@ cmk create portforwardingrule \
   cidrlist=0.0.0.0/0
 ```
 
-> **Note:** Port 50000 is the **Talos API** — a gRPC endpoint used by `talosctl` for node management (bootstrap, apply-config, upgrade, logs, dashboard, etc.). Each CP node listens on port 50000 internally. Since all VMs are on an isolated network, port forwarding maps unique public ports to each node's internal 50000: CP-1 → 50000, CP-2 → 50001, CP-3 → 50002. The firewall must also allow the full range (50000-50002) for multi-node clusters.
+> **Note:** Port 50000 is the **Talos API** — a gRPC endpoint used by `talosctl` for node management (bootstrap, apply-config, upgrade, logs, dashboard, etc.). Each CP node listens on port 50000 internally. Since all VMs are on an isolated network, port forwarding maps unique public ports to each node's internal 50000: CP-1 → 50000, CP-2 → 50001, CP-3 → 50002.
+>
+> **Firewall:** If you created the initial firewall rule with `openfirewall=true` on the first port forward, it only opens port 50000. For multi-node clusters, you must also open ports 50001 and 50002 (or the full range 50000-50002):
+> ```bash
+> cmk create firewallrule ipaddressid=${PUBLIC_IPADDRESS_ID} protocol=tcp startport=50001 endport=50002 cidrlist=0.0.0.0/0
+> ```
 
-Talos automatically discovers and joins additional control plane nodes to the etcd cluster.
+Talos automatically discovers and joins additional control plane nodes to the etcd cluster — no manual `talosctl bootstrap --recover-from` needed when all nodes use the same `controlplane.yaml` (same cluster ID, secret, and bootstrap token).
 
 ## Upgrading Talos
 

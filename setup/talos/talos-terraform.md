@@ -253,7 +253,7 @@ EOF
 - **Bootstrap etcd** — `talosctl bootstrap` is manual
 - **Install CNI, CCM, CSI** — these are post-bootstrap steps
 - **Create the Talos template** — the image must already exist in CloudStack
-- **Patch CSI ignition-dir** — the DaemonSet patch is still manual (Talos immutable root issue)
+- **Patch CSI cloud-init-dir** — the pre-patched DaemonSet at `manifests/csi-node-daemonset-talos.yaml` handles this (see [Known Issues](#csi-cloud-init-dir-on-talos-immutable-root))
 
 ## Multi-Node Clusters
 
@@ -302,6 +302,22 @@ The `cloudstack_loadbalancer_rule` and `cloudstack_port_forward` resources in pr
 
 The Talos configs must be generated **before** `terraform apply` because the VMs need the configs embedded as userdata. Pre-allocating a free IP with `cmk` solves this — you know the IP upfront, generate configs, then a single `terraform apply` creates everything.
 
+### Data Source Filter Syntax (Provider v0.6.0)
+
+The `cloudstack/cloudstack` provider v0.6.0 requires a `filter` block for data sources, not a direct `id` attribute:
+
+```hcl
+data "cloudstack_ipaddress" "existing" {
+  count  = var.public_ip_id != "" ? 1 : 0
+  filter {
+    name  = "id"
+    value = var.public_ip_id
+  }
+}
+```
+
+Using `id = var.public_ip_id` (as in older provider versions) will fail with `At least 1 "filter" blocks are required`.
+
 ## Scaling the Cluster
 
 ### Add Workers (Simple)
@@ -341,17 +357,18 @@ The `[*]` splat operator evaluates to a list of all `cloudstack_instance.control
 
 Port forwarding for talosctl (50000+) also scales automatically via `count = var.control_plane_count` with `public_port = 50000 + count.index`. The firewall rule for the Talos API uses a **dynamic port range** — `"${local.talos_api_port_start}-${local.talos_api_port_end}"` — so it automatically covers all CP nodes' ports (e.g., `50000-50002` for 3 CP nodes).
 
-However, etcd membership is **not** managed by Terraform. After apply, join the new CP nodes to the existing etcd cluster:
+### Auto-Join Behavior
 
-```bash
-# Get the existing CP node IP
-export EXISTING_CP=<existing-cp-ip>
+When all CP nodes use the **same** `controlplane.yaml` (same cluster ID, secret, and bootstrap token), new nodes **auto-join** the etcd cluster automatically — no manual `talosctl bootstrap --recover-from` needed. Talos discovers the existing etcd members and joins the cluster on its own.
 
-# Join each new CP node to etcd
-talosctl --talosconfig talosconfig -n <new-cp-ip> bootstrap --recover-from=${EXISTING_CP}
-```
+This is the default behavior when using Terraform, since all CP VMs are deployed with the same `control_plane_userdata` from `terraform.tfvars`.
 
-> **Note:** For production multi-CP clusters, generate the initial configs with `--with-secrets` and save the secrets file. When scaling CP nodes later, regenerate configs using the same secrets so all nodes share the same etcd identity:
+> **If using different configs** (e.g., regenerated with `--with-secrets` for separate identities), you would need to join new CP nodes manually:
+> ```bash
+> talosctl --talosconfig talosconfig -n <new-cp-ip> bootstrap --recover-from=<existing-cp-ip>
+> ```
+>
+> For production multi-CP clusters, generate the initial configs with `--with-secrets` and save the secrets file. When scaling CP nodes later, regenerate configs using the same secrets so all nodes share the same etcd identity:
 > ```bash
 > talosctl gen config <cluster> https://<ip>:6443 \
 >   --with-secrets=secrets.yaml \
@@ -395,6 +412,6 @@ Terraform state stays unchanged. No infrastructure changes needed.
 | Operation | Terraform handles | Manual steps needed |
 |-----------|------------------|---------------------|
 | Add workers | ✅ VM creation | None (auto-joins) |
-| Add CP nodes | ✅ VM creation + LB | `talosctl bootstrap --recover-from` for etcd |
+| Add CP nodes | ✅ VM creation + LB + firewall | None (auto-joins etcd when using same config) |
 | Remove nodes | ✅ VM destruction | `kubectl drain/delete`, `talosctl reset` first |
 | Upgrade Talos | ❌ | `talosctl upgrade` per node |
