@@ -333,11 +333,11 @@ Talos nodes connect to Omni via **SideroLink**, which establishes a WireGuard tu
 
 **On CloudStack, this means the Omni VM and all Talos nodes must be on the same network** — either the same shared network or the same isolated network. If they are on different isolated networks, there is no routing between them and SideroLink will fail.
 
-#### TLS Certificate Requirement
+#### TLS Certificate Requirement (Hard Requirement)
 
-The SideroLink connection from Talos nodes to Omni uses HTTPS. If you use a **self-signed CA**, the Talos nodes will reject the connection because they don't trust the CA. There is no `--insecure-skip-tls-verify` equivalent for SideroLink.
+The SideroLink connection from Talos nodes to Omni uses HTTPS. If you use a **self-signed CA**, the Talos nodes will reject the connection because they don't trust the CA. There is no `--insecure-skip-tls-verify` equivalent for SideroLink, and the system trust store in Talos is immutable at runtime — `machine.acceptedCAs` only affects the node's own certificate identity, not outbound TLS connections.
 
-**Use a publicly trusted certificate** (e.g., Let's Encrypt) for the Omni VM. Talos Linux trusts public CA roots by default, so this eliminates the TLS trust issue entirely.
+**A publicly trusted certificate (e.g., Let's Encrypt) is a hard requirement for self-hosted Omni.** Talos Linux trusts public CA roots by default, so this eliminates the TLS trust issue entirely.
 
 #### Import vs Create
 

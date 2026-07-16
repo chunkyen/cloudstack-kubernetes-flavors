@@ -917,7 +917,7 @@ None of these solved the core problem: the Talos nodes couldn't reach the Omni V
 
 **Deploy the Omni VM on the same CloudStack network as your Talos nodes.** If you use an isolated network for your cluster, put the Omni VM on that same isolated network. If you use a shared network, put everything on the shared network.
 
-### 2. TLS Certificate Trust
+### 2. TLS Certificate Trust (The Real Blocker)
 
 #### The Problem
 
@@ -927,19 +927,19 @@ Omni serves its API over HTTPS. The SideroLink connection from Talos nodes to Om
 tls: failed to verify certificate: x509: certificate signed by unknown authority
 ```
 
-This is a hard blocker — there is no `--insecure-skip-tls-verify` flag for the SideroLink connection. The Talos node **must** trust the Omni CA.
+This is a **hard blocker** — there is no `--insecure-skip-tls-verify` flag for the SideroLink connection. The Talos node **must** trust the Omni CA.
 
-#### Solutions
+#### What We Tried (and Why It Didn't Work)
 
-| Approach | Effort | Reliability |
-|----------|--------|-------------|
-| **Public trusted cert** (Let's Encrypt) | Medium — requires DNS + public IP or DNS challenge | ✅ Best — Talos trusts public CAs by default |
-| **Inject CA into Talos config** | High — requires patching machine config on every node | ⚠️ Fragile — `machine.trustedRoots` may not exist in all versions |
-| **Self-signed + CA distribution** | High — must distribute CA to every node | ❌ Not practical for auto-scaling |
+| Attempt | Result |
+|---------|--------|
+| `machine.acceptedCAs` in Talos config | ❌ This field is for the **node's own certificate identity**, not for trusting external server connections. The SideroLink controller uses the system trust store, which is baked into the Talos image. |
+| Injecting CA via config patch | ❌ Same reason — the system trust store is immutable at runtime |
+| `--siderolink-use-grpc-tunnel` | ❌ Doesn't bypass TLS verification, only tunnels WireGuard over TCP |
 
-#### Recommendation
+#### The Only Solution: Public Trusted Certificate
 
-**Use a publicly trusted certificate** (e.g., Let's Encrypt) for the Omni VM. This eliminates the TLS trust issue entirely because Talos Linux trusts public CA roots by default.
+**Use a publicly trusted certificate** (e.g., Let's Encrypt) for the Omni VM. Talos Linux trusts public CA roots by default, so this eliminates the TLS trust issue entirely. This is not optional — it is a hard requirement for self-hosted Omni.
 
 To use Let's Encrypt:
 1. Give the Omni VM a public IP (or use DNS-01 challenge with a private IP)
