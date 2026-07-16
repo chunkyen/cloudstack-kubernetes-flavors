@@ -726,23 +726,41 @@ Dex requires bcrypt password hash cost >= 10. The `htpasswd` command defaults to
 
 Omni needs `--network=host` to reach Dex on localhost:5556. Without this, the OIDC provider URL lookup fails.
 
-### 4. `--initial-users` Must Be Set on First Start
+### 4. CA Certificate Must Be Mounted for HTTPS Dex
+
+Omni v1.9+ is scratch-based with no `ca-certificates` package. It uses Go's system cert pool which is empty in scratch containers. When the OIDC provider (Dex) uses HTTPS with a self-signed CA, Omni can't verify:
+
+```
+Error: failed to run server: Get "https://192.168.188.204:5556/..."
+  tls: failed to verify certificate: x509: certificate signed by unknown authority
+```
+
+**Fix:** Mount the CA certificate into the container as the system cert bundle:
+
+```bash
+# Mount the CA cert as the system cert bundle  
+-v $(pwd)/ca.pem:/etc/ssl/certs/ca-certificates.crt:ro
+```
+
+This is already included in the `docker run` command in [Step 5](#step-5-run-omni), but is easy to forget when modifying the command.
+
+### 5. `--initial-users` Must Be Set on First Start
 
 If Omni initializes without `--initial-users`, the user won't be authorized. You must wipe the etcd data directory and restart fresh.
 
-### 5. Missing `openid` Scope
+### 6. Missing `openid` Scope
 
 Dex requires the `openid` scope. Omni must be started with `--auth-oidc-scopes=openid,profile,email` or Dex will reject the authorization request.
 
-### 6. WireGuard Requires `--cap-add=NET_ADMIN` and `/dev/net/tun`
+### 7. WireGuard Requires `--cap-add=NET_ADMIN` and `/dev/net/tun`
 
 Without these, SideroLink (WireGuard) will fail to start. The container will still run but Talos machines won't be able to connect.
 
-### 7. CSI `cloud-init-dir` on Talos
+### 8. CSI `cloud-init-dir` on Talos
 
 The same CSI patching issue applies — see the [known issues in talos.md](talos.md#csi-node-pod-fails-with-cloud-init-dir-mount-error). The pre-patched DaemonSet at `manifests/csi-node-daemonset-talos.yaml` handles this.
 
-### 8. Backup
+### 9. Backup
 
 Back up the Omni VM regularly. VM snapshots are sufficient since Omni stores state in embedded etcd and SQLite on the local disk. See [Back Up Omni Database](https://docs.siderolabs.com/omni/self-hosted/back-up-omni-db/).
 
