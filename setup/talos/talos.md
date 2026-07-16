@@ -328,7 +328,7 @@ cmk assigntoloadbalancerrule id=${LB_RULE_ID} virtualmachineids=${VM_ID}
 
 ## Step 8: Create Port Forwarding for talosctl API
 
-Talos uses port 50000 for its gRPC API. Create a port forwarding rule so `talosctl` can reach the control plane from outside the isolated network:
+Talos uses port **50000** for its gRPC API — this is the endpoint `talosctl` connects to for node management (bootstrap, apply-config, upgrade, logs, dashboard, etc.). Create a port forwarding rule so `talosctl` can reach the control plane from outside the isolated network:
 
 ```bash
 cmk create portforwardingrule \
@@ -342,6 +342,8 @@ cmk create portforwardingrule \
 ```
 
 > **Note:** The Talos API endpoint (`192.168.200.49:50000` in this example) is separate from the Kubernetes API endpoint (`192.168.200.49:6443`). The load balancer handles 6443; port forwarding handles 50000.
+>
+> For multi-node control planes, each CP node listens on port 50000 internally. Port forwarding maps unique public ports to each node: CP-1 → 50000, CP-2 → 50001, CP-3 → 50002. The firewall must allow the full range (e.g., 50000-50002 for 3 CP nodes). See [Scaling to HA](#scaling-to-ha-multi-node-control-plane) for details.
 
 ## Step 9: Bootstrap the Cluster
 
@@ -595,6 +597,30 @@ Then add them to the load balancer:
 ```bash
 cmk assigntoloadbalancerrule id=${LB_RULE_ID} virtualmachineids=${CP2_ID},${CP3_ID}
 ```
+
+Also create additional port forwarding rules for talosctl access to each new CP node (each CP node uses internal port 50000, mapped to unique public ports):
+
+```bash
+cmk create portforwardingrule \
+  ipaddressid=${PUBLIC_IPADDRESS_ID} \
+  privateport=50000 \
+  publicport=50001 \
+  protocol=tcp \
+  virtualmachineid=${CP2_ID} \
+  openfirewall=true \
+  cidrlist=0.0.0.0/0
+
+cmk create portforwardingrule \
+  ipaddressid=${PUBLIC_IPADDRESS_ID} \
+  privateport=50000 \
+  publicport=50002 \
+  protocol=tcp \
+  virtualmachineid=${CP3_ID} \
+  openfirewall=true \
+  cidrlist=0.0.0.0/0
+```
+
+> **Note:** Port 50000 is the **Talos API** — a gRPC endpoint used by `talosctl` for node management (bootstrap, apply-config, upgrade, logs, dashboard, etc.). Each CP node listens on port 50000 internally. Since all VMs are on an isolated network, port forwarding maps unique public ports to each node's internal 50000: CP-1 → 50000, CP-2 → 50001, CP-3 → 50002. The firewall must also allow the full range (50000-50002) for multi-node clusters.
 
 Talos automatically discovers and joins additional control plane nodes to the etcd cluster.
 
