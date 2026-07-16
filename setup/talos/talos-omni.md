@@ -880,9 +880,7 @@ Dex includes built-in cycle detection to prevent infinite loops.
 
 This section documents real difficulties encountered during the self-hosted Omni deployment on CloudStack, along with practical recommendations.
 
-### 1. Network Topology: The Critical Requirement
-
-**The single most important requirement** for self-hosted Omni is that **all Talos nodes must have direct L3 connectivity to the Omni VM**. This is not optional.
+### 1. Network Topology: Important but Not the Blocker
 
 #### The Problem
 
@@ -894,14 +892,9 @@ Talos nodes connect to Omni via **SideroLink**, which establishes a WireGuard tu
 
 #### What We Encountered
 
-In our lab, the Omni VM was on a shared network (`s1net`, 192.168.188.0/24) while the Talos cluster was on an isolated network (`terra-talos-net`, 10.22.2.0/24). These networks had no routing between them. The Talos nodes could reach the internet through the virtual router's public IP, but they could not reach the Omni VM's private IP.
+In our lab, the Omni VM was on a shared network (`s1net`, 192.168.188.0/24) while the Talos cluster was on an isolated network (`terra-talos-net`, 10.22.2.0/24). However, the Talos nodes **could reach the Omni VM outbound** through the virtual router — a ping test from a pod on the cluster to 192.168.188.204 succeeded at 1.8ms. The routing existed through the management server.
 
-We attempted to work around this with:
-- **SSH port forwarding** — works for `talosctl` but not for SideroLink (which needs direct WireGuard UDP)
-- **gRPC tunnel mode** (`--siderolink-use-grpc-tunnel`) — tunnels WireGuard over TCP, but the Talos node still needs to initiate the connection to the Omni VM
-- **socat tunnels on the Omni VM** — only works for `talosctl` API access, not for SideroLink
-
-None of these solved the core problem: the Talos nodes couldn't reach the Omni VM.
+The real blocker was **TLS certificate trust**, not network connectivity.
 
 #### Solutions
 
@@ -916,6 +909,8 @@ None of these solved the core problem: the Talos nodes couldn't reach the Omni V
 #### Recommendation
 
 **Deploy the Omni VM on the same CloudStack network as your Talos nodes.** If you use an isolated network for your cluster, put the Omni VM on that same isolated network. If you use a shared network, put everything on the shared network.
+
+However, if the nodes can reach Omni outbound through existing routing (e.g., via a virtual router), the network is not the blocker — TLS is.
 
 ### 2. TLS Certificate Trust (The Real Blocker)
 
@@ -935,7 +930,7 @@ This is a **hard blocker** — there is no `--insecure-skip-tls-verify` flag for
 |---------|--------|
 | `machine.acceptedCAs` in Talos config | ❌ This field is for the **node's own certificate identity**, not for trusting external server connections. The SideroLink controller uses the system trust store, which is baked into the Talos image. |
 | Injecting CA via config patch | ❌ Same reason — the system trust store is immutable at runtime |
-| `--siderolink-use-grpc-tunnel` | ❌ Doesn't bypass TLS verification, only tunnels WireGuard over TCP |
+| `--siderolink-use-grpc-tunnel` alone | ❌ Doesn't bypass TLS verification, only tunnels WireGuard over TCP |
 
 #### Solution 1: Public Trusted Certificate (Recommended)
 
@@ -949,7 +944,7 @@ To use Let's Encrypt:
 
 If a public IP is not available, use the **DNS-01 challenge** with a DNS provider that supports it (e.g., Cloudflare, AWS Route53). This works with private IPs.
 
-#### Solution 2: gRPC Scheme (Air-Gapped / Custom CA)
+#### Solution 2: gRPC Scheme (Air-Gapped / Custom CA) ✅ Verified
 
 For air-gapped environments where a public CA is not an option, you can use the **`grpc://` scheme** for the machine API URL. The SideroLink controller interprets `grpc://` as "skip TLS" and connects without encryption:
 
@@ -962,6 +957,20 @@ For air-gapped environments where a public CA is not an option, you can use the 
 ```
 
 This tells the SideroLink controller to use `insecure.NewCredentials()` — no TLS verification at all. The WireGuard tunnel (SideroLink) still provides encryption for the data plane, so the control plane connection is the only unencrypted part.
+
+**This was verified in our lab** — after switching to `grpc://`, all 3 Talos nodes connected to Omni successfully with no TLS errors:
+
+```
+NODE          NAMESPACE   TYPE               ID           VERSION   API ENDPOINT                                                                         TUNNEL
+10.22.2.224   config      SiderolinkConfig   siderolink   1         grpc://192.168.188.204:8090/?jointoken=...   false
+```
+
+The machined logs showed successful provisioning with no TLS errors:
+```
+[talos] siderolink connection configured
+[talos] opened client
+[talos] reconfigured wireguard link
+```
 
 **Trade-off:** The machine API connection is unencrypted. In an air-gapped environment where the network is isolated, this is acceptable — the WireGuard tunnel handles data encryption.
 
@@ -987,11 +996,49 @@ After unlocking, Omni takes over full lifecycle management — scaling, upgrades
 
 #### What We Encountered
 
-We successfully imported the cluster but never got to the unlock step because the SideroLink connection failed (TLS cert issue). The cluster remained locked because the nodes couldn't establish the SideroLink tunnel to Omni.
+We successfully imported the cluster but hit two blockers:
+
+1. **TLS cert issue** — The SideroLink connection failed because the Talos nodes didn't trust the self-signed CA. Solved by using `grpc://` scheme for the machine API URL (see [TLS Certificate Trust](#2-tls-certificate-trust-the-real-blocker)).
+
+2. **Health check timeout** — During import, Omni tries to reach the Kubernetes API through the SideroLink tunnel to verify cluster health. If the Kubernetes API is exposed through a public IP (port forwarding) rather than through the tunnel, this health check will time out:
+
+   ```
+   > waiting for all k8s nodes to report: Get "https://[fdae:41e4:649b:9303::1]:10000/api/v1/nodes": context deadline exceeded
+   ```
+
+   **Solution:** Use `--skip-health-check` during import:
+
+   ```bash
+   omnictl cluster import terra-talos \
+     --talosconfig ~/.talos/config \
+     --talos-context terra-talos \
+     --nodes 10.22.2.224,10.22.2.40,10.22.2.107 \
+     --skip-health-check
+   ```
+
+   After import, Omni can still manage the cluster through the SideroLink tunnel — the health check is only needed during import to validate the cluster state.
+
+3. **Socat tunnels for import** — When importing from the Omni VM, the Talos nodes are on a different network. You need socat tunnels on the Omni VM to reach the nodes' Talos APIs:
+
+   ```bash
+   socat TCP-LISTEN:50000,fork TCP:<public-ip>:50000 &
+   socat TCP-LISTEN:50000,fork,bind=127.0.0.2 TCP:<public-ip>:50001 &
+   socat TCP-LISTEN:50000,fork,bind=127.0.0.3 TCP:<public-ip>:50002 &
+   ```
+
+   Then configure `talosctl` to use the loopback endpoints:
+   ```bash
+   talosctl config endpoint 127.0.0.1
+   talosctl config node 10.22.2.224 10.22.2.40 10.22.2.107
+   ```
+
+   These tunnels are only needed for the import step — after import, the SideroLink tunnel handles all communication.
 
 #### Recommendation
 
-The import → unlock workflow works as designed. The lock is a safety feature, not a limitation. The real blocker is getting the SideroLink connection working first (see [Network Topology](#1-network-topology-the-critical-requirement) and [TLS Certificate Trust](#2-tls-certificate-trust)).
+The import → unlock workflow works as designed. The lock is a safety feature, not a limitation. The real blockers are:
+- Getting the SideroLink connection working first (see [Network Topology](#1-network-topology-important-but-not-the-blocker) and [TLS Certificate Trust](#2-tls-certificate-trust-the-real-blocker))
+- Using `--skip-health-check` if the Kubernetes API is not reachable through the SideroLink tunnel
 
 ### 4. Omni Flag Drift Between Versions
 
@@ -1066,12 +1113,13 @@ The service account key is stored as **base64-encoded JSON wrapping a PGP privat
 
 If we were to deploy self-hosted Omni on CloudStack again:
 
-1. **Put Omni on the same network as the Talos nodes** — this is non-negotiable
-2. **Use Let's Encrypt certificates** — avoid the self-signed CA trust issue entirely
-3. **Create new clusters through Omni** — don't import existing ones (read-only limitation)
-4. **Pin the Omni version** and test flag changes before restarting
-5. **Back up the service account key** immediately after creation
-6. **Consider SaaS Omni** if the network topology doesn't support direct connectivity
+1. **Put Omni on the same network as the Talos nodes** — this avoids the socat tunnel workaround during import
+2. **Use `grpc://` scheme for the machine API** — avoids the self-signed CA trust issue entirely (or use Let's Encrypt if a public IP is available)
+3. **Use `--skip-health-check` during import** — the Kubernetes API is typically exposed through a public IP, not through the SideroLink tunnel
+4. **Create new clusters through Omni** — avoids the import complexity entirely
+5. **Pin the Omni version** and test flag changes before restarting
+6. **Back up the service account key** immediately after creation
+7. **Consider SaaS Omni** if the network topology doesn't support direct connectivity
 
 ---
 
