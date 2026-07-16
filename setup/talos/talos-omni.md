@@ -8,8 +8,6 @@
 
 ### Omni Deployment Options
 
-Omni can be deployed in several ways, each with different trade-offs:
-
 | Option | Description | Complexity | Best For |
 |--------|-------------|------------|----------|
 | **Omni SaaS** | Fully managed by Sidero Labs. No infrastructure to manage. | None | Most users; quick start, no ops overhead |
@@ -28,8 +26,6 @@ Omni can be deployed in several ways, each with different trade-offs:
 
 ### How Omni Changes the Workflow
 
-Compared to the manual ([talos.md](talos.md)) or Terraform ([talos-terraform.md](talos-terraform.md)) approaches, Omni eliminates most operational overhead:
-
 | Aspect | Manual / Terraform | With Omni |
 |--------|-------------------|-----------|
 | Config generation | `talosctl gen config` | Automatic |
@@ -45,26 +41,27 @@ Compared to the manual ([talos.md](talos.md)) or Terraform ([talos-terraform.md]
 
 ```
 ┌──────────────────────────────────────────────────────────────────┐
-│                     CloudStack (cyz1)                            │
+│                     CloudStack (shared L2 network)               │
 │                                                                  │
 │  ┌──────────────────────┐    ┌──────────────────────────────┐   │
 │  │  Omni VM              │    │  Talos Cluster Nodes          │   │
-│  │  (self-hosted)        │    │                               │   │
+│  │  192.168.188.204      │    │                               │   │
 │  │                       │    │  ┌──────────────────────┐    │   │
 │  │  ┌─────────────────┐  │    │  │ CP-1  CP-2  CP-3     │    │   │
 │  │  │ Omni container   │  │    │  │ (Talos Linux)        │    │   │
-│  │  │ Dex (OIDC)        │  │    │  └──────────────────────┘    │   │
-│  │  │ etcd (embedded)   │  │    │  ┌──────────────────────┐    │   │
-│  │  │ Image Factory     │  │    │  │ Worker-1  Worker-2   │    │   │
-│  │  │ Container Registry│  │    │  │ (Talos Linux)        │    │   │
-│  │  └─────────────────┘  │    │  └──────────────────────┘    │   │
+│  │  │ port 443 (HTTPS)  │  │    │  └──────────────────────┘    │   │
+│  │  │ port 8090 (gRPC)  │  │    │  ┌──────────────────────┐    │   │
+│  │  │ port 50180/UDP   │  │    │  │ Worker-1  Worker-2   │    │   │
+│  │  │ (WireGuard)       │  │    │  │ (Talos Linux)        │    │   │
+│  │  ├─────────────────┤  │    │  └──────────────────────┘    │   │
+│  │  │ Dex (OIDC)       │  │    │         │                   │   │
+│  │  │ port 5556 (HTTP) │  │    │ SideroLink│                  │   │
+│  │  └─────────────────┘  │    │ (WireGuard)│                 │   │
 │  │         │              │    │         │                   │   │
-│  │         │ SideroLink   │    │ SideroLink│                  │   │
-│  │         │ (WireGuard)  │    │ (WireGuard)│                 │   │
 │  │         └──────────────┼────┼───────────┘                 │   │
 │  └──────────────────────┘    └──────────────────────────────┘   │
 │                                                                  │
-│  Public IP: 192.168.200.X (port forwarding to Omni VM)          │
+│  All VMs on same L2 network — no public IP needed                │
 └──────────────────────────────────────────────────────────────────┘
 ```
 
@@ -73,7 +70,8 @@ Key architectural points:
 - **SideroLink** — Omni establishes a WireGuard-encrypted tunnel to each registered machine. No public load balancer or port forwarding rules needed for the cluster nodes.
 - **No LB for cluster** — Omni provides the Kubernetes API endpoint through the SideroLink tunnel. You don't need a CloudStack load balancer rule for port 6443.
 - **No port forwarding for talosctl** — `talosctl` communicates through Omni, not directly to nodes.
-- **Omni VM needs public access** — the Omni VM itself must be reachable from the Talos nodes (via SideroLink/WireGuard) and from administrators (UI/CLI).
+- **Private IP only** — on a shared CloudStack network, all VMs (Omni + Talos nodes) are on the same L2 segment. No public IP or port forwarding is required for Omni to function. The Omni UI is accessed directly at the private IP.
+- **Dex over HTTP** — since Dex and Omni run on the same host, Dex serves HTTP (no TLS) to avoid browser certificate trust issues with the self-signed CA.
 
 ---
 
@@ -81,40 +79,32 @@ Key architectural points:
 
 ### Omni VM Hardware Requirements
 
-For a single-VM Omni deployment (recommended for most self-hosted setups), the following is a reasonable baseline for up to ~200 managed nodes:
-
 | Resource | Minimum | Recommended |
 |----------|---------|-------------|
 | vCPUs | 2 | 4 |
 | RAM | 4 GB | 8–16 GB |
 | Disk | 200 GB SSD | 500 GB SSD |
-| Network | 1 Gbps | 2.5 Gbps (for heavy WireGuard traffic) |
-
-For fewer than 50 managed nodes, 2 vCPUs + 8 GB RAM + 200 GB SSD is sufficient.
+| Network | 1 Gbps | Same L2 segment as Talos nodes |
 
 ### CloudStack Environment
 
 Same prerequisites as [talos.md](talos.md#prerequisites):
 
-- **Zone:** `cyz1` (`227f3c30-596d-43ca-b2a5-b03d18b02e1f`)
-- **Network:** `DefaultNetworkOfferingforKubernetesService` (egress allowed by default)
-- **Template:** `talos-v1.13.6` (`e0c83e0d-adc9-4d36-93cc-45024b73f36d`)
-- **CP offering:** `kube control` (`2cc8d224-da47-4178-9d32-70a4d63d216c`)
-- **Worker offering:** `kube worker1` (`c04878fc-4e7f-44a7-8bf5-83dde09a26d9`)
-- **Guest CPU mode:** `host-passthrough` (required for Talos)
-- **Management server:** SSH as `toor` to `192.168.200.1`
+- **Zone:** `cyz1`
+- **Network:** Shared L2 network (e.g., `s1net`) — all VMs must be on the same network
+- **Template:** Any Linux distribution (Debian, Ubuntu, Rocky Linux) for the Omni VM
+- **Talos template:** `talos-v1.13.6` (for the managed cluster nodes)
+- **Management server:** SSH access to CloudStack management server
 
-### Ports Required for Omni
-
-The Omni VM needs these ports open (firewall rules on the public IP):
+### Ports Required on the Omni VM
 
 | Port | Protocol | Purpose |
 |------|----------|---------|
-| 443 | TCP | Omni UI and API |
-| 8090 | TCP | SideroLink API |
+| 443 | TCP | Omni UI and API (HTTPS, self-signed cert) |
+| 8090 | TCP | SideroLink gRPC API |
 | 8091 | TCP | Event sink |
 | 8100 | TCP | Kubernetes proxy |
-| 5556 | TCP | Dex OIDC |
+| 5556 | TCP | Dex OIDC (HTTP, no TLS) |
 | 50180 | UDP | WireGuard (SideroLink) |
 
 ---
@@ -123,58 +113,24 @@ The Omni VM needs these ports open (firewall rules on the public IP):
 
 ### Step 1: Create a VM for Omni
 
-Deploy a Linux VM (Ubuntu 22.04/24.04 or Rocky Linux) on CloudStack:
-
 ```bash
-# Find a suitable template (Ubuntu 22.04+)
-cmk list templates templatefilter=executable zoneid=227f3c30-596d-43ca-b2a5-b03d18b02e1f
+# Find a suitable Linux template
+cmk list templates templatefilter=executable zoneid=<zone-id>
 
 # Deploy the Omni VM
 cmk deploy virtualmachine \
-  zoneid=227f3c30-596d-43ca-b2a5-b03d18b02e1f \
-  templateid=<ubuntu-template-id> \
+  zoneid=<zone-id> \
+  templateid=<linux-template-id> \
   serviceofferingid=<offering-id> \
   networkids=<network-id> \
-  name=omni-server \
-  rootdisksize=500
+  name=omni \
+  rootdisksize=200
 ```
 
-### Step 2: Allocate a Public IP and Configure Firewall
+### Step 2: SSH into the Omni VM and Install Docker
 
 ```bash
-# Allocate a public IP
-cmk associate ipaddress networkid=<network-id> zoneid=227f3c30-596d-43ca-b2a5-b03d18b02e1f
-
-# Note the IP address
-PUBLIC_IP=<allocated-ip>
-
-# Create firewall rules for Omni ports
-for port in 443 8090 8091 8100 5556; do
-  cmk create firewallrule ipaddressid=${PUBLIC_IP_ID} protocol=tcp startport=$port endport=$port cidrlist=0.0.0.0/0
-done
-
-# WireGuard UDP
-cmk create firewallrule ipaddressid=${PUBLIC_IP_ID} protocol=udp startport=50180 endport=50180 cidrlist=0.0.0.0/0
-
-# Create port forwarding for SSH and Omni ports
-cmk create portforwardingrule \
-  ipaddressid=${PUBLIC_IP_ID} \
-  privateport=22 publicport=22 protocol=tcp \
-  virtualmachineid=${OMNI_VM_ID} \
-  openfirewall=true cidrlist=<your-admin-ip>/32
-
-cmk create portforwardingrule \
-  ipaddressid=${PUBLIC_IP_ID} \
-  privateport=443 publicport=443 protocol=tcp \
-  virtualmachineid=${OMNI_VM_ID}
-
-# Repeat for ports 8090, 8091, 8100, 5556, 50180
-```
-
-### Step 3: SSH into the Omni VM and Install Docker
-
-```bash
-ssh toor@<public-ip>
+ssh toor@<omni-private-ip>
 
 # Install Docker
 curl -fsSL https://get.docker.com | sh
@@ -186,11 +142,13 @@ newgrp docker
 
 ## Part 2: Deploy Omni (Single VM)
 
-This follows the [official Run Omni On-Prem guide](https://docs.siderolabs.com/omni/self-hosted/run-omni-on-prem/).
+All commands below run on the Omni VM. We use a self-signed CA for TLS and Dex over HTTP (no TLS) to avoid browser certificate trust issues.
 
 ### Step 1: Install cfssl
 
 ```bash
+mkdir -p ~/omni-setup && cd ~/omni-setup
+
 CFSSL_VERSION=$(curl -sI https://github.com/cloudflare/cfssl/releases/latest \
   | grep -i location | awk -F '/' '{print $NF}' | tr -d '\r')
 
@@ -203,23 +161,13 @@ chmod +x cfssl cfssljson
 sudo mv cfssl cfssljson /usr/local/bin/
 ```
 
-### Step 2: Set Environment Variables
+### Step 2: Generate TLS Certificates
 
 ```bash
-export HOST_PUBLIC_IP=<omni-public-ip>
-export HOST_PRIVATE_IP=<omni-private-ip>
-export OMNI_ENDPOINT=omni.internal
-export AUTH_ENDPOINT=auth.internal
-export OMNI_USER_EMAIL="admin@omni.internal"
+cd ~/omni-setup
 
-echo "127.0.0.1 ${OMNI_ENDPOINT} ${AUTH_ENDPOINT}" | sudo tee -a /etc/hosts
-```
-
-### Step 3: Generate TLS Certificates
-
-```bash
 # Create root CA
-cat <<EOF > ca-csr.json
+cat > ca-csr.json <<EOF
 {
   "CN": "Internal Root CA",
   "key": { "algo": "rsa", "size": 4096 },
@@ -229,11 +177,12 @@ EOF
 
 cfssl gencert -initca ca-csr.json | cfssljson -bare ca
 
+# Add CA to system trust store (so Omni container trusts Dex's certs)
 sudo cp ca.pem /usr/local/share/ca-certificates/ca.crt
 sudo update-ca-certificates
 
 # Create signing config
-cat <<EOF > ca-config.json
+cat > ca-config.json <<EOF
 {
   "signing": {
     "default": { "expiry": "8760h" },
@@ -251,16 +200,15 @@ cat <<EOF > ca-config.json
 }
 EOF
 
-# Generate server certificate
-cat <<EOF > wildcard-csr.json
+# Generate server certificate with the Omni VM's private IP in SANs
+OMNI_IP=<omni-private-ip>  # e.g. 192.168.188.204
+
+cat > wildcard-csr.json <<EOF
 {
-  "CN": "Internal Wildcard",
+  "CN": "Omni Server",
   "hosts": [
-    "${OMNI_ENDPOINT}",
-    "${AUTH_ENDPOINT}",
-    "127.0.0.1",
-    "${HOST_PUBLIC_IP}",
-    "${HOST_PRIVATE_IP}"
+    "${OMNI_IP}",
+    "127.0.0.1"
   ],
   "key": { "algo": "rsa", "size": 4096 }
 }
@@ -276,9 +224,11 @@ cat server.pem ca.pem > server-chain.pem
 chmod 644 server*.pem
 ```
 
-### Step 4: Generate etcd Encryption Key
+### Step 3: Generate etcd Encryption Key
 
 ```bash
+cd ~/omni-setup
+
 gpg --batch --passphrase '' \
   --quick-generate-key \
   "Omni (Used for etcd data encryption) omni@internal.local" \
@@ -293,40 +243,52 @@ gpg --batch --passphrase '' \
 gpg --export-secret-key --armor omni@internal.local > omni.asc
 ```
 
-### Step 5: Set Up Dex (OIDC Provider)
+### Step 4: Set Up Dex (OIDC Provider)
+
+Dex serves over **HTTP** (no TLS) because it runs on the same host as Omni. Using HTTPS with a self-signed cert causes browser trust errors during the OIDC redirect flow.
 
 ```bash
-# Create password hash
-export OMNI_USER_PASSWORD=$(docker run --rm httpd:2.4-alpine \
-  htpasswd -BnC 15 admin | cut -d: -f2)
+cd ~/omni-setup
+
+# Generate bcrypt password hash (cost 10 required by Dex)
+python3 -c "
+import bcrypt
+password = b'omni-admin-password'
+salt = bcrypt.gensalt(rounds=10)
+hashed = bcrypt.hashpw(password, salt).decode()
+# Go's bcrypt expects \$2a\$ prefix
+hashed = hashed.replace('\$2b\$', '\$2a\$')
+print(hashed)
+" > /tmp/dex-hash.txt
 
 # Write Dex config
-cat <<EOF > dex.yaml
-issuer: https://${AUTH_ENDPOINT}:5556
+python3 -c "
+import yaml
 
-storage:
-  type: memory
+with open('/tmp/dex-hash.txt') as f:
+    hashed = f.read().strip()
 
-web:
-  https: 0.0.0.0:5556
-  tlsCert: /etc/dex/tls/server-chain.pem
-  tlsKey: /etc/dex/tls/server-key.pem
-
-enablePasswordDB: true
-
-staticClients:
-  - name: Omni
-    id: omni
-    secret: omni-dex-secret
-    redirectURIs:
-      - https://${OMNI_ENDPOINT}/oidc/consume
-
-staticPasswords:
-  - email: "${OMNI_USER_EMAIL}"
-    username: "admin"
-    preferredUsername: "admin"
-    hash: "${OMNI_USER_PASSWORD}"
-EOF
+config = {
+    'issuer': 'http://${OMNI_IP}:5556',
+    'storage': {'type': 'memory'},
+    'web': {'http': '0.0.0.0:5556'},
+    'enablePasswordDB': True,
+    'staticClients': [{
+        'name': 'Omni',
+        'id': 'omni',
+        'secret': 'omni-dex-secret',
+        'redirectURIs': ['https://${OMNI_IP}:443/oidc/consume']
+    }],
+    'staticPasswords': [{
+        'email': 'admin@omni.internal',
+        'username': 'admin',
+        'preferredUsername': 'admin',
+        'hash': hashed
+    }]
+}
+with open('dex.yaml', 'w') as f:
+    yaml.dump(config, f, default_flow_style=False)
+"
 
 # Run Dex
 docker run -d \
@@ -334,87 +296,121 @@ docker run -d \
   --restart=unless-stopped \
   -p 5556:5556 \
   -v $(pwd)/dex.yaml:/etc/dex/dex.yaml:ro,Z \
-  -v $(pwd)/server-key.pem:/etc/dex/tls/server-key.pem:ro,Z \
-  -v $(pwd)/server-chain.pem:/etc/dex/tls/server-chain.pem:ro,Z \
   ghcr.io/dexidp/dex:v2.41.1 \
     dex serve /etc/dex/dex.yaml
 ```
 
-### Step 6: Run Omni
+> **Note:** The bcrypt hash must have cost >= 10. The `htpasswd` command defaults to cost 5, which Dex rejects. Use Python's `bcrypt` library or explicitly set `-C 10` with `htpasswd`.
+
+### Step 5: Run Omni
+
+Omni runs with `--network=host` so it can reach Dex on localhost. It uses embedded etcd and stores data in a SQLite database.
 
 ```bash
+cd ~/omni-setup
+
 # Get latest Omni version
 export OMNI_VERSION=$(curl -sI https://github.com/siderolabs/omni/releases/latest \
   | grep -i location | awk -F '/' '{print $NF}' | tr -d '\r')
 
-# Create SQLite directory
+# Create data directory
 mkdir -p $HOME/sqlite
 
 # Run Omni container
 docker run -d \
   --name omni \
   --restart=unless-stopped \
-  -p 443:443 \
-  -p 8090:8090 \
-  -p 8091:8091 \
-  -p 8100:8100 \
-  -p 50180:50180/udp \
-  -v $(pwd)/server-key.pem:/etc/omni/tls/server-key.pem:ro,Z \
+  --network=host \
+  --cap-add=NET_ADMIN \
+  --device /dev/net/tun:/dev/net/tun \
+  -v $(pwd)/ca.pem:/etc/ssl/certs/ca-certificates.crt:ro \
   -v $(pwd)/server-chain.pem:/etc/omni/tls/server-chain.pem:ro,Z \
+  -v $(pwd)/server-key.pem:/etc/omni/tls/server-key.pem:ro,Z \
   -v $(pwd)/omni.asc:/etc/omni/omni.asc:ro,Z \
   -v $HOME/sqlite:/etc/omni/sqlite:Z \
   ghcr.io/siderolabs/omni:${OMNI_VERSION} \
     --account-id=cloudstack-lab \
     --name=cloudstack-lab \
-    --siderolink-api-advertised-url=https://${HOST_PUBLIC_IP}:8090 \
-    --siderolink-wireguard-advertised-url=https://${HOST_PUBLIC_IP}:50180 \
-    --event-sink-advertised-url=https://${HOST_PUBLIC_IP}:8091 \
-    --advertised-api-url=https://${OMNI_ENDPOINT}:443 \
-    --auth-auth0-domain=${AUTH_ENDPOINT}:5556 \
-    --auth-auth0-client-id=omni \
-    --auth-auth0-client-secret=omni-dex-secret \
-    --etcd-encryption-key-file=/etc/omni/omni.asc \
-    --sqlite-path=/etc/omni/sqlite/omni.db \
-    --eula-accepted=true
+    --bind-addr=0.0.0.0:443 \
+    --cert=/etc/omni/tls/server-chain.pem \
+    --key=/etc/omni/tls/server-key.pem \
+    --siderolink-wireguard-advertised-addr=${OMNI_IP}:50180 \
+    --siderolink-wireguard-bind-addr=0.0.0.0:50180 \
+    --advertised-api-url=https://${OMNI_IP}:443 \
+    --auth-oidc-enabled \
+    --auth-oidc-provider-url=http://${OMNI_IP}:5556 \
+    --auth-oidc-client-id=omni \
+    --auth-oidc-client-secret=omni-dex-secret \
+    --auth-oidc-scopes=openid,profile,email \
+    --initial-users=admin@omni.internal \
+    --etcd-embedded \
+    --etcd-embedded-db-path=/etc/omni/sqlite/etcd \
+    --private-key-source=file:///etc/omni/omni.asc \
+    --sqlite-storage-path=/etc/omni/sqlite/omni.db \
+    --eula-accept-email=admin@omni.internal \
+    --eula-accept-name=admin \
+    --create-initial-service-account \
+    --initial-service-account-key-path=/etc/omni/sqlite/service-account-key.pem
 ```
 
-> **Note:** The `--eula-accepted=true` flag accepts the EULA programmatically. If your organization has a separate agreement with Sidero Labs, that takes precedence.
+> **Important flags explained:**
+> - `--network=host` — required so Omni can reach Dex on localhost:5556
+> - `--cap-add=NET_ADMIN --device /dev/net/tun` — required for WireGuard (SideroLink)
+> - `--auth-oidc-scopes=openid,profile,email` — Dex requires the `openid` scope or it rejects the request
+> - `--initial-users=admin@omni.internal` — authorizes this user on first start. Must match the email in Dex's `staticPasswords`
+> - `--private-key-source=file:///etc/omni/omni.asc` — the GPG key for etcd encryption (note the `file://` prefix)
+> - `--etcd-embedded` — uses embedded etcd (no external database needed)
 
-### Step 7: Verify Omni is Running
+### Step 6: Verify Omni is Running
 
 ```bash
+# Check logs
 docker logs omni --tail 20
-# Look for: "Omni is ready" or similar startup message
 
-# Check ports are listening
+# Check ports
 ss -tulpn | grep -E '443|8090|8091|8100|50180|5556'
+
+# Test the UI
+curl -sk https://${OMNI_IP}:443/ | head -5
+# Should return HTML (Omni UI)
+
+# Test Dex OIDC endpoint
+curl -s http://${OMNI_IP}:5556/.well-known/openid-configuration | head -5
 ```
+
+### Step 7: Access the Omni UI
+
+Open `https://<omni-private-ip>:443` in your browser. You'll see a TLS warning because the certificate is self-signed — accept the risk and proceed.
+
+**Login flow:**
+1. Omni redirects to `http://<omni-ip>:5556/auth?...` (Dex login page)
+2. Enter **Email:** `admin@omni.internal` / **Password:** `omni-admin-password`
+3. Click "Grant Access" on the approval page
+4. On the "authenticate UI access" page, click to confirm — your browser's public key is registered
+5. You are logged into the Omni dashboard
+
+> **Troubleshooting:** If you get "identity is not authorized", ensure `--initial-users=admin@omni.internal` was set on the **first** start. If Omni already initialized without it, wipe the data directory (`~/sqlite/etcd`, `~/sqlite/omni.db`) and restart.
 
 ---
 
 ## Part 3: Install and Configure Omnictl
 
-On your admin machine (e.g., hermes1):
+On your admin machine (must have network access to the Omni VM):
 
 ```bash
 # Install omnictl
 curl -sL https://github.com/siderolabs/omni/releases/latest/download/omnictl-linux-amd64 -o /usr/local/bin/omnictl
 chmod +x /usr/local/bin/omnictl
 
-# Add the CA cert to your trust store
-# Copy ca.pem from the Omni VM to your admin machine
-scp toor@<omni-public-ip>:~/ca.pem /usr/local/share/ca-certificates/omni-ca.crt
-sudo update-ca-certificates
-
-# Configure omnictl context
+# Configure context
 omnictl config context add cloudstack-lab \
-  --url=https://<omni-public-ip> \
+  --url=https://<omni-ip> \
   --auth-mode=basic
 
 # Log in
 omnictl login --auth-mode=basic
-# Username: admin
-# Password: <the password you set in Dex>
+# Username: admin@omni.internal
+# Password: omni-admin-password
 
 # Verify
 omnictl get contexts
@@ -424,7 +420,7 @@ omnictl get contexts
 
 ## Part 4: Register Talos Machines with Omni
 
-Since CloudStack may not have a built-in Omni infrastructure provider, we use the **Machine Registration** approach — provision VMs manually and have them register with Omni.
+Since CloudStack does not have a built-in Omni infrastructure provider, we use the **Machine Registration** approach — provision VMs manually and have them register with Omni.
 
 ### Step 1: Create a Registration Token
 
@@ -468,9 +464,9 @@ EOF
 # Deploy control plane VMs
 for i in 1 2 3; do
   cmk deploy virtualmachine \
-    zoneid=227f3c30-596d-43ca-b2a5-b03d18b02e1f \
-    templateid=e0c83e0d-adc9-4d36-93cc-45024b73f36d \
-    serviceofferingid=2cc8d224-da47-4178-9d32-70a4d63d216c \
+    zoneid=<zone-id> \
+    templateid=<talos-template-id> \
+    serviceofferingid=<cp-offering-id> \
     networkid=<network-id> \
     name=omni-cp-${i} \
     userdata=$(base64 register-cp.yaml | tr -d '\n')
@@ -479,16 +475,16 @@ done
 # Deploy worker VMs
 for i in 1 2; do
   cmk deploy virtualmachine \
-    zoneid=227f3c30-596d-43ca-b2a5-b03d18b02e1f \
-    templateid=e0c83e0d-adc9-4d36-93cc-45024b73f36d \
-    serviceofferingid=c04878fc-4e7f-44a7-8bf5-83dde09a26d9 \
+    zoneid=<zone-id> \
+    templateid=<talos-template-id> \
+    serviceofferingid=<worker-offering-id> \
     networkid=<network-id> \
     name=omni-worker-${i} \
     userdata=$(base64 register-worker.yaml | tr -d '\n')
 done
 ```
 
-The VMs boot Talos, connect to Omni via SideroLink, and register themselves. You can monitor registration in the Omni UI or via:
+The VMs boot Talos, connect to Omni via SideroLink, and register themselves. Monitor registration:
 
 ```bash
 omnictl get machines
@@ -497,7 +493,6 @@ omnictl get machines
 ### Step 3: Create a Machine Class
 
 ```bash
-# Create machine classes based on labels
 omnictl create machine-class cp-machines \
   --label-selector 'type=control-plane'
 
@@ -613,8 +608,6 @@ omnictl update cluster omni-cluster --worker-count 2
 omnictl update cluster omni-cluster --control-plane-count 3
 ```
 
-Omni handles VM provisioning (or machine selection), etcd membership, and Kubernetes node management automatically.
-
 ### Upgrades
 
 ```bash
@@ -625,19 +618,49 @@ omnictl update cluster omni-cluster --talos-version v1.14.0
 omnictl update cluster omni-cluster --kubernetes-version 1.37.0
 ```
 
-Omni performs rolling upgrades — one node at a time, draining, upgrading, rebooting, and uncordoning.
-
 ### Import an Existing Talos Cluster
 
-If you already have a Talos cluster (like `terra-talos`), you can import it into Omni:
-
 ```bash
-# On the existing cluster, get the talosconfig
-# Then register with Omni
 omnictl import talosconfig --cluster-name terra-talos ./talosconfig
 ```
 
-See [Import Talos Clusters](https://docs.siderolabs.com/omni/cluster-management/importing-talos-clusters/) for details.
+---
+
+## Known Issues & Pitfalls
+
+### 1. Self-Signed TLS and Browser Trust
+
+The Omni UI uses a self-signed certificate. Your browser will show a warning — accept it to proceed. The OIDC redirect to Dex uses **HTTP** (not HTTPS) to avoid a double TLS warning. This is safe because both services run on the same host.
+
+### 2. Dex Bcrypt Hash Cost
+
+Dex requires bcrypt password hash cost >= 10. The `htpasswd` command defaults to cost 5. Either:
+- Use `htpasswd -nbBC 10 admin <password>` (explicit cost 10)
+- Or generate the hash with Python's `bcrypt` library
+
+### 3. Omni Must Use `--network=host`
+
+Omni needs `--network=host` to reach Dex on localhost:5556. Without this, the OIDC provider URL lookup fails.
+
+### 4. `--initial-users` Must Be Set on First Start
+
+If Omni initializes without `--initial-users`, the user won't be authorized. You must wipe the etcd data directory and restart fresh.
+
+### 5. Missing `openid` Scope
+
+Dex requires the `openid` scope. Omni must be started with `--auth-oidc-scopes=openid,profile,email` or Dex will reject the authorization request.
+
+### 6. WireGuard Requires `--cap-add=NET_ADMIN` and `/dev/net/tun`
+
+Without these, SideroLink (WireGuard) will fail to start. The container will still run but Talos machines won't be able to connect.
+
+### 7. CSI `cloud-init-dir` on Talos
+
+The same CSI patching issue applies — see the [known issues in talos.md](talos.md#csi-node-pod-fails-with-cloud-init-dir-mount-error). The pre-patched DaemonSet at `manifests/csi-node-daemonset-talos.yaml` handles this.
+
+### 8. Backup
+
+Back up the Omni VM regularly. VM snapshots are sufficient since Omni stores state in embedded etcd and SQLite on the local disk. See [Back Up Omni Database](https://docs.siderolabs.com/omni/self-hosted/back-up-omni-db/).
 
 ---
 
@@ -656,36 +679,7 @@ See [Import Talos Clusters](https://docs.siderolabs.com/omni/cluster-management/
 | CCM/CSI install | Manual | Manual | Manual (same) |
 | Monitoring | Manual | Manual | Omni UI |
 | Infrastructure to manage | CloudStack only | CloudStack + Terraform | CloudStack + Omni VM |
-| Complexity | High | Medium | Medium (Omni setup) / Low (daily ops) |
-
----
-
-## Known Issues & Considerations
-
-### Network Requirements
-
-- Talos nodes need outbound access to the Omni VM (SideroLink uses WireGuard, UDP 50180)
-- The CloudStack network offering `DefaultNetworkOfferingforKubernetesService` has `egressdefaultpolicy=true`, so this works out of the box
-- For the Omni VM, ensure the public IP firewall allows all required ports (see [Ports Required for Omni](#ports-required-for-omni))
-
-### Omni VM Availability
-
-Omni is not part of the Kubernetes control plane. If the Omni VM goes down, your clusters continue running normally. Talos machines reconnect when Omni becomes available again. However, external access (`kubectl`, `omnictl`) won't work until Omni is recovered.
-
-Omni offers a "break glass" configuration for emergency access when Omni is unavailable.
-
-### Licensing
-
-- **Omni Self-Hosted** — free for non-production use (home lab, development); requires a [commercial license](mailto:sales@siderolabs.com) for production use
-- **Talos Linux** — open source (MPL 2.0), no license required
-
-### CSI `cloud-init-dir` on Talos
-
-The same CSI patching issue applies — see the [known issues in talos.md](talos.md#csi-node-pod-fails-with-cloud-init-dir-mount-error). The pre-patched DaemonSet at `manifests/csi-node-daemonset-talos.yaml` handles this.
-
-### Backup
-
-Back up the Omni VM regularly. VM snapshots are usually sufficient since Omni stores state in embedded etcd and SQLite on the local disk. See [Back Up Omni Database](https://docs.siderolabs.com/omni/self-hosted/back-up-omni-db/) for details.
+| Complexity | High | Medium | Medium (setup) / Low (daily ops) |
 
 ---
 
@@ -699,6 +693,5 @@ Back up the Omni VM regularly. VM snapshots are usually sufficient since Omni st
 - [Import Talos Clusters](https://docs.siderolabs.com/omni/cluster-management/importing-talos-clusters/)
 - [Omni Firewall and Egress Requirements](https://docs.siderolabs.com/omni/omni-cluster-setup/omni-firewall-egress-requirement/)
 - [Expose Omni with Nginx (HTTPS)](https://docs.siderolabs.com/omni/self-hosted/expose-omni-with-nginx-https/)
-- [Configure Keycloak for Omni](https://docs.siderolabs.com/omni/self-hosted/configure-keycloak-for-omni/)
 - [talos.md](talos.md) — manual Talos setup on CloudStack
 - [talos-terraform.md](talos-terraform.md) — Terraform-based Talos setup on CloudStack
