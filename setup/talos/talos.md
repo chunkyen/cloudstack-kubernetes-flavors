@@ -629,6 +629,33 @@ cmk create portforwardingrule \
 
 Talos automatically discovers and joins additional control plane nodes to the etcd cluster — no manual `talosctl bootstrap --recover-from` needed when all nodes use the same `controlplane.yaml` (same cluster ID, secret, and bootstrap token).
 
+### Scaling Down Control Plane Nodes
+
+To remove control plane nodes, the correct order is:
+
+1. **Remove the node from etcd** — run from a remaining CP node:
+   ```bash
+   # Get the member ID of the node to remove
+   talosctl --talosconfig talosconfig -n <remaining-cp> etcd status
+   # Remove the member (one at a time, maintaining quorum)
+   talosctl --talosconfig talosconfig -n <remaining-cp> etcd remove-member <member-id>
+   ```
+
+2. **Drain and delete the Kubernetes node:**
+   ```bash
+   kubectl drain <node> --ignore-daemonsets --delete-emptydir-data
+   kubectl delete node <node>
+   ```
+
+3. **Reset the node:**
+   ```bash
+   talosctl --talosconfig talosconfig -n <node> reset --graceful=false
+   ```
+
+4. **Clean up CloudStack resources** — remove the VM, port forwarding rule, and update the firewall range.
+
+> **⚠️ Quorum risk:** When going from 3→1 CP, remove members one at a time (3→2, then 2→1). Each removal maintains quorum briefly. If you remove two members at once, etcd loses quorum and the cluster becomes unavailable.
+
 ## Upgrading Talos
 
 Talos upgrades are image-based and atomic. The upgrade replaces the installer image on each node and reboots into the new version.

@@ -377,7 +377,9 @@ This is the default behavior when using Terraform, since all CP VMs are deployed
 
 ### Remove Nodes
 
-Terraform can destroy the VM, but you must drain and remove the node from Kubernetes first:
+#### Workers (Simple)
+
+Terraform can destroy the worker VM, but you must drain and remove the node from Kubernetes first:
 
 ```bash
 # Before terraform apply
@@ -390,6 +392,33 @@ terraform apply
 ```
 
 Terraform destroys the VM, but the Kubernetes node object and etcd member are already cleaned up.
+
+#### Control Plane Nodes (Requires etcd Member Removal)
+
+Scaling down control plane nodes is more involved because etcd requires quorum. The correct order is:
+
+1. **Remove the node from etcd** — run this from a remaining CP node:
+   ```bash
+   # Get the member ID of the node to remove
+   talosctl --talosconfig talosconfig -n <remaining-cp> etcd status
+   # Remove the member (one at a time, maintaining quorum)
+   talosctl --talosconfig talosconfig -n <remaining-cp> etcd remove-member <member-id>
+   ```
+
+2. **Drain and delete the Kubernetes node:**
+   ```bash
+   kubectl drain <node> --ignore-daemonsets --delete-emptydir-data
+   kubectl delete node <node>
+   ```
+
+3. **Reset the node** so it leaves the cluster cleanly:
+   ```bash
+   talosctl --talosconfig talosconfig -n <node> reset --graceful=false
+   ```
+
+4. **Update `terraform.tfvars`** — reduce `control_plane_count`, then `terraform apply` to destroy the VM, remove port forwarding, and update the firewall range.
+
+> **⚠️ Quorum risk:** When going from 3→1 CP, remove members one at a time (3→2, then 2→1). Each removal maintains quorum briefly. If you remove two members at once, etcd loses quorum and the cluster becomes unavailable.
 
 ## Upgrading Talos
 
@@ -413,5 +442,6 @@ Terraform state stays unchanged. No infrastructure changes needed.
 |-----------|------------------|---------------------|
 | Add workers | ✅ VM creation | None (auto-joins) |
 | Add CP nodes | ✅ VM creation + LB + firewall | None (auto-joins etcd when using same config) |
-| Remove nodes | ✅ VM destruction | `kubectl drain/delete`, `talosctl reset` first |
+| Remove workers | ✅ VM destruction | `kubectl drain/delete`, `talosctl reset` first |
+| Remove CP nodes | ✅ VM destruction + LB + firewall | `etcd remove-member`, `kubectl drain/delete`, `talosctl reset` first |
 | Upgrade Talos | ❌ | `talosctl upgrade` per node |
