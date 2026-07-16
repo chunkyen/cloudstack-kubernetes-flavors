@@ -76,7 +76,7 @@ The Rancher Turtles integration combines three layers — Rancher (management pl
 - [Talos setup guide](setup/talos/talos.md) — deploy a Talos cluster on CloudStack (manual `cmk` approach)
 - [Terraform deployment guide](setup/talos/talos-terraform.md) — one-shot deployment with Terraform (network, IP, LB, firewall, VMs)
 - [Terraform manifests](setup/talos/manifests/terraform/) — Terraform configs for the above
-- [Sidero Omni guide](setup/talos/talos-omni.md) — managing Talos clusters on CloudStack with Sidero Omni (SaaS or self-hosted)
+- [Sidero Omni guide](setup/talos/talos-omni.md) — self-hosted Omni on CloudStack: deploy the Omni VM, register Talos machines, and manage clusters
 
 #### Cross-Cutting Components
 
