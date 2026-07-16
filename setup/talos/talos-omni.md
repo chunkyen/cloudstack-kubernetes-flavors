@@ -1066,23 +1066,7 @@ We successfully imported the cluster but hit two blockers:
 
    After import, Omni can still manage the cluster through the SideroLink tunnel — the health check is only needed during import to validate the cluster state.
 
-3. **Socat tunnels for import (workaround)** — When importing from the Omni VM, `omnictl` needs to reach all Talos nodes to discover the cluster state. Talos's request forwarding only works when the request comes from within the cluster network. If the Omni VM is on a different network, the CP node refuses to forward requests (`no request forwarding`).
-
-   The socat workaround makes the nodes appear as localhost on the Omni VM, bypassing the request forwarding check:
-
-   ```bash
-   socat TCP-LISTEN:50000,fork TCP:<public-ip>:50000 &
-   socat TCP-LISTEN:50000,fork,bind=127.0.0.2 TCP:<public-ip>:50001 &
-   socat TCP-LISTEN:50000,fork,bind=127.0.0.3 TCP:<public-ip>:50002 &
-   ```
-
-   Then configure `talosctl` to use the loopback endpoints:
-   ```bash
-   talosctl config endpoint 127.0.0.1
-   talosctl config node 10.22.2.224 10.22.2.40 10.22.2.107
-   ```
-
-   **This is a workaround, not a requirement.** If the Omni VM and Talos nodes are on the same network (or have direct routing), there is no "no request forwarding" issue and socat is unnecessary. The tunnels are only needed for the import step — after import, the SideroLink tunnel handles all communication.
+   **Note:** Both the Omni VM and your admin machine have direct access to the port forwarding (public IP), so no socat tunnels or other workarounds are needed for the import step. The `--skip-health-check` flag is the only adjustment required.
 
 #### Recommendation
 
@@ -1163,7 +1147,7 @@ The service account key is stored as **base64-encoded JSON wrapping a PGP privat
 
 If we were to deploy self-hosted Omni on CloudStack again:
 
-1. **Put Omni on the same network as the Talos nodes** — this avoids the socat tunnel workaround during import
+1. **Put Omni on the same network as the Talos nodes** — avoids the need for port forwarding and socat workarounds during import
 2. **Use `grpc://` scheme for the machine API** — avoids the self-signed CA trust issue entirely (or use Let's Encrypt if a public IP is available)
 3. **Use `--skip-health-check` during import** — the Kubernetes API is typically exposed through a public IP, not through the SideroLink tunnel
 4. **Create new clusters through Omni** — avoids the import complexity entirely
