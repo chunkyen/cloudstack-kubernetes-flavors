@@ -937,9 +937,9 @@ This is a **hard blocker** — there is no `--insecure-skip-tls-verify` flag for
 | Injecting CA via config patch | ❌ Same reason — the system trust store is immutable at runtime |
 | `--siderolink-use-grpc-tunnel` | ❌ Doesn't bypass TLS verification, only tunnels WireGuard over TCP |
 
-#### The Only Solution: Public Trusted Certificate
+#### Solution 1: Public Trusted Certificate (Recommended)
 
-**Use a publicly trusted certificate** (e.g., Let's Encrypt) for the Omni VM. Talos Linux trusts public CA roots by default, so this eliminates the TLS trust issue entirely. This is not optional — it is a hard requirement for self-hosted Omni.
+**Use a publicly trusted certificate** (e.g., Let's Encrypt) for the Omni VM. Talos Linux trusts public CA roots by default, so this eliminates the TLS trust issue entirely.
 
 To use Let's Encrypt:
 1. Give the Omni VM a public IP (or use DNS-01 challenge with a private IP)
@@ -948,6 +948,24 @@ To use Let's Encrypt:
 4. Pass the Let's Encrypt cert and key to the Omni container instead of the self-signed cert
 
 If a public IP is not available, use the **DNS-01 challenge** with a DNS provider that supports it (e.g., Cloudflare, AWS Route53). This works with private IPs.
+
+#### Solution 2: gRPC Scheme (Air-Gapped / Custom CA)
+
+For air-gapped environments where a public CA is not an option, you can use the **`grpc://` scheme** for the machine API URL. The SideroLink controller interprets `grpc://` as "skip TLS" and connects without encryption:
+
+```bash
+# Instead of:
+--machine-api-advertised-url=https://192.168.188.204:8090/
+
+# Use:
+--machine-api-advertised-url=grpc://192.168.188.204:8090/
+```
+
+This tells the SideroLink controller to use `insecure.NewCredentials()` — no TLS verification at all. The WireGuard tunnel (SideroLink) still provides encryption for the data plane, so the control plane connection is the only unencrypted part.
+
+**Trade-off:** The machine API connection is unencrypted. In an air-gapped environment where the network is isolated, this is acceptable — the WireGuard tunnel handles data encryption.
+
+**Note:** This only affects the SideroLink connection. The main Omni API (port 443) still uses HTTPS with your self-signed cert for `omnictl` and UI access.
 
 ### 3. Importing Existing Clusters
 
