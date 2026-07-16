@@ -11,7 +11,7 @@ This repository examines four primary approaches to running Kubernetes on CloudS
 1. **CKS (CloudStack Kubernetes Service)** — Native CloudStack Kubernetes integration
 2. **CAPC (Cluster API Provider for CloudStack)** — Infrastructure-as-Code approach using Cluster API (with user-defined node OS)
 3. **Rancher + CAPC** — Managed Kubernetes with Rancher as the management plane, CAPC as the CloudStack infrastructure provider (with user-defined nodes)
-4. **Talos Linux** — Minimal, immutable Linux designed for Kubernetes (can be used standalone with CAPI, with Rancher, or independently)
+4. **Talos Linux** — Minimal, immutable Linux designed for Kubernetes. Can be managed standalone (via `cmk` or Terraform), or with **Sidero Omni** — a Kubernetes management platform that automates cluster lifecycle (self-hosted on CloudStack as a single Docker VM).
 
 ### Cross-Cutting Components
 
@@ -72,11 +72,21 @@ The Rancher Turtles integration combines three layers — Rancher (management pl
 
 #### Talos Linux
 
+Talos Linux is a minimal, immutable OS designed specifically for Kubernetes. It can be managed through three approaches, each documented here:
+
+| Approach | Description | Complexity |
+|----------|-------------|------------|
+| **Manual (`cmk`)** | Deploy VMs via CloudStack CLI, generate configs with `talosctl`, bootstrap manually | High |
+| **Terraform** | One-shot deployment with Terraform managing all CloudStack resources (network, IP, LB, firewall, VMs) | Medium |
+| **Sidero Omni** | Kubernetes management platform that automates cluster creation, scaling, upgrades, and lifecycle. Self-hosted on CloudStack as a single Docker VM. | Low (daily ops) / Medium (initial setup) |
+
+Guides:
+
 - [Talos architecture](architecture/talos.md) — architecture overview
-- [Talos setup guide](setup/talos/talos.md) — deploy a Talos cluster on CloudStack (manual `cmk` approach)
-- [Terraform deployment guide](setup/talos/talos-terraform.md) — one-shot deployment with Terraform (network, IP, LB, firewall, VMs)
+- [Manual setup](setup/talos/talos.md) — deploy a Talos cluster on CloudStack via `cmk` CLI
+- [Terraform deployment](setup/talos/talos-terraform.md) — one-shot deployment with Terraform (network, IP, LB, firewall, VMs)
 - [Terraform manifests](setup/talos/manifests/terraform/) — Terraform configs for the above
-- [Sidero Omni guide](setup/talos/talos-omni.md) — self-hosted Omni on CloudStack: deploy the Omni VM, register Talos machines, and manage clusters
+- [Sidero Omni](setup/talos/talos-omni.md) — self-hosted Omni on CloudStack: deploy the Omni VM, register Talos machines, and manage clusters via `omnictl`
 
 #### Cross-Cutting Components
 
