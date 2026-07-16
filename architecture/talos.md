@@ -316,7 +316,7 @@ Sidero Omni is a Kubernetes lifecycle management platform for Talos clusters. It
 │  │  └─────────────────┘  │    │  └──────────────────────┘    │   │
 │  └──────────────────────┘    └──────────────────────────────┘   │
 │                                                                  │
-│  ⚠️ All VMs MUST be on the same L2 network segment               │
+│  ⚠️ Nodes need L3 reachability to Omni — routing between networks works │
 │  ⚠️ NAT / port forwarding does NOT work for SideroLink           │
 └──────────────────────────────────────────────────────────────────┘
 ```

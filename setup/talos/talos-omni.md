@@ -61,7 +61,7 @@
 │  │         └──────────────┼────┼───────────┘                 │   │
 │  └──────────────────────┘    └──────────────────────────────┘   │
 │                                                                  │
-│  All VMs on same L2 network — no public IP needed                │
+│  All VMs need L3 reachability — routing between networks works fine  │
 └──────────────────────────────────────────────────────────────────┘
 ```
 
@@ -70,7 +70,7 @@ Key architectural points:
 - **SideroLink** — Omni establishes a WireGuard-encrypted tunnel to each registered machine. No public load balancer or port forwarding rules needed for the cluster nodes.
 - **No LB for cluster** — Omni provides the Kubernetes API endpoint through the SideroLink tunnel. You don't need a CloudStack load balancer rule for port 6443.
 - **No port forwarding for talosctl** — `talosctl` communicates through Omni, not directly to nodes.
-- **Private IP only** — on a shared CloudStack network, all VMs (Omni + Talos nodes) are on the same L2 segment. No public IP or port forwarding is required for Omni to function. The Omni UI is accessed directly at the private IP.
+- **Private IP only** — on a shared CloudStack network, all VMs (Omni + Talos nodes) can be on the same L2 segment, but they don't have to be. The Talos nodes just need L3 reachability to the Omni VM (routing between networks works fine). No public IP or port forwarding is required for Omni to function. The Omni UI is accessed directly at the private IP.
 - **IP vs hostname** — the official Sidero guide uses hostnames like `omni.internal` and `auth.internal` with entries in `/etc/hosts`. This guide uses the private IP directly instead, which works without any DNS or hosts file configuration. If you prefer hostnames, you can substitute the IP with your chosen FQDN throughout — just ensure DNS (or `/etc/hosts` on every client) resolves it to the Omni VM's IP.
 - **Full HTTPS** — both Omni (port 443) and Dex (port 5556) serve HTTPS using the same self-signed CA. Install the CA certificate in your browser's trust store to avoid TLS warnings.
 
@@ -92,7 +92,7 @@ Key architectural points:
 Same prerequisites as [talos.md](talos.md#prerequisites):
 
 - **Zone:** `cyz1`
-- **Network:** Shared L2 network (e.g., `s1net`) — all VMs must be on the same network
+- **Network:** Any network that provides outbound connectivity to the Omni VM. The Omni VM and Talos nodes do **not** need to be on the same network — they just need L3 reachability (routing between networks, or the Talos nodes must be able to reach the Omni VM's IP). In our lab, the Omni VM was on a shared network (`s1net`, 192.168.188.0/24) while the Talos cluster was on an isolated network (`terra-talos-net`, 10.22.2.0/24) — the nodes could reach Omni through the virtual router.
 - **Template:** Any Linux distribution (Debian, Ubuntu, Rocky Linux) for the Omni VM
 - **Talos template:** `talos-v1.13.6` (for the managed cluster nodes)
 - **Management server:** SSH access to CloudStack management server
