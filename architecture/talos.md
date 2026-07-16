@@ -291,6 +291,72 @@ Talos upgrades are **image-based** and **atomic**:
 
 This is fundamentally different from package-based upgrades (apt/yum upgrade) used by other flavors.
 
+### Omni (Sidero Management Plane)
+
+Sidero Omni is a Kubernetes lifecycle management platform for Talos clusters. It can be self-hosted or used as a SaaS service.
+
+#### Architecture
+
+```
+┌──────────────────────────────────────────────────────────────────┐
+│                    CloudStack Network                             │
+│                                                                  │
+│  ┌──────────────────────┐    ┌──────────────────────────────┐   │
+│  │  Omni VM              │    │  Talos Cluster Nodes          │   │
+│  │                       │    │                               │   │
+│  │  ┌─────────────────┐  │    │  ┌──────────────────────┐    │   │
+│  │  │ Omni container   │  │    │  │ CP-1  CP-2  CP-3     │    │   │
+│  │  │ port 443 (HTTPS)  │  │    │  │ (Talos Linux)        │    │   │
+│  │  │ port 8090 (gRPC)  │◄─┼────┼──┤ SideroLink           │    │   │
+│  │  │ port 50180/UDP   │◄─┼────┼──┤ (WireGuard tunnel)   │    │   │
+│  │  │ (WireGuard)       │  │    │  └──────────────────────┘    │   │
+│  │  ├─────────────────┤  │    │  ┌──────────────────────┐    │   │
+│  │  │ Dex (OIDC)       │  │    │  │ Worker-1  Worker-2   │    │   │
+│  │  │ port 5556 (HTTPS)│  │    │  │ (Talos Linux)        │    │   │
+│  │  └─────────────────┘  │    │  └──────────────────────┘    │   │
+│  └──────────────────────┘    └──────────────────────────────┘   │
+│                                                                  │
+│  ⚠️ All VMs MUST be on the same L2 network segment               │
+│  ⚠️ NAT / port forwarding does NOT work for SideroLink           │
+└──────────────────────────────────────────────────────────────────┘
+```
+
+#### Critical Network Requirement
+
+**Self-hosted Omni requires direct L3 connectivity between the Omni VM and every Talos node.** This is the single most important requirement and is non-negotiable.
+
+Talos nodes connect to Omni via **SideroLink**, which establishes a WireGuard tunnel. The connection is **initiated by the Talos node** — it reaches out to the Omni VM's SideroLink API endpoint and establishes the tunnel. This means:
+
+- The Talos node must be able to **initiate a TCP connection** to the Omni VM's IP (port 8090)
+- The Talos node must be able to **send/receive UDP packets** to/from the Omni VM's IP (port 50180)
+- NAT, port forwarding, or proxy-based access **does not work** for the SideroLink connection
+
+**On CloudStack, this means the Omni VM and all Talos nodes must be on the same network** — either the same shared network or the same isolated network. If they are on different isolated networks, there is no routing between them and SideroLink will fail.
+
+#### TLS Certificate Requirement
+
+The SideroLink connection from Talos nodes to Omni uses HTTPS. If you use a **self-signed CA**, the Talos nodes will reject the connection because they don't trust the CA. There is no `--insecure-skip-tls-verify` equivalent for SideroLink.
+
+**Use a publicly trusted certificate** (e.g., Let's Encrypt) for the Omni VM. Talos Linux trusts public CA roots by default, so this eliminates the TLS trust issue entirely.
+
+#### Import vs Create
+
+When you import an existing Talos cluster into Omni, the cluster is **locked** — you can view and access it, but you cannot scale, upgrade, or modify it through Omni. For full lifecycle management, create new clusters through Omni's machine registration workflow.
+
+#### SaaS vs Self-Hosted
+
+| Factor | SaaS Omni | Self-Hosted Omni |
+|--------|-----------|-----------------|
+| **Network requirements** | None (uses relay/proxy) | Direct L3 connectivity required |
+| **TLS** | Handled by Sidero | You must manage certificates |
+| **NAT'd / isolated nodes** | ✅ Works | ❌ Does not work |
+| **Setup time** | Minutes | Hours |
+| **Maintenance** | None | You manage updates, backups |
+
+For CloudStack environments with isolated networks or NAT'd nodes, **SaaS Omni is strongly recommended** over self-hosted.
+
+---
+
 ## Key Differences from Other Flavors
 
 | Aspect | CKS | CAPC | Rancher+CAPC | Talos Linux |

@@ -874,6 +874,191 @@ Dex includes built-in cycle detection to prevent infinite loops.
 
 ---
 
+---
+
+## Lessons Learned & Recommendations
+
+This section documents real difficulties encountered during the self-hosted Omni deployment on CloudStack, along with practical recommendations.
+
+### 1. Network Topology: The Critical Requirement
+
+**The single most important requirement** for self-hosted Omni is that **all Talos nodes must have direct L3 connectivity to the Omni VM**. This is not optional.
+
+#### The Problem
+
+Talos nodes connect to Omni via **SideroLink**, which establishes a WireGuard tunnel. The connection is **initiated by the Talos node** — it reaches out to the Omni VM's SideroLink API endpoint and establishes the tunnel. This means:
+
+- The Talos node must be able to **initiate a TCP connection** to the Omni VM's IP (port 8090 by default)
+- The Talos node must be able to **send/receive UDP packets** to/from the Omni VM's IP (port 50180 for WireGuard)
+- NAT, port forwarding, or proxy-based access **does not work** for the SideroLink connection
+
+#### What We Encountered
+
+In our lab, the Omni VM was on a shared network (`s1net`, 192.168.188.0/24) while the Talos cluster was on an isolated network (`terra-talos-net`, 10.22.2.0/24). These networks had no routing between them. The Talos nodes could reach the internet through the virtual router's public IP, but they could not reach the Omni VM's private IP.
+
+We attempted to work around this with:
+- **SSH port forwarding** — works for `talosctl` but not for SideroLink (which needs direct WireGuard UDP)
+- **gRPC tunnel mode** (`--siderolink-use-grpc-tunnel`) — tunnels WireGuard over TCP, but the Talos node still needs to initiate the connection to the Omni VM
+- **socat tunnels on the Omni VM** — only works for `talosctl` API access, not for SideroLink
+
+None of these solved the core problem: the Talos nodes couldn't reach the Omni VM.
+
+#### Solutions
+
+| Approach | How | Works? |
+|----------|-----|--------|
+| **Same network** | Deploy Omni VM and Talos nodes on the same CloudStack network (shared or isolated) | ✅ Best |
+| **Static route** | Add a route on the virtual router to bridge the two networks | ✅ Works if you control the router |
+| **Public IP on Omni VM** | Give the Omni VM a public IP and configure port forwarding | ✅ Works but exposes Omni |
+| **SaaS Omni** | Use Sidero's hosted Omni service | ✅ No network issues (uses relay) |
+| **Port forwarding / NAT** | Try to reach Omni through NAT | ❌ Does not work |
+
+#### Recommendation
+
+**Deploy the Omni VM on the same CloudStack network as your Talos nodes.** If you use an isolated network for your cluster, put the Omni VM on that same isolated network. If you use a shared network, put everything on the shared network.
+
+### 2. TLS Certificate Trust
+
+#### The Problem
+
+Omni serves its API over HTTPS. The SideroLink connection from Talos nodes to Omni also uses HTTPS. If you use a **self-signed CA** (as this guide does), the Talos nodes will reject the connection with:
+
+```
+tls: failed to verify certificate: x509: certificate signed by unknown authority
+```
+
+This is a hard blocker — there is no `--insecure-skip-tls-verify` flag for the SideroLink connection. The Talos node **must** trust the Omni CA.
+
+#### Solutions
+
+| Approach | Effort | Reliability |
+|----------|--------|-------------|
+| **Public trusted cert** (Let's Encrypt) | Medium — requires DNS + public IP or DNS challenge | ✅ Best — Talos trusts public CAs by default |
+| **Inject CA into Talos config** | High — requires patching machine config on every node | ⚠️ Fragile — `machine.trustedRoots` may not exist in all versions |
+| **Self-signed + CA distribution** | High — must distribute CA to every node | ❌ Not practical for auto-scaling |
+
+#### Recommendation
+
+**Use a publicly trusted certificate** (e.g., Let's Encrypt) for the Omni VM. This eliminates the TLS trust issue entirely because Talos Linux trusts public CA roots by default.
+
+To use Let's Encrypt:
+1. Give the Omni VM a public IP (or use DNS-01 challenge with a private IP)
+2. Set up a DNS A record pointing to the Omni VM's IP
+3. Use `certbot` or `acme.sh` to obtain a certificate
+4. Pass the Let's Encrypt cert and key to the Omni container instead of the self-signed cert
+
+If a public IP is not available, use the **DNS-01 challenge** with a DNS provider that supports it (e.g., Cloudflare, AWS Route53). This works with private IPs.
+
+### 3. Importing Existing Clusters is Read-Only
+
+#### The Problem
+
+When you import an existing Talos cluster into Omni, the cluster is **locked**:
+
+```
+cluster "terra-talos" is imported successfully but marked as 'locked' to prevent changes done by Omni
+```
+
+This means:
+- You can **view** the cluster in the Omni UI
+- You can **access** the cluster through Omni (kubeconfig proxy)
+- You **cannot** scale, upgrade, or modify the cluster through Omni
+- The cluster's lifecycle remains fully manual
+
+#### Why This Matters
+
+If your goal is to **manage** existing clusters through Omni (scaling, upgrades, etc.), importing is not sufficient. You need to either:
+- **Create new clusters through Omni** (using machine registration)
+- **Accept that imported clusters are read-only** and use Omni only for visibility
+
+#### Recommendation
+
+Use Omni for **new clusters** created through the machine registration workflow. For existing clusters, either:
+- Keep managing them manually (or with Terraform)
+- Tear them down and recreate them through Omni
+
+### 4. Omni Flag Drift Between Versions
+
+#### The Problem
+
+Omni flags change between versions. We encountered several breaking changes:
+
+| Flag (old) | Flag (new) | Version |
+|------------|------------|---------|
+| `--auth-oidc-issuer` | `--auth-oidc-provider-url` | v1.9.x |
+| `--eula-accept` | `--eula-accept-email` + `--eula-accept-name` | v1.9.x |
+| `--auth-oidc-insecure-skip-verify` | Removed (no replacement) | v1.9.x |
+| `--skip-tls-verify` | Removed (no replacement) | v1.9.x |
+
+When you restart the container with stale flags, Omni **exits silently** with no visible error. You only see the error in `docker logs omni`.
+
+#### Recommendation
+
+Always check the current flag names before restarting:
+```bash
+docker run --rm ghcr.io/siderolabs/omni:latest --help | grep <flag-name>
+```
+
+Pin your Omni version and test flag changes in a non-production environment first.
+
+### 5. Service Account Key is Fragile
+
+#### The Problem
+
+The service account key is stored as **base64-encoded JSON wrapping a PGP private key**. This makes it easy to corrupt:
+
+- The key file is owned by `root` inside the container
+- Regenerating it requires wiping the SQLite database (which loses all cluster data)
+- The key can expire (we hit "key expired" after restarting Omni with the same data directory)
+- Extracting the PGP key from the JSON requires careful parsing
+
+#### Recommendation
+
+- Back up the service account key immediately after creation
+- Use `--initial-service-account-key-path` to control where it's stored
+- If the key is lost or expired, you may need to create a new service account through the Omni UI instead of wiping the database
+
+### 6. SaaS vs Self-Hosted: When to Use Which
+
+| Factor | SaaS Omni | Self-Hosted Omni |
+|--------|-----------|-----------------|
+| **Network requirements** | None (uses relay/proxy) | Direct L3 connectivity between Omni and all nodes |
+| **TLS** | Handled by Sidero | You must manage certificates |
+| **Maintenance** | None | You manage updates, backups, monitoring |
+| **Cost** | Per-node pricing | VM cost + ops time |
+| **Data residency** | Sidero's cloud | Your infrastructure |
+| **NAT'd nodes** | ✅ Works | ❌ Does not work |
+| **Isolated networks** | ✅ Works | ❌ Does not work |
+| **Setup time** | Minutes | Hours |
+| **Flag drift** | None | Must track version changes |
+
+#### Recommendation
+
+**Use SaaS Omni if:**
+- Your Talos nodes are behind NAT or on isolated networks
+- You don't want to manage certificates
+- You want the simplest possible setup
+- You're okay with Sidero hosting your management plane
+
+**Use Self-Hosted Omni if:**
+- You have direct L3 connectivity between Omni and all nodes
+- You have a proper PKI (public trusted certs or internal CA)
+- You need data residency / air-gapped deployment
+- You're managing many clusters and want to avoid per-node SaaS costs
+
+### 7. Summary: What We'd Do Differently
+
+If we were to deploy self-hosted Omni on CloudStack again:
+
+1. **Put Omni on the same network as the Talos nodes** — this is non-negotiable
+2. **Use Let's Encrypt certificates** — avoid the self-signed CA trust issue entirely
+3. **Create new clusters through Omni** — don't import existing ones (read-only limitation)
+4. **Pin the Omni version** and test flag changes before restarting
+5. **Back up the service account key** immediately after creation
+6. **Consider SaaS Omni** if the network topology doesn't support direct connectivity
+
+---
+
 ## Comparison: Manual vs Terraform vs Self-Hosted Omni
 
 | Aspect | Manual (`cmk`) | Terraform | Self-Hosted Omni |
