@@ -1,6 +1,20 @@
 # Talos Omni Architecture
 
-## Overview
+## What is SideroLink?
+
+SideroLink is the **management overlay network** that connects Talos nodes to Omni. It's a WireGuard-based tunnel that replaces the need for direct network access to each node.
+
+**Without Omni**, you need:
+- Port forwarding (50000) to each node for `talosctl`
+- A load balancer (6443) for the Kubernetes API
+- Direct network access to every node's IP
+
+**With Omni**, SideroLink handles all of this:
+- `talosctl` talks to Omni, which proxies through the tunnel
+- The Kubernetes API is exposed through Omni's workload proxy (no LB needed)
+- Nodes register themselves — you don't need to know their IPs
+
+## Architecture Diagram
 
 ```
 ┌──────────────────────────────────────────────────────────────────┐
