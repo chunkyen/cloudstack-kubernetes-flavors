@@ -63,7 +63,7 @@ User Browser              Omni (port 443)           Dex (port 5556)
 
 ```
 ┌──────────────────────────────────────────────────────────────────┐
-│                     CloudStack (shared L2 network)               │
+│                     CloudStack Network                             │
 │                                                                  │
 │  ┌──────────────────────┐    ┌──────────────────────────────┐   │
 │  │  Omni VM              │    │  Talos Cluster Nodes          │   │
