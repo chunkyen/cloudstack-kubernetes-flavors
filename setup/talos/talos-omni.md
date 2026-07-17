@@ -647,16 +647,26 @@ The cluster transitions through: `UNKNOWN` → `PROVISIONING` → `RUNNING Ready
 
 ## Part 5: Access the Cluster
 
-### Step 1: Get the Kubeconfig
+### Step 1: Install kubelogin
+
+The kubeconfig from Omni uses OIDC authentication via `kubelogin`. Install it on any machine that needs cluster access:
 
 ```bash
-# Generate a service account kubeconfig (static token, no OIDC needed)
+curl -sL 'https://github.com/int128/kubelogin/releases/latest/download/kubelogin_linux_amd64.zip' \
+  -o /tmp/kubelogin.zip
+unzip -o /tmp/kubelogin.zip -d /tmp/kubelogin
+sudo cp /tmp/kubelogin/kubelogin /usr/local/bin/kubelogin
+sudo ln -sf /usr/local/bin/kubelogin /usr/local/bin/kubectl-oidc-login
+```
+
+### Step 2: Download the Kubeconfig
+
+```bash
 omnictl kubeconfig --cluster omni-cluster \
-  --service-account --user admin \
   --force --merge=false /tmp/omni-cluster-kubeconfig
 ```
 
-### Step 2: Fix the Server Address
+### Step 3: Fix the Server Address
 
 The generated kubeconfig points to `localhost:8095` (the Omni workload proxy). Change it to the Omni server's IP:
 
@@ -665,42 +675,46 @@ sed 's/localhost:8095/<omni-ip>:8095/' /tmp/omni-cluster-kubeconfig \
   > /tmp/omni-cluster-kubeconfig-fixed
 ```
 
-### Step 3: Test Access
+### Step 4: Access the Cluster
 
 ```bash
 kubectl --kubeconfig /tmp/omni-cluster-kubeconfig-fixed get nodes
 ```
 
-### Alternative: OIDC Authentication (for Users with a Browser)
+This will:
+1. `kubelogin` detects no cached token
+2. A browser window opens to the Dex OIDC login page at `https://<omni-ip>:5556`
+3. Log in with your Omni credentials (e.g., `admin@omni.internal`)
+4. Grant access on the consent page
+5. The token is cached locally, and `kubectl` returns node information
 
-For users who want to authenticate via the Omni UI (browser-based OIDC):
+Subsequent commands reuse the cached token until it expires.
+
+### Headless Machines (No Browser)
+
+On servers or machines without a browser, use the device-code flow:
 
 ```bash
-# 1. Install kubelogin
-curl -sL 'https://github.com/int128/kubelogin/releases/latest/download/kubelogin_linux_amd64.zip' \
-  -o /tmp/kubelogin.zip
-unzip -o /tmp/kubelogin.zip -d /tmp/kubelogin
-sudo cp /tmp/kubelogin/kubelogin /usr/local/bin/kubelogin
-sudo ln -sf /usr/local/bin/kubelogin /usr/local/bin/kubectl-oidc-login
-
-# 2. Download the OIDC kubeconfig
-omnictl kubeconfig --cluster omni-cluster \
-  --force --merge=false /tmp/omni-cluster-kubeconfig-oidc
-
-# 3. Fix the server address (same as above)
-sed 's/localhost:8095/<omni-ip>:8095/' /tmp/omni-cluster-kubeconfig-oidc \
-  > /tmp/omni-cluster-kubeconfig-oidc-fixed
-
-# 4. Use it — kubelogin will open a browser for authentication
-kubectl --kubeconfig /tmp/omni-cluster-kubeconfig-oidc-fixed get nodes
-```
-
-On headless machines, use the device-code flow:
-```bash
-kubectl --kubeconfig /tmp/omni-cluster-kubeconfig-oidc-fixed \
+kubectl --kubeconfig /tmp/omni-cluster-kubeconfig-fixed \
   get nodes --oidc-grant-type=authcode-keyboard
 ```
-This prints a URL + code — visit the URL on any device with a browser, enter the code, and authenticate.
+
+This prints a URL and code. Visit the URL on any device with a browser, enter the code, and authenticate. The token is then cached on the headless machine.
+
+### Alternative: Service Account (Static Token, No OIDC)
+
+For automation or CI/CD where interactive login is not possible, generate a kubeconfig with a long-lived static token:
+
+```bash
+omnictl kubeconfig --cluster omni-cluster \
+  --service-account --user admin \
+  --force --merge=false /tmp/omni-cluster-kubeconfig-sa
+
+sed 's/localhost:8095/<omni-ip>:8095/' /tmp/omni-cluster-kubeconfig-sa \
+  > /tmp/omni-cluster-kubeconfig-sa-fixed
+
+kubectl --kubeconfig /tmp/omni-cluster-kubeconfig-sa-fixed get nodes
+```
 
 ### How the Proxy Works
 
