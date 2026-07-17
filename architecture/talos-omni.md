@@ -22,6 +22,26 @@ Key capabilities:
 
 For CloudStack environments, **SaaS Omni is simpler** but self-hosted is viable with the `grpc://` scheme for TLS.
 
+## Infra Providers
+
+Omni supports **infrastructure providers** that automate VM provisioning — you define a machine spec and Omni creates the VM on the target platform. Built-in providers include:
+
+- **Sidero Metal** — bare metal provisioning via PXE
+- **AWS** — EC2 instance provisioning
+- **Azure** — Azure VM provisioning
+- **GCP** — GCE instance provisioning
+- **vSphere** — vSphere VM provisioning
+- **Custom** — any platform via the [InfraProvider API](https://docs.siderolabs.com/omni/latest/infrastructure-and-extensions/infra-providers/)
+
+**CloudStack does not have an Omni infra provider.** This means VMs must be provisioned manually (via `cmk` CLI, CloudStack UI, or Terraform) and registered with Omni using a SideroLinkConfig in the userdata. The workflow is:
+
+1. Deploy Talos VMs on CloudStack with a SideroLinkConfig pointing to Omni
+2. VMs boot, connect to Omni via SideroLink, and register themselves
+3. Label the machines and create machine classes in the Omni UI
+4. Create the cluster — Omni selects the registered machines
+
+This is the approach documented in the [setup guide](../setup/talos/talos-omni.md).
+
 ## SideroLink
 
 SideroLink is the **management overlay network** that connects Talos nodes to Omni. It's a WireGuard-based tunnel that replaces the need for direct network access to each node.
