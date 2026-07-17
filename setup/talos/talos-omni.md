@@ -770,62 +770,6 @@ omnictl cluster import <cluster-name> \
 
 ---
 
-## Known Issues & Pitfalls
-
-### 1. Self-Signed TLS and Browser Trust
-
-Both Omni (port 443) and Dex (port 5556) use the same self-signed CA certificate. Your browser will show TLS warnings for both. Install the CA certificate in your browser's trust store to eliminate all warnings (see [Step 7](#step-7-access-the-omni-ui) for instructions).
-
-### 2. Dex Bcrypt Hash Cost
-
-Dex requires bcrypt password hash cost >= 10. The `htpasswd` command defaults to cost 5. Either:
-- Use `htpasswd -nbBC 10 admin <password>` (explicit cost 10)
-- Or generate the hash with Python's `bcrypt` library
-
-### 3. Omni Must Use `--network=host`
-
-Omni needs `--network=host` to reach Dex on localhost:5556. Without this, the OIDC provider URL lookup fails.
-
-### 4. CA Certificate Must Be Mounted for HTTPS Dex
-
-Omni v1.9+ is scratch-based with no `ca-certificates` package. It uses Go's system cert pool which is empty in scratch containers. When the OIDC provider (Dex) uses HTTPS with a self-signed CA, Omni can't verify:
-
-```
-Error: failed to run server: Get "https://192.168.188.204:5556/..."
-  tls: failed to verify certificate: x509: certificate signed by unknown authority
-```
-
-**Fix:** Mount the CA certificate into the container as the system cert bundle:
-
-```bash
-# Mount the CA cert as the system cert bundle  
--v $(pwd)/ca.pem:/etc/ssl/certs/ca-certificates.crt:ro
-```
-
-This is already included in the `docker run` command in [Step 5](#step-5-run-omni), but is easy to forget when modifying the command.
-
-### 5. `--initial-users` Must Be Set on First Start
-
-If Omni initializes without `--initial-users`, the user won't be authorized. You must wipe the etcd data directory and restart fresh.
-
-### 6. Missing `openid` Scope
-
-Dex requires the `openid` scope. Omni must be started with `--auth-oidc-scopes=openid,profile,email` or Dex will reject the authorization request.
-
-### 7. WireGuard Requires `--cap-add=NET_ADMIN` and `/dev/net/tun`
-
-Without these, SideroLink (WireGuard) will fail to start. The container will still run but Talos machines won't be able to connect.
-
-### 8. CSI `cloud-init-dir` on Talos
-
-The same CSI patching issue applies — see the [known issues in talos.md](talos.md#csi-node-pod-fails-with-cloud-init-dir-mount-error). The pre-patched DaemonSet at `manifests/csi-node-daemonset-talos.yaml` handles this.
-
-### 9. Backup
-
-Back up the Omni VM regularly. VM snapshots are sufficient since Omni stores state in embedded etcd and SQLite on the local disk. See [Back Up Omni Database](https://docs.siderolabs.com/omni/self-hosted/back-up-omni-db/).
-
----
-
 ## Part 8: Adding Users and LDAP/AD Integration
 
 ### Adding More Users
@@ -1010,11 +954,78 @@ Dex includes built-in cycle detection to prevent infinite loops.
 
 ---
 
+
+## Comparison: Manual vs Terraform vs Self-Hosted Omni
+
+| Aspect | Manual (`cmk`) | Terraform | Self-Hosted Omni |
+|--------|---------------|-----------|-----------------|
+| VM provisioning | Manual `cmk` commands | Terraform `apply` | Manual (registration) or automatic (provider) |
+| Config generation | `talosctl gen config` | `talosctl gen config` | Automatic |
+| Bootstrap | `talosctl bootstrap` | `talosctl bootstrap` | Automatic |
+| etcd management | Manual | Manual (or auto-join) | Automatic |
+| Kubernetes API endpoint | Load balancer (6443) | Load balancer (6443) | SideroLink tunnel |
+| talosctl access | Port forwarding (50000) | Port forwarding (50000) | Via Omni |
+| Scaling | Manual VMs + LB + etcd | Terraform apply + etcd | `omnictl apply` (YAML) |
+| Upgrades | `talosctl upgrade` per node | `talosctl upgrade` per node | Automatic rolling |
+| CCM/CSI install | Manual | Manual | Manual (same) |
+| Monitoring | Manual | Manual | Omni UI |
+| Infrastructure to manage | CloudStack only | CloudStack + Terraform | CloudStack + Omni VM |
+| Complexity | High | Medium | Medium (setup) / Low (daily ops) |
+
+---
+
 ## Lessons Learned & Recommendations
 
 This section documents real difficulties encountered during the self-hosted Omni deployment on CloudStack, along with practical recommendations.
 
-### 1. Network Topology: Important but Not the Blocker
+### 1. Dex Bcrypt Hash Cost
+
+Dex requires bcrypt password hash cost >= 10. The `htpasswd` command defaults to cost 5. Either:
+- Use `htpasswd -nbBC 10 admin <password>` (explicit cost 10)
+- Or generate the hash with Python's `bcrypt` library
+
+### 2. Omni Must Use `--network=host`
+
+Omni needs `--network=host` to reach Dex on localhost:5556. Without this, the OIDC provider URL lookup fails.
+
+### 3. CA Certificate Must Be Mounted for HTTPS Dex
+
+Omni v1.9+ is scratch-based with no `ca-certificates` package. It uses Go's system cert pool which is empty in scratch containers. When the OIDC provider (Dex) uses HTTPS with a self-signed CA, Omni can't verify:
+
+```
+Error: failed to run server: Get "https://192.168.188.204:5556/..."
+  tls: failed to verify certificate: x509: certificate signed by unknown authority
+```
+
+**Fix:** Mount the CA certificate into the container as the system cert bundle:
+
+```bash
+-v $(pwd)/ca.pem:/etc/ssl/certs/ca-certificates.crt:ro
+```
+
+This is already included in the `docker run` command in [Step 5](#step-5-run-omni), but is easy to forget when modifying the command.
+
+### 4. `--initial-users` Must Be Set on First Start
+
+If Omni initializes without `--initial-users`, the user won't be authorized. You must wipe the etcd data directory and restart fresh.
+
+### 5. Missing `openid` Scope
+
+Dex requires the `openid` scope. Omni must be started with `--auth-oidc-scopes=openid,profile,email` or Dex will reject the authorization request.
+
+### 6. WireGuard Requires `--cap-add=NET_ADMIN` and `/dev/net/tun`
+
+Without these, SideroLink (WireGuard) will fail to start. The container will still run but Talos machines won't be able to connect.
+
+### 7. CSI `cloud-init-dir` on Talos
+
+The same CSI patching issue applies — see the [known issues in talos.md](talos.md#csi-node-pod-fails-with-cloud-init-dir-mount-error). The pre-patched DaemonSet at `manifests/csi-node-daemonset-talos.yaml` handles this.
+
+### 8. Backup
+
+Back up the Omni VM regularly. VM snapshots are sufficient since Omni stores state in embedded etcd and SQLite on the local disk. See [Back Up Omni Database](https://docs.siderolabs.com/omni/self-hosted/back-up-omni-db/).
+
+### 9. Network Topology: Important but Not the Blocker
 
 #### The Problem
 
@@ -1046,7 +1057,7 @@ The real blocker was **TLS certificate trust**, not network connectivity.
 
 However, if the nodes can reach Omni outbound through existing routing (e.g., via a virtual router), the network is not the blocker — TLS is.
 
-### 2. TLS Certificate Trust (The Real Blocker)
+### 10. TLS Certificate Trust (The Real Blocker)
 
 #### The Problem
 
@@ -1112,7 +1123,7 @@ The machined logs showed successful provisioning with no TLS errors:
 
 **Note:** This only affects the SideroLink connection. The main Omni API (port 443) still uses HTTPS with your self-signed cert for `omnictl` and UI access.
 
-### 3. Importing Existing Clusters
+### 11. Importing Existing Clusters
 
 #### How It Works
 
@@ -1134,7 +1145,7 @@ After unlocking, Omni takes over full lifecycle management — scaling, upgrades
 
 We successfully imported the cluster but hit two blockers:
 
-1. **TLS cert issue** — The SideroLink connection failed because the Talos nodes didn't trust the self-signed CA. Solved by using `grpc://` scheme for the machine API URL (see [TLS Certificate Trust](#2-tls-certificate-trust-the-real-blocker)).
+1. **TLS cert issue** — The SideroLink connection failed because the Talos nodes didn't trust the self-signed CA. Solved by using `grpc://` scheme for the machine API URL (see [TLS Certificate Trust](#10-tls-certificate-trust-the-real-blocker)).
 
 2. **Health check timeout** — During import, Omni tries to reach the Kubernetes API through the SideroLink tunnel to verify cluster health. If the Kubernetes API is exposed through a public IP (port forwarding) rather than through the tunnel, this health check will time out:
 
@@ -1161,10 +1172,10 @@ We successfully imported the cluster but hit two blockers:
 #### Recommendation
 
 The import → unlock workflow works as designed. The lock is a safety feature, not a limitation. The real blockers are:
-- Getting the SideroLink connection working first (see [Network Topology](#1-network-topology-important-but-not-the-blocker) and [TLS Certificate Trust](#2-tls-certificate-trust-the-real-blocker))
+- Getting the SideroLink connection working first (see [Network Topology](#9-network-topology-important-but-not-the-blocker) and [TLS Certificate Trust](#10-tls-certificate-trust-the-real-blocker))
 - Using `--skip-health-check` if the Kubernetes API is not reachable through the SideroLink tunnel
 
-### 4. Omni Flag Drift Between Versions
+### 12. Omni Flag Drift Between Versions
 
 #### The Problem
 
@@ -1188,7 +1199,7 @@ docker run --rm ghcr.io/siderolabs/omni:latest --help | grep <flag-name>
 
 Pin your Omni version and test flag changes in a non-production environment first.
 
-### 5. Service Account Key is Fragile
+### 13. Service Account Key is Fragile
 
 #### The Problem
 
@@ -1224,7 +1235,7 @@ chmod 600 ~/.talos/keys/<context>-<identity>.pgp
 - When creating a service account in the Omni UI, set a **180-day expiry** to avoid the v1.9.x client-side lifetime check
 - Use base64 encoding when transferring the key between machines
 
-### 6. Summary: What We'd Do Differently
+### 14. Summary: What We'd Do Differently
 
 If we were to deploy self-hosted Omni on CloudStack again:
 
@@ -1237,26 +1248,6 @@ If we were to deploy self-hosted Omni on CloudStack again:
 7. **Consider SaaS Omni** if the network topology doesn't support direct connectivity
 
 ---
-
-## Comparison: Manual vs Terraform vs Self-Hosted Omni
-
-| Aspect | Manual (`cmk`) | Terraform | Self-Hosted Omni |
-|--------|---------------|-----------|-----------------|
-| VM provisioning | Manual `cmk` commands | Terraform `apply` | Manual (registration) or automatic (provider) |
-| Config generation | `talosctl gen config` | `talosctl gen config` | Automatic |
-| Bootstrap | `talosctl bootstrap` | `talosctl bootstrap` | Automatic |
-| etcd management | Manual | Manual (or auto-join) | Automatic |
-| Kubernetes API endpoint | Load balancer (6443) | Load balancer (6443) | SideroLink tunnel |
-| talosctl access | Port forwarding (50000) | Port forwarding (50000) | Via Omni |
-| Scaling | Manual VMs + LB + etcd | Terraform apply + etcd | `omnictl apply` (YAML) |
-| Upgrades | `talosctl upgrade` per node | `talosctl upgrade` per node | Automatic rolling |
-| CCM/CSI install | Manual | Manual | Manual (same) |
-| Monitoring | Manual | Manual | Omni UI |
-| Infrastructure to manage | CloudStack only | CloudStack + Terraform | CloudStack + Omni VM |
-| Complexity | High | Medium | Medium (setup) / Low (daily ops) |
-
----
-
 ## References
 
 - [Run Omni On-Prem](https://docs.siderolabs.com/omni/self-hosted/run-omni-on-prem/) — official deployment guide
