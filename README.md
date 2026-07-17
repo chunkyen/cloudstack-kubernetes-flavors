@@ -105,10 +105,10 @@ Guides:
 | **Management** | Native CloudStack UI/API | Cluster API controllers | Rancher UI/API | Talos CLI / Terraform | Omni UI / `omnictl` |
 | **Node OS** | User-defined | User-defined | User-defined | Talos Linux (immutable, no SSH) | Talos Linux (immutable, no SSH) |
 | **GitOps** | No | Yes (CAPI native) | Yes (Rancher Fleet) | Yes (talosctl + Git) | Yes (Omni + Git) |
-| **Multi-cluster** | Limited | Yes (CAPI native) | Yes (CAPI + Rancher Turtles) | Manual / CAPI with Talos provider | Yes (Omni native) |
+| **Multi-cluster** | Limited | Yes (CAPI native) | Yes (CAPI + Rancher Turtles) | Manual | Yes (Omni native) |
 | **Upgrade Strategy** | Manual | Image-based rolling update | Image-based rolling update | Image-based atomic (talosctl upgrade) | Automatic rolling (Omni-managed) |
 | **CNI/CCM/CSI** | Baked into ISO | Manual or ClusterResourceSet | Manual or ClusterResourceSet | Manual install | Manual install (same) |
-| **ClusterClass** | N/A | Not supported (no CloudStackClusterTemplate) | Not supported (no CloudStackClusterTemplate) | Supported (CAPI with Talos provider) | N/A (Omni manages configs) |
+| **ClusterClass** | N/A | Not supported (no CloudStackClusterTemplate) | Not supported (no CloudStackClusterTemplate) | N/A (manual config) | N/A (Omni manages configs) |
 | **Complexity** | Low | Medium | High | Medium | Medium-High (self-hosted) / Low (SaaS) |
 
 ## Status
