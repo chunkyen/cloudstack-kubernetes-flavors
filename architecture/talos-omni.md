@@ -2,7 +2,7 @@
 
 > **Reference:** [Omni Documentation](https://docs.siderolabs.com/omni/latest/) | [Run Omni On-Prem](https://docs.siderolabs.com/omni/self-hosted/run-omni-on-prem/) | [SideroLink Overview](https://www.siderolabs.com/platform/sidero-omni/)
 
-## What is Omni?
+## Overview
 
 [Sidero Omni](https://www.siderolabs.com/platform/sidero-omni/) is a Kubernetes management platform by Sidero Labs that automates the creation, scaling, and lifecycle management of Talos Linux clusters. It provides a central control plane for managing multiple Talos clusters through a web UI, CLI (`omnictl`), and API.
 
@@ -13,7 +13,7 @@ Key capabilities:
 - **SideroLink** — secure overlay network for management traffic (see below)
 - **Workload proxy** — exposes Kubernetes API through the Omni server (no load balancer needed)
 
-## What is SideroLink?
+## SideroLink
 
 SideroLink is the **management overlay network** that connects Talos nodes to Omni. It's a WireGuard-based tunnel that replaces the need for direct network access to each node.
 
