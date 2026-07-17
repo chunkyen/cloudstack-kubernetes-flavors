@@ -720,9 +720,30 @@ Manual scaling is done through the **Omni UI**:
 3. Choose the target MachineSet (e.g., `omni-test-workers`)
 4. Confirm
 
-> **Note:** Labels and Machine Classes are used for **automatic** scaling (machines auto-join when they match a Machine Class). For manual scaling, use the Cluster Scaling page in the UI. See [Labels Do Not Auto-Assign Machines to Clusters](#14-labels-do-not-auto-assign-machines-to-clusters) in Lessons Learned.
+> **Note:** Labels and Machine Classes are used for **automatic** scaling (machines auto-join when they match a Machine Class). For manual scaling, use the Cluster Scaling page in the UI. See [Labels Do Not Auto-Assign Machines to Clusters](#13-labels-do-not-auto-assign-machines-to-clusters) in Lessons Learned.
 
-If you have a service account with write access, you can also create resources like MachineClasses and MachineLabels via `omnictl apply`. However, ClusterMachines are **controller-managed** — they can only be created by the Omni controllers, not directly via `omnictl`. See [Controller-Managed Resources](#15-controller-managed-resources-cannot-be-created-via-omnictl-apply) for details.
+If you have a service account with write access, you can also create resources like MachineClasses and MachineLabels via `omnictl apply`. However, ClusterMachines are **controller-managed** — they can only be created by the Omni controllers, not directly via `omnictl`. See [Controller-Managed Resources](#14-controller-managed-resources-cannot-be-created-via-omnictl-apply) for details.
+
+#### Why Manual Scaling Is the Only Option for CloudStack
+
+Omni's **automatic scaling** (via Machine Classes + `machineallocation.machineclass`) requires an **infrastructure provider** — a gRPC service that Omni calls to provision VMs on demand. Supported providers include AWS, Proxmox, vSphere, KubeVirt, and libvirt.
+
+CloudStack does **not** have an Omni infrastructure provider. Without one:
+
+- Omni cannot auto-provision VMs — you must deploy them manually via `cmk deploy`
+- The Machine Class + label auto-join path is designed for VMs that Omni itself provisions, not manually deployed ones
+- The only way to add a manually deployed machine to a cluster is the **UI's Cluster Scaling page**
+
+**With a supported infra provider**, the flow would be:
+
+```
+Set machineallocation.machineclass + machinecount on MachineSet
+  → Omni provisions VMs via infra provider
+  → Machines auto-join the cluster
+  → omni-node-autoscaler can auto-scale based on pod demand
+```
+
+For CloudStack, implementing a custom infrastructure provider is possible but requires significant effort — see [Write an Infrastructure Provider](https://docs.siderolabs.com/omni/infrastructure-and-extensions/writing-infrastructure-providers).
 
 ### Upgrades
 
@@ -1190,37 +1211,7 @@ docker run --rm ghcr.io/siderolabs/omni:latest --help | grep <flag-name>
 
 Pin your Omni version and test flag changes in a non-production environment first.
 
-### 13. Userdata Injection Is Required (Kernel Args Alone Not Enough)
-
-SideroLink requires the `SideroLinkConfig` userdata to be injected into the VM at deployment time. Passing kernel args via `extrakernelsargs` alone is **not sufficient** — Talos needs the full userdata YAML to configure the SideroLink connection.
-
-**Correct approach:**
-```bash
-# Create the userdata YAML
-cat > omni-userdata.yaml <<EOF
-apiVersion: v1alpha1
-kind: SideroLinkConfig
-apiUrl: grpc://<omni-ip>:8090/?jointoken=<token>
-EOF
-
-# Base64-encode and pass to cmk deploy
-cmk deploy virtualmachine \
-  name=omni-cluster-worker-1 \
-  templateid=<template-id> \
-  serviceofferingid=<offering-id> \
-  networkids=<network-id> \
-  zoneid=<zone-id> \
-  account=admin \
-  domainid=<domain-id> \
-  keypair=<keypair> \
-  details[0].guest.cpu.mode=host-passthrough \
-  userdata=$(base64 -w0 omni-userdata.yaml) \
-  extrakernelsargs="siderolink.api=grpc://<omni-ip>:8090/?jointoken=<token>"
-```
-
-Both `userdata` and `extrakernelsargs` should be provided — the userdata carries the full config, while the kernel args provide a fallback for early boot stages.
-
-### 14. Labels Do Not Auto-Assign Machines to Clusters
+### 13. Labels Do Not Auto-Assign Machines to Clusters
 
 Setting a label (e.g., `type: worker`) on a machine in the Omni UI does **not** automatically add it to a cluster. Labels are used for Machine Class matching (automatic scaling), but for manual scaling you must explicitly add the machine to the cluster.
 
@@ -1232,7 +1223,7 @@ Setting a label (e.g., `type: worker`) on a machine in the Omni UI does **not** 
 
 This is the documented manual scaling workflow per the [official Omni blog](https://www.siderolabs.com/blog/automatic-cluster-scaling-with-omni/). The Machine Class + label approach is for **automatic** scaling (e.g., when machines are dynamically provisioned by an auto-scaling group).
 
-### 15. Controller-Managed Resources Cannot Be Created via `omnictl apply`
+### 14. Controller-Managed Resources Cannot Be Created via `omnictl apply`
 
 Some resources in Omni are **controller-managed** — they have an `owner` field set by an internal controller (e.g., `MachineSetStatusController`). Attempting to create or modify these via `omnictl apply` will fail with:
 
@@ -1263,9 +1254,9 @@ If we were to deploy self-hosted Omni on CloudStack again:
 3. **Create new clusters through Omni** — avoids the import complexity entirely
 4. **Pin the Omni version** and test flag changes before restarting
 5. **Consider SaaS Omni** if the operational complexity of self-hosted is not justified for your use case
-6. **Always inject SideroLinkConfig userdata** — kernel args alone are not enough; pass the full YAML as base64-encoded `userdata` in `cmk deploy virtualmachine`
-7. **Use the UI for scaling, not labels** — setting labels on a machine does not add it to the cluster; use **Clusters → Cluster Scaling** to manually add machines
-8. **ClusterMachines are controller-managed** — they can't be created via `omnictl apply`; use the UI's Cluster Scaling page to add machines to a cluster
+6. **Use the UI for scaling, not labels** — setting labels on a machine does not add it to the cluster; use **Clusters → Cluster Scaling** to manually add machines
+7. **ClusterMachines are controller-managed** — they can't be created via `omnictl apply`; use the UI's Cluster Scaling page to add machines to a cluster
+8. **CloudStack has no Omni infra provider** — automatic scaling (Machine Classes + `machineallocation.machineclass`) requires an infra provider; without one, manual UI scaling is the only option
 
 ---
 ## References
