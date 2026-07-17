@@ -63,12 +63,16 @@ spec:
             - name: device-dir
               mountPath: /dev
             # ═══════════════════════════════════════════════════════════════
-            # TALOS PATCH: cloud-init-dir and ignition-dir
+            # TALOS PATCH: cloud-init-dir (and ignition-dir if present)
             # ═══════════════════════════════════════════════════════════════
-            # The upstream manifest uses hostPath volumes for cloud-init-dir
-            # (/run/cloud-init/) and ignition-dir (/run/metadata) — both are
-            # legacy remnants from cloud-init/CoreOS environments. Talos Linux
-            # has an immutable root filesystem and neither directory exists.
+            # The upstream manifest includes a hostPath volume for cloud-init-dir
+            # (/run/cloud-init/) — this is a legacy remnant from cloud-init/CoreOS
+            # environments. Talos Linux has an immutable root filesystem and this
+            # directory does not exist.
+            #
+            # Some upstream versions also include an ignition-dir volume
+            # (/run/metadata) with the same issue — it depends on which init
+            # system the upstream manifest was generated for.
             #
             # The CSI driver doesn't actually need these directories — it reads
             # metadata from the CloudStack API directly. On Talos, these hostPath
@@ -190,9 +194,11 @@ spec:
             path: /var/lib/kubelet/plugins_registry
             type: Directory
         # ═══════════════════════════════════════════════════════════════
-        # TALOS PATCH: cloud-init-dir and ignition-dir (see comment above)
+        # TALOS PATCH: cloud-init-dir (and ignition-dir if present)
         # ═══════════════════════════════════════════════════════════════
-        # Upstream uses hostPath for these, which fails on Talos.
+        # Upstream uses hostPath for cloud-init-dir, and sometimes also
+        # ignition-dir — depending on which init system the manifest was
+        # generated for. Both fail on Talos (immutable rootfs).
         # emptyDir is a no-op but keeps the pod running.
         - name: cloud-init-dir
           emptyDir: {}
