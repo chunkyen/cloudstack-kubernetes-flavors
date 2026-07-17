@@ -782,6 +782,8 @@ The easiest way is through the **Omni UI**:
 
 This automatically configures both Dex and Omni — no need to edit files or restart containers.
 
+> **To change the admin password:** Generate a new bcrypt hash (see below), edit `~/omni-setup/dex.yaml` and replace the `hash` value under `admin@omni.internal`, then run `docker restart dex`. Dex uses `storage: type: memory` so the config file is the source of truth — no Omni changes needed.
+
 Alternatively, you can add users manually via the Dex config and omnictl:
 
 ```bash
