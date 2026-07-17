@@ -34,7 +34,7 @@
 | Kubernetes API endpoint | Load balancer + port forwarding | SideroLink (WireGuard tunnel) |
 | Node registration | Embedded userdata | Machines register with Omni |
 | Upgrades | `talosctl upgrade` per node | Automatic rolling upgrades |
-| Scaling | Terraform + manual etcd | `omnictl update` |
+| Scaling | Terraform + manual etcd | `omnictl apply` (YAML) |
 | Monitoring | Manual | Omni UI |
 | talosctl access | Direct to node IPs | Via Omni through SideroLink |
 
@@ -681,7 +681,7 @@ curl -sL 'https://github.com/int128/kubelogin/releases/latest/download/kubelogin
   -o /tmp/kubelogin.zip
 unzip -o /tmp/kubelogin.zip -d /tmp/kubelogin
 sudo cp /tmp/kubelogin/kubelogin /usr/local/bin/kubelogin
-sudo ln -sf /usr/local/bin/kubelogin /usr/local/bin/kubectl-oidc_login
+sudo ln -sf /usr/local/bin/kubelogin /usr/local/bin/kubectl-oidc-login
 
 # 2. Download the OIDC kubeconfig
 omnictl kubeconfig --cluster omni-cluster \
@@ -772,32 +772,51 @@ kubectl apply -f cloudstack-ssd.yaml
 
 ### Scaling
 
+To scale, update the cluster spec via `omnictl apply`:
+
 ```bash
-# Add workers
-omnictl update cluster omni-cluster --worker-count 5
+cat > omni-cluster-scale.yaml <<EOF
+metadata:
+    namespace: default
+    type: Clusters.omni.sidero.dev
+    id: omni-cluster
+spec:
+    machineallocation:
+        controlplanecount: 3
+        workercount: 5
+EOF
 
-# Add control plane nodes
-omnictl update cluster omni-cluster --control-plane-count 5
-
-# Scale down
-omnictl update cluster omni-cluster --worker-count 2
-omnictl update cluster omni-cluster --control-plane-count 3
+omnictl apply -f omni-cluster-scale.yaml
 ```
+
+> **Note:** Only the fields you want to change need to be in the YAML. Omni merges the update with the existing spec.
 
 ### Upgrades
 
 ```bash
-# Upgrade Talos version
-omnictl update cluster omni-cluster --talos-version v1.14.0
+cat > omni-cluster-upgrade.yaml <<EOF
+metadata:
+    namespace: default
+    type: Clusters.omni.sidero.dev
+    id: omni-cluster
+spec:
+    talosversion: 1.14.0
+    kubernetesversion: 1.37.0
+EOF
 
-# Upgrade Kubernetes version
-omnictl update cluster omni-cluster --kubernetes-version 1.37.0
+omnictl apply -f omni-cluster-upgrade.yaml
 ```
+
+> **Note:** The `talosversion` field must be without the `v` prefix (e.g., `1.14.0`, not `v1.14.0`).
 
 ### Import an Existing Talos Cluster
 
 ```bash
-omnictl import talosconfig --cluster-name terra-talos ./talosconfig
+omnictl cluster import <cluster-name> \
+  --talosconfig ~/.talos/config \
+  --talos-context <context> \
+  --nodes <node-ip-1>,<node-ip-2>,<node-ip-3> \
+  --skip-health-check
 ```
 
 ---
@@ -906,7 +925,7 @@ Restart Dex and add the user to Omni:
 docker restart dex
 
 # Add the user to Omni (run from the admin machine)
-omnictl create user --email user2@omni.internal --name user2
+omnictl user create --email user2@omni.internal --name user2
 ```
 
 ### Integrating with Active Directory via LDAP
@@ -1285,7 +1304,7 @@ If we were to deploy self-hosted Omni on CloudStack again:
 | etcd management | Manual | Manual (or auto-join) | Automatic |
 | Kubernetes API endpoint | Load balancer (6443) | Load balancer (6443) | SideroLink tunnel |
 | talosctl access | Port forwarding (50000) | Port forwarding (50000) | Via Omni |
-| Scaling | Manual VMs + LB + etcd | Terraform apply + etcd | `omnictl update` |
+| Scaling | Manual VMs + LB + etcd | Terraform apply + etcd | `omnictl apply` (YAML) |
 | Upgrades | `talosctl upgrade` per node | `talosctl upgrade` per node | Automatic rolling |
 | CCM/CSI install | Manual | Manual | Manual (same) |
 | Monitoring | Manual | Manual | Omni UI |
