@@ -1,7 +1,5 @@
 # Talos Omni Architecture
 
-> **Reference:** [Omni Documentation](https://docs.siderolabs.com/omni/latest/) | [Run Omni On-Prem](https://docs.siderolabs.com/omni/self-hosted/run-omni-on-prem/) | [SideroLink Overview](https://www.siderolabs.com/platform/sidero-omni/)
-
 ## Overview
 
 [Sidero Omni](https://www.siderolabs.com/platform/sidero-omni/) is a Kubernetes management platform by Sidero Labs that automates the creation, scaling, and lifecycle management of Talos Linux clusters. It provides a central control plane for managing multiple Talos clusters through a web UI, CLI (`omnictl`), and API.
