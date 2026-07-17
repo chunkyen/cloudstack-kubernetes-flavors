@@ -1275,6 +1275,9 @@ If we were to deploy self-hosted Omni on CloudStack again:
 3. **Create new clusters through Omni** — avoids the import complexity entirely
 4. **Pin the Omni version** and test flag changes before restarting
 5. **Consider SaaS Omni** if the operational complexity of self-hosted is not justified for your use case
+6. **Always inject SideroLinkConfig userdata** — kernel args alone are not enough; pass the full YAML as base64-encoded `userdata` in `cmk deploy virtualmachine`
+7. **Use the UI for scaling, not labels** — setting labels on a machine does not add it to the cluster; use **Clusters → Cluster Scaling** to manually add machines
+8. **Service account keys are read-only** — even with Admin role, the key may only have read scope; use the UI or OIDC auth for write operations
 
 ---
 ## References
