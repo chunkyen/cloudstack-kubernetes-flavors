@@ -11,6 +11,18 @@ Key capabilities:
 - **SideroLink** — secure overlay network for management traffic (see below)
 - **Workload proxy** — exposes Kubernetes API through the Omni server (no load balancer needed)
 
+### SaaS vs Self-Hosted
+
+| Factor | SaaS Omni | Self-Hosted Omni |
+|--------|-----------|-----------------|
+| **Network requirements** | None (uses relay/proxy) | Outbound connectivity from nodes to Omni |
+| **TLS** | Handled by Sidero | You must manage certificates (use `grpc://` or Let's Encrypt) |
+| **NAT'd / isolated nodes** | ✅ Works | ✅ Works if nodes can reach Omni outbound |
+| **Setup time** | Minutes | Hours |
+| **Maintenance** | None | You manage updates, backups |
+
+For CloudStack environments, **SaaS Omni is simpler** but self-hosted is viable with the `grpc://` scheme for TLS.
+
 ## SideroLink
 
 SideroLink is the **management overlay network** that connects Talos nodes to Omni. It's a WireGuard-based tunnel that replaces the need for direct network access to each node.
@@ -152,18 +164,6 @@ The SideroLink connection from Talos nodes to Omni uses HTTPS. If you use a **se
 When you import an existing Talos cluster into Omni, the cluster is initially **locked** as a safety measure. Once you verify the import, unlock it with `omnictl cluster unlock <cluster-name>` — after that, Omni takes over full lifecycle management (scaling, upgrades, config changes). The lock is not a permanent limitation; it's a safety step before handing over control.
 
 **Note:** During import, Omni performs a health check that tries to reach the Kubernetes API through the SideroLink tunnel. If the Kubernetes API is exposed through a public IP (port forwarding), use `--skip-health-check` to avoid a timeout.
-
-## SaaS vs Self-Hosted
-
-| Factor | SaaS Omni | Self-Hosted Omni |
-|--------|-----------|-----------------|
-| **Network requirements** | None (uses relay/proxy) | Outbound connectivity from nodes to Omni |
-| **TLS** | Handled by Sidero | You must manage certificates (use `grpc://` or Let's Encrypt) |
-| **NAT'd / isolated nodes** | ✅ Works | ✅ Works if nodes can reach Omni outbound |
-| **Setup time** | Minutes | Hours |
-| **Maintenance** | None | You manage updates, backups |
-
-For CloudStack environments, **SaaS Omni is simpler** but self-hosted is viable with the `grpc://` scheme for TLS.
 
 ## Ports
 
