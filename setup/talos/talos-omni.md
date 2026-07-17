@@ -741,7 +741,7 @@ EOF
 omnictl apply -f add-machine.yaml
 ```
 
-However, most service account keys are read-only (see [Service Account Keys Are Read-Only Despite Admin Role](#15-service-account-keys-are-read-only-despite-admin-role)), so the UI method is the reliable approach.
+See [Service Account Key Scope](#15-service-account-key-scope) for details on creating a write-capable key.
 
 ### Upgrades
 
@@ -1251,20 +1251,38 @@ Setting a label (e.g., `type: worker`) on a machine in the Omni UI does **not** 
 
 This is the documented manual scaling workflow per the [official Omni blog](https://www.siderolabs.com/blog/automatic-cluster-scaling-with-omni/). The Machine Class + label approach is for **automatic** scaling (e.g., when machines are dynamically provisioned by an auto-scaling group).
 
-### 15. Service Account Keys Are Read-Only Despite Admin Role
+### 15. Service Account Key Scope
 
-A service account created via the Omni UI with the **Admin** role may still have **read-only scope** on the API. This means `omnictl apply` and `omnictl create` will fail with:
+When creating a service account in the Omni UI, the key's access scope is determined at creation time. If the key was created with read-only scope, `omnictl apply` and `omnictl create` will fail with:
 
 ```
 Error: rpc error: code = PermissionDenied desc = only read access is permitted
 ```
 
-This is a limitation of how the service account key is generated — the key itself encodes the access scope, and the Admin role in the UI does not guarantee write access via the key.
+This is not a limitation of the Admin role — it's a matter of how the key was configured during creation. A service account with the Admin role **can** have write access if the key is created with the appropriate scope.
 
-**Workarounds:**
-- Use the **Omni UI** for write operations (scaling, creating resources)
-- Use **OIDC authentication** as `admin@omni.internal` for full write access
-- If you need CLI write access, create the service account with explicit write scope (if the UI supports it in your version)
+**To get a write-capable key:**
+- When creating the service account in the Omni UI, ensure the key scope includes write permissions
+- Alternatively, use **OIDC authentication** as `admin@omni.internal` which has full write access by default
+
+**To scale a cluster via `omnictl` with a write-capable key:**
+
+```bash
+cat > add-machine.yaml <<EOF
+metadata:
+    namespace: default
+    type: ClusterMachines.omni.sidero.dev
+    id: <machine-id>
+    labels:
+        omni.sidero.dev/cluster: omni-cluster
+        omni.sidero.dev/machine-set: omni-cluster-workers
+        omni.sidero.dev/role-worker: ""
+spec:
+    kubernetes_version: 1.36.2
+EOF
+
+omnictl apply -f add-machine.yaml
+```
 
 ### 16. Summary: What We'd Do Differently
 
@@ -1277,7 +1295,7 @@ If we were to deploy self-hosted Omni on CloudStack again:
 5. **Consider SaaS Omni** if the operational complexity of self-hosted is not justified for your use case
 6. **Always inject SideroLinkConfig userdata** — kernel args alone are not enough; pass the full YAML as base64-encoded `userdata` in `cmk deploy virtualmachine`
 7. **Use the UI for scaling, not labels** — setting labels on a machine does not add it to the cluster; use **Clusters → Cluster Scaling** to manually add machines
-8. **Service account keys are read-only** — even with Admin role, the key may only have read scope; use the UI or OIDC auth for write operations
+8. **Service account key scope matters** — a key created with read-only scope can't write via `omnictl`; create the key with write scope or use OIDC auth
 
 ---
 ## References
