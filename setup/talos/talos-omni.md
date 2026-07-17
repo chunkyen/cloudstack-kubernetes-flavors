@@ -1239,13 +1239,12 @@ chmod 600 ~/.talos/keys/<context>-<identity>.pgp
 
 If we were to deploy self-hosted Omni on CloudStack again:
 
-1. **Put Omni on the same network as the Talos nodes** — avoids the need for port forwarding and socat workarounds during import
-2. **Use `grpc://` scheme for the machine API** — avoids the self-signed CA trust issue entirely (or use Let's Encrypt if a public IP is available)
-3. **Use `--skip-health-check` during import** — the Kubernetes API is typically exposed through a public IP, not through the SideroLink tunnel
-4. **Create new clusters through Omni** — avoids the import complexity entirely
-5. **Pin the Omni version** and test flag changes before restarting
-6. **Back up the service account key** immediately after creation
-7. **Consider SaaS Omni** if the network topology doesn't support direct connectivity
+1. **Use `grpc://` scheme for the machine API** — avoids the self-signed CA trust issue entirely (or use Let's Encrypt if a public IP is available)
+2. **Use `--skip-health-check` during import** — the Kubernetes API is typically exposed through a public IP, not through the SideroLink tunnel
+3. **Create new clusters through Omni** — avoids the import complexity entirely
+4. **Pin the Omni version** and test flag changes before restarting
+5. **Back up the service account key** immediately after creation
+6. **Consider SaaS Omni** if the network topology doesn't support direct connectivity
 
 ---
 ## References
