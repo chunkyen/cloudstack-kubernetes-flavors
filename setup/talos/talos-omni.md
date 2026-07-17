@@ -1215,35 +1215,7 @@ chmod 600 ~/.talos/keys/<context>-<identity>.pgp
 - When creating a service account in the Omni UI, set a **180-day expiry** to avoid the v1.9.x client-side lifetime check
 - Use base64 encoding when transferring the key between machines
 
-### 6. SaaS vs Self-Hosted: When to Use Which
-
-| Factor | SaaS Omni | Self-Hosted Omni |
-|--------|-----------|-----------------|
-| **Network requirements** | None (uses relay/proxy) | Direct L3 connectivity between Omni and all nodes |
-| **TLS** | Handled by Sidero | You must manage certificates |
-| **Maintenance** | None | You manage updates, backups, monitoring |
-| **Cost** | Per-node pricing | VM cost + ops time |
-| **Data residency** | Sidero's cloud | Your infrastructure |
-| **NAT'd nodes** | ✅ Works | ❌ Does not work |
-| **Isolated networks** | ✅ Works | ❌ Does not work |
-| **Setup time** | Minutes | Hours |
-| **Flag drift** | None | Must track version changes |
-
-#### Recommendation
-
-**Use SaaS Omni if:**
-- Your Talos nodes are behind NAT or on isolated networks
-- You don't want to manage certificates
-- You want the simplest possible setup
-- You're okay with Sidero hosting your management plane
-
-**Use Self-Hosted Omni if:**
-- You have direct L3 connectivity between Omni and all nodes
-- You have a proper PKI (public trusted certs or internal CA)
-- You need data residency / air-gapped deployment
-- You're managing many clusters and want to avoid per-node SaaS costs
-
-### 7. Summary: What We'd Do Differently
+### 6. Summary: What We'd Do Differently
 
 If we were to deploy self-hosted Omni on CloudStack again:
 
