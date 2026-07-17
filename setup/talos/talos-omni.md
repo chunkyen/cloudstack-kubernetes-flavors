@@ -402,6 +402,7 @@ docker run -d \
     --key=/etc/omni/tls/server-key.pem \
     --siderolink-wireguard-advertised-addr=${OMNI_IP}:50180 \
     --siderolink-wireguard-bind-addr=0.0.0.0:50180 \
+    --machine-api-advertised-url=grpc://${OMNI_IP}:8090/ \
     --advertised-api-url=https://${OMNI_IP}:443 \
     --auth-oidc-enabled \
     --auth-oidc-provider-url=https://${OMNI_IP}:5556 \
@@ -426,6 +427,7 @@ docker run -d \
 > - `--initial-users=admin@omni.internal` — authorizes this user on first start. Must match the email in Dex's `staticPasswords`
 > - `--private-key-source=file:///etc/omni/omni.asc` — the GPG key for etcd encryption (note the `file://` prefix)
 > - `--etcd-embedded` — uses embedded etcd (no external database needed)
+> - `--machine-api-advertised-url=grpc://${OMNI_IP}:8090/` — tells Talos nodes to connect to the SideroLink API without TLS. If omitted, Omni defaults to `https://`, which will fail if you use a self-signed CA (Talos nodes don't trust it). The `grpc://` scheme skips TLS — the WireGuard tunnel (SideroLink) still encrypts all data traffic. If you have a publicly trusted certificate, use `https://` instead.
 
 ### Step 6: Verify Omni is Running
 
@@ -833,6 +835,8 @@ omnictl cluster import <cluster-name> \
   --skip-health-check
 ```
 
+> **Prerequisite:** The machine running `omnictl cluster import` must be able to reach each node's **Talos API (port 50000)**. The import command uses `talosctl` under the hood to read cluster state (machine configs, secrets, node identities) from each node. If port 50000 is behind a firewall or port forwarding, ensure it's accessible from where you run the import. After import succeeds and SideroLink is established, port 50000 is no longer needed — Omni manages everything through the tunnel.
+
 > **Note on cluster access:** After import, the cluster has **two working kubeconfigs**:
 > 1. **Original kubeconfig** — still works through the CloudStack LB (e.g., `192.168.200.49:6443`). No changes needed for existing users or automation.
 > 2. **Omni-proxied kubeconfig** — `omnictl kubeconfig --cluster <name>` gives a config pointing to the Omni workload proxy (`<omni-ip>:8095`). This works through SideroLink and requires kubelogin for OIDC auth.
@@ -1225,6 +1229,8 @@ We successfully imported the cluster but hit two blockers:
 
    **Note:** Both the Omni VM and your admin machine have direct access to the port forwarding (public IP), so no socat tunnels or other workarounds are needed for the import step. The `--skip-health-check` flag is the only adjustment required.
 
+3. **Talos API access (port 50000)** — The `omnictl cluster import` command connects to each node's Talos API to read machine configs, cluster secrets, and node identities. If port 50000 is not reachable from where you run the import (e.g., behind a firewall or NAT), the import will fail. Ensure port forwarding rules for the Talos API are in place before importing. After import succeeds and SideroLink is established, these rules can be removed.
+
 #### Recommendation
 
 The import → unlock workflow works as designed. The lock is a safety feature, not a limitation. The real blockers are:
@@ -1265,12 +1271,31 @@ The service account key is stored as **base64-encoded JSON wrapping a PGP privat
 - Regenerating it requires wiping the SQLite database (which loses all cluster data)
 - The key can expire (we hit "key expired" after restarting Omni with the same data directory)
 - Extracting the PGP key from the JSON requires careful parsing
+- **Key lifetime check in omnictl v1.9.x** — the client rejects keys with a lifetime longer than 1 year (8760h). A non-expiring key created from the Omni UI will fail with `key lifetime is too long: 8760h0m0s`. Workaround: create a service account key with a 180-day expiry instead of non-expiring.
+- **Key corruption during SCP** — the PGP key file (960 bytes) is often truncated when copied between machines via `scp`. Use base64 encoding for reliable transfer:
+  ```bash
+  base64 -w0 key.pgp | ssh <host> "base64 -d > key.pgp && chmod 600 key.pgp"
+  ```
+
+#### Extracting the PGP Key
+
+The service account secret from the Omni UI is a base64-encoded JSON blob. Extract the PGP key:
+
+```bash
+source ~/projects/omni/cloudomni
+echo "$OMNI_SERVICE_ACCOUNT_KEY" | base64 -d | \
+  python3 -c "import sys,json; print(json.load(sys.stdin)['pgp_key'])" \
+  > ~/.talos/keys/<context>-<identity>.pgp
+chmod 600 ~/.talos/keys/<context>-<identity>.pgp
+```
 
 #### Recommendation
 
 - Back up the service account key immediately after creation
 - Use `--initial-service-account-key-path` to control where it's stored
-- If the key is lost or expired, you may need to create a new service account through the Omni UI instead of wiping the database
+- If the key is lost or expired, create a new service account through the Omni UI instead of wiping the database
+- When creating a service account in the Omni UI, set a **180-day expiry** to avoid the v1.9.x client-side lifetime check
+- Use base64 encoding when transferring the key between machines
 
 ### 6. SaaS vs Self-Hosted: When to Use Which
 
