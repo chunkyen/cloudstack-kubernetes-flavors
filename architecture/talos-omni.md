@@ -17,7 +17,6 @@ Key capabilities:
 |--------|-----------|-----------------|
 | **Network requirements** | None (uses relay/proxy) | Outbound connectivity from nodes to Omni |
 | **TLS** | Handled by Sidero | You must manage certificates (use `grpc://` or Let's Encrypt) |
-| **NAT'd / isolated nodes** | ✅ Works | ✅ Works if nodes can reach Omni outbound |
 | **Setup time** | Minutes | Hours |
 | **Maintenance** | None | You manage updates, backups |
 
