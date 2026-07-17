@@ -78,7 +78,7 @@ Talos Linux is a minimal, immutable OS designed specifically for Kubernetes. It 
 |----------|-------------|------------|
 | **Manual (`cmk`)** | Deploy VMs via CloudStack CLI, generate configs with `talosctl`, bootstrap manually | High |
 | **Terraform** | One-shot deployment with Terraform managing all CloudStack resources (network, IP, LB, firewall, VMs) | Medium |
-| **Sidero Omni** | Kubernetes management platform that automates cluster creation, scaling, upgrades, and lifecycle. Self-hosted on CloudStack as a single Docker VM. | Medium-High (self-hosted initial setup) / Low-Medium (daily ops) / Low (SaaS) |
+| **Sidero Omni** | Kubernetes management platform that automates cluster creation, scaling, upgrades, and lifecycle. Self-hosted on CloudStack as a single Docker VM. | High (self-hosted) / Low (SaaS) |
 
 Guides:
 
@@ -109,7 +109,7 @@ Guides:
 | **Upgrade Strategy** | Manual | Image-based rolling update | Image-based rolling update | Image-based atomic (talosctl upgrade) | Automatic rolling (Omni-managed) |
 | **CNI/CCM/CSI** | Baked into ISO | Manual or ClusterResourceSet | Manual or ClusterResourceSet | Manual install | Manual install (same) |
 | **ClusterClass** | N/A | Not supported (no CloudStackClusterTemplate) | Not supported (no CloudStackClusterTemplate) | N/A (manual config) | N/A (Omni manages configs) |
-| **Complexity** | Low | Medium | High | Medium | Medium-High (self-hosted) / Low (SaaS) |
+| **Complexity** | Low | Medium | High | Medium | High (self-hosted) / Low (SaaS) |
 
 ## Status
 
