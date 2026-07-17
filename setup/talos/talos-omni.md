@@ -833,6 +833,12 @@ omnictl cluster import <cluster-name> \
   --skip-health-check
 ```
 
+> **Note on cluster access:** After import, the cluster has **two working kubeconfigs**:
+> 1. **Original kubeconfig** — still works through the CloudStack LB (e.g., `192.168.200.49:6443`). No changes needed for existing users or automation.
+> 2. **Omni-proxied kubeconfig** — `omnictl kubeconfig --cluster <name>` gives a config pointing to the Omni workload proxy (`<omni-ip>:8095`). This works through SideroLink and requires kubelogin for OIDC auth.
+>
+> Both can coexist. The original kubeconfig is useful for users who already have it configured, while the Omni-proxied one provides access through the SideroLink tunnel without needing the LB or port forwarding rules.
+
 ---
 
 ## Known Issues & Pitfalls
