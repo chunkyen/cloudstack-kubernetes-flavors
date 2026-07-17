@@ -952,9 +952,6 @@ Dex includes built-in cycle detection to prevent infinite loops.
 
 ---
 
----
-
-
 ## Comparison: Manual vs Terraform vs Self-Hosted Omni
 
 | Aspect | Manual (`cmk`) | Terraform | Self-Hosted Omni |
