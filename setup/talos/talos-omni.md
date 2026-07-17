@@ -713,24 +713,35 @@ kubectl apply -f cloudstack-ssd.yaml
 
 ### Scaling
 
-To scale, update the cluster spec via `omnictl apply`:
+Manual scaling is done through the **Omni UI**:
+
+1. Go to **Clusters → `<cluster-name>` → Cluster Scaling**
+2. Select the machine you want to add from the list of available machines
+3. Choose the target MachineSet (e.g., `omni-test-workers`)
+4. Confirm
+
+> **Note:** Labels and Machine Classes are used for **automatic** scaling (machines auto-join when they match a Machine Class). For manual scaling, use the Cluster Scaling page in the UI. See [Labels Do Not Auto-Assign Machines to Clusters](#14-labels-do-not-auto-assign-machines-to-clusters) in Lessons Learned.
+
+If you have a service account with write access, you can also scale via `omnictl` by creating a `ClusterMachine` resource:
 
 ```bash
-cat > omni-cluster-scale.yaml <<EOF
+cat > add-machine.yaml <<EOF
 metadata:
     namespace: default
-    type: Clusters.omni.sidero.dev
-    id: omni-cluster
+    type: ClusterMachines.omni.sidero.dev
+    id: <machine-id>
+    labels:
+        omni.sidero.dev/cluster: omni-cluster
+        omni.sidero.dev/machine-set: omni-cluster-workers
+        omni.sidero.dev/role-worker: ""
 spec:
-    machineallocation:
-        controlplanecount: 3
-        workercount: 5
+    kubernetes_version: 1.36.2
 EOF
 
-omnictl apply -f omni-cluster-scale.yaml
+omnictl apply -f add-machine.yaml
 ```
 
-> **Note:** Only the fields you want to change need to be in the YAML. Omni merges the update with the existing spec.
+However, most service account keys are read-only (see [Service Account Keys Are Read-Only Despite Admin Role](#15-service-account-keys-are-read-only-despite-admin-role)), so the UI method is the reliable approach.
 
 ### Upgrades
 
@@ -1198,7 +1209,64 @@ docker run --rm ghcr.io/siderolabs/omni:latest --help | grep <flag-name>
 
 Pin your Omni version and test flag changes in a non-production environment first.
 
-### 13. Summary: What We'd Do Differently
+### 13. Userdata Injection Is Required (Kernel Args Alone Not Enough)
+
+SideroLink requires the `SideroLinkConfig` userdata to be injected into the VM at deployment time. Passing kernel args via `extrakernelsargs` alone is **not sufficient** — Talos needs the full userdata YAML to configure the SideroLink connection.
+
+**Correct approach:**
+```bash
+# Create the userdata YAML
+cat > omni-userdata.yaml <<EOF
+apiVersion: v1alpha1
+kind: SideroLinkConfig
+apiUrl: grpc://<omni-ip>:8090/?jointoken=<token>
+EOF
+
+# Base64-encode and pass to cmk deploy
+cmk deploy virtualmachine \
+  name=omni-cluster-worker-1 \
+  templateid=<template-id> \
+  serviceofferingid=<offering-id> \
+  networkids=<network-id> \
+  zoneid=<zone-id> \
+  account=admin \
+  domainid=<domain-id> \
+  keypair=<keypair> \
+  details[0].guest.cpu.mode=host-passthrough \
+  userdata=$(base64 -w0 omni-userdata.yaml) \
+  extrakernelsargs="siderolink.api=grpc://<omni-ip>:8090/?jointoken=<token>"
+```
+
+Both `userdata` and `extrakernelsargs` should be provided — the userdata carries the full config, while the kernel args provide a fallback for early boot stages.
+
+### 14. Labels Do Not Auto-Assign Machines to Clusters
+
+Setting a label (e.g., `type: worker`) on a machine in the Omni UI does **not** automatically add it to a cluster. Labels are used for Machine Class matching (automatic scaling), but for manual scaling you must explicitly add the machine to the cluster.
+
+**The correct workflow for manual scaling:**
+1. Deploy the VM with SideroLink userdata
+2. Wait for it to connect to Omni (appears in Machines list)
+3. Go to **Clusters → `<cluster-name>` → Cluster Scaling**
+4. Select the machine and add it to the appropriate MachineSet
+
+This is the documented manual scaling workflow per the [official Omni blog](https://www.siderolabs.com/blog/automatic-cluster-scaling-with-omni/). The Machine Class + label approach is for **automatic** scaling (e.g., when machines are dynamically provisioned by an auto-scaling group).
+
+### 15. Service Account Keys Are Read-Only Despite Admin Role
+
+A service account created via the Omni UI with the **Admin** role may still have **read-only scope** on the API. This means `omnictl apply` and `omnictl create` will fail with:
+
+```
+Error: rpc error: code = PermissionDenied desc = only read access is permitted
+```
+
+This is a limitation of how the service account key is generated — the key itself encodes the access scope, and the Admin role in the UI does not guarantee write access via the key.
+
+**Workarounds:**
+- Use the **Omni UI** for write operations (scaling, creating resources)
+- Use **OIDC authentication** as `admin@omni.internal` for full write access
+- If you need CLI write access, create the service account with explicit write scope (if the UI supports it in your version)
+
+### 16. Summary: What We'd Do Differently
 
 If we were to deploy self-hosted Omni on CloudStack again:
 
