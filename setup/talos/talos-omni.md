@@ -1196,43 +1196,7 @@ docker run --rm ghcr.io/siderolabs/omni:latest --help | grep <flag-name>
 
 Pin your Omni version and test flag changes in a non-production environment first.
 
-### 13. Service Account Key is Fragile
-
-#### The Problem
-
-The service account key is stored as **base64-encoded JSON wrapping a PGP private key**. This makes it easy to corrupt:
-
-- The key file is owned by `root` inside the container
-- Regenerating it requires wiping the SQLite database (which loses all cluster data)
-- The key can expire (we hit "key expired" after restarting Omni with the same data directory)
-- Extracting the PGP key from the JSON requires careful parsing
-- **Key lifetime check in omnictl v1.9.x** — the client rejects keys with a lifetime longer than 1 year (8760h). A non-expiring key created from the Omni UI will fail with `key lifetime is too long: 8760h0m0s`. Workaround: create a service account key with a 180-day expiry instead of non-expiring.
-- **Key corruption during SCP** — the PGP key file (960 bytes) is often truncated when copied between machines via `scp`. Use base64 encoding for reliable transfer:
-  ```bash
-  base64 -w0 key.pgp | ssh <host> "base64 -d > key.pgp && chmod 600 key.pgp"
-  ```
-
-#### Extracting the PGP Key
-
-The service account secret from the Omni UI is a base64-encoded JSON blob. Extract the PGP key:
-
-```bash
-source ~/projects/omni/cloudomni
-echo "$OMNI_SERVICE_ACCOUNT_KEY" | base64 -d | \
-  python3 -c "import sys,json; print(json.load(sys.stdin)['pgp_key'])" \
-  > ~/.talos/keys/<context>-<identity>.pgp
-chmod 600 ~/.talos/keys/<context>-<identity>.pgp
-```
-
-#### Recommendation
-
-- Back up the service account key immediately after creation
-- Use `--initial-service-account-key-path` to control where it's stored
-- If the key is lost or expired, create a new service account through the Omni UI instead of wiping the database
-- When creating a service account in the Omni UI, set a **180-day expiry** to avoid the v1.9.x client-side lifetime check
-- Use base64 encoding when transferring the key between machines
-
-### 14. Summary: What We'd Do Differently
+### 13. Summary: What We'd Do Differently
 
 If we were to deploy self-hosted Omni on CloudStack again:
 
@@ -1240,8 +1204,7 @@ If we were to deploy self-hosted Omni on CloudStack again:
 2. **Use `--skip-health-check` during import** — the Kubernetes API is typically exposed through a public IP, not through the SideroLink tunnel
 3. **Create new clusters through Omni** — avoids the import complexity entirely
 4. **Pin the Omni version** and test flag changes before restarting
-5. **Back up the service account key** immediately after creation
-6. **Consider SaaS Omni** if the operational complexity of self-hosted is not justified for your use case
+5. **Consider SaaS Omni** if the operational complexity of self-hosted is not justified for your use case
 
 ---
 ## References
