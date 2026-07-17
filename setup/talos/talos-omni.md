@@ -502,121 +502,213 @@ omnictl get contexts
 
 ---
 
-## Part 4: Register Talos Machines with Omni
+## Part 4: Create a New Cluster from Scratch
 
-Since CloudStack does not have a built-in Omni infrastructure provider, we use the **Machine Registration** approach — provision VMs manually and have them register with Omni.
+This section covers creating a **new** Talos cluster via Omni (not importing an existing one). VMs are deployed on CloudStack with a SideroLinkConfig that tells them to connect to Omni on boot.
 
-### Step 1: Create a Registration Token
+### Step 1: Create an Isolated Network (Optional)
 
-```bash
-# Generate a registration URL for control plane machines
-omnictl create registration-url \
-  --label 'type=control-plane' \
-  --label 'region=cyz1'
-
-# Generate a registration URL for worker machines
-omnictl create registration-url \
-  --label 'type=worker' \
-  --label 'region=cyz1'
-```
-
-This outputs URLs like:
-- `https://<omni-ip>/registration/<cp-token>`
-- `https://<omni-ip>/registration/<worker-token>`
-
-### Step 2: Deploy Talos VMs with Registration Config
-
-On the CloudStack management server, create a minimal registration config and deploy VMs:
+If you want the cluster on its own network:
 
 ```bash
-# Create registration config for control plane
-cat > register-cp.yaml <<EOF
-version: v1alpha1
-kind: MachineConfig
-registration:
-  url: "https://<omni-ip>/registration/<cp-token>"
-EOF
+# Create a network
+cmk create network \
+  zoneid=<zone-id> \
+  networkofferingid=<network-offering-id> \
+  name=omni-cluster-net \
+  displaytext=omni-cluster-net
 
-# Create registration config for workers
-cat > register-worker.yaml <<EOF
-version: v1alpha1
-kind: MachineConfig
-registration:
-  url: "https://<omni-ip>/registration/<worker-token>"
-EOF
-
-# Deploy control plane VMs
-for i in 1 2 3; do
-  cmk deploy virtualmachine \
-    zoneid=<zone-id> \
-    templateid=<talos-template-id> \
-    serviceofferingid=<cp-offering-id> \
-    networkid=<network-id> \
-    name=omni-cp-${i} \
-    userdata=$(base64 register-cp.yaml | tr -d '\n')
-done
-
-# Deploy worker VMs
-for i in 1 2; do
-  cmk deploy virtualmachine \
-    zoneid=<zone-id> \
-    templateid=<talos-template-id> \
-    serviceofferingid=<worker-offering-id> \
-    networkid=<network-id> \
-    name=omni-worker-${i} \
-    userdata=$(base64 register-worker.yaml | tr -d '\n')
-done
+# Note the network ID for later steps
 ```
 
-The VMs boot Talos, connect to Omni via SideroLink, and register themselves. Monitor registration:
+### Step 2: Generate a Join Token
+
+```bash
+# Generate kernel args with join token (use --use-grpc-tunnel if UDP is restricted)
+omnictl jointoken kernel-args --use-grpc-tunnel
+```
+
+This outputs kernel args like:
+```
+talos.electronjs.org/join-token=<token> siderolink.api=grpc://<omni-ip>:8090
+```
+
+### Step 3: Create SideroLink Userdata
+
+Create a userdata YAML that tells Talos to connect to Omni on boot:
+
+```bash
+cat > omni-userdata.yaml <<EOF
+version: v1alpha1
+kind: SideroLinkConfig
+apiUrl: grpc://<omni-ip>:8090/?jointoken=<token>
+EOF
+```
+
+> **Note:** Use `grpc://` scheme to skip TLS verification (for self-signed certs). Use `https://` if you have a publicly trusted cert.
+
+### Step 4: Deploy Talos VMs
+
+On the CloudStack management server:
+
+```bash
+# Deploy control plane VM
+cmk deploy virtualmachine \
+  zoneid=<zone-id> \
+  templateid=<talos-template-id> \
+  serviceofferingid=<cp-offering-id> \
+  networkids=<network-id> \
+  name=omni-cluster-cp-1 \
+  rootdisksize=20 \
+  userdata=$(base64 -w0 omni-userdata.yaml) \
+  details[0].guest.cpu.mode=host-passthrough
+
+# Deploy worker VM
+cmk deploy virtualmachine \
+  zoneid=<zone-id> \
+  templateid=<talos-template-id> \
+  serviceofferingid=<worker-offering-id> \
+  networkids=<network-id> \
+  name=omni-cluster-worker-1 \
+  rootdisksize=20 \
+  userdata=$(base64 -w0 omni-userdata.yaml) \
+  details[0].guest.cpu.mode=host-passthrough
+```
+
+### Step 5: Verify Machines Connect
+
+Wait 60-90 seconds for the VMs to boot and connect:
 
 ```bash
 omnictl get machines
 ```
 
-### Step 3: Create a Machine Class
+Look for your new machines — they should show `connected=true` and be in maintenance mode.
+
+### Step 6: Label the Machines
+
+Labels tell Omni which machines are control planes vs workers. Set them from the **Omni UI**:
+
+1. Go to the machine's detail page
+2. Add a label: `type=control-plane` (for CP) or `type=worker` (for worker)
+
+> **Note:** The `omnictl apply` command for `MachineLabels.omni.sidero.dev` may not persist labels correctly in v1.9.x. Use the UI for reliability.
+
+### Step 7: Create Machine Classes
+
+Machine classes group machines by label. Create them from the **Omni UI**:
+
+1. Go to **Machine Classes**
+2. Create `omni-cluster-cp` with label selector `type = control-plane`
+3. Create `omni-cluster-worker` with label selector `type = worker`
+
+### Step 8: Create the Cluster
 
 ```bash
-omnictl create machine-class cp-machines \
-  --label-selector 'type=control-plane'
+cat > omni-cluster.yaml <<EOF
+metadata:
+    namespace: default
+    type: Clusters.omni.sidero.dev
+    id: omni-cluster
+spec:
+    kubernetesversion: 1.36.2
+    talosversion: 1.13.6
+    machineclasses:
+        controlplane:
+            - omni-cluster-cp
+        workers:
+            - omni-cluster-worker
+    machineallocation:
+        controlplanecount: 1
+        workercount: 1
+EOF
 
-omnictl create machine-class worker-machines \
-  --label-selector 'type=worker'
+omnictl apply -f omni-cluster.yaml
 ```
 
----
+> **Note:** The `talosversion` field must be without the `v` prefix (e.g., `1.13.6`, not `v1.13.6`).
 
-## Part 5: Create a Cluster
+### Step 9: Monitor Cluster Creation
 
 ```bash
-omnictl create cluster omni-cluster \
-  --kubernetes-version 1.36.2 \
-  --talos-version v1.13.6 \
-  --control-plane-class cp-machines \
-  --worker-class worker-machines \
-  --control-plane-count 3 \
-  --worker-count 2
+omnictl cluster status omni-cluster
 ```
 
 Omni will:
-1. Select registered machines matching the machine classes
+1. Select machines matching the machine classes
 2. Generate and apply Talos configs
 3. Bootstrap the cluster
 4. Set up the Kubernetes API endpoint via SideroLink
 5. Install Flannel (default CNI)
 
-### Access the Cluster
+The cluster transitions through: `UNKNOWN` → `PROVISIONING` → `RUNNING Ready`.
+
+---
+
+## Part 5: Access the Cluster
+
+### Step 1: Get the Kubeconfig
 
 ```bash
-# Get kubeconfig
-omnictl get kubeconfig omni-cluster > ~/.kube/config-omni
-
-# Or use omnictl proxy
-omnictl proxy omni-cluster
-
-# In another terminal
-kubectl get nodes
+# Generate a service account kubeconfig (static token, no OIDC needed)
+omnictl kubeconfig --cluster omni-cluster \
+  --service-account --user admin \
+  --force --merge=false /tmp/omni-cluster-kubeconfig
 ```
+
+### Step 2: Fix the Server Address
+
+The generated kubeconfig points to `localhost:8095` (the Omni workload proxy). Change it to the Omni server's IP:
+
+```bash
+sed 's/localhost:8095/<omni-ip>:8095/' /tmp/omni-cluster-kubeconfig \
+  > /tmp/omni-cluster-kubeconfig-fixed
+```
+
+### Step 3: Test Access
+
+```bash
+kubectl --kubeconfig /tmp/omni-cluster-kubeconfig-fixed get nodes
+```
+
+### Alternative: OIDC Authentication (for Users with a Browser)
+
+For users who want to authenticate via the Omni UI (browser-based OIDC):
+
+```bash
+# 1. Install kubelogin
+curl -sL 'https://github.com/int128/kubelogin/releases/latest/download/kubelogin_linux_amd64.zip' \
+  -o /tmp/kubelogin.zip
+unzip -o /tmp/kubelogin.zip -d /tmp/kubelogin
+sudo cp /tmp/kubelogin/kubelogin /usr/local/bin/kubelogin
+sudo ln -sf /usr/local/bin/kubelogin /usr/local/bin/kubectl-oidc_login
+
+# 2. Download the OIDC kubeconfig
+omnictl kubeconfig --cluster omni-cluster \
+  --force --merge=false /tmp/omni-cluster-kubeconfig-oidc
+
+# 3. Fix the server address (same as above)
+sed 's/localhost:8095/<omni-ip>:8095/' /tmp/omni-cluster-kubeconfig-oidc \
+  > /tmp/omni-cluster-kubeconfig-oidc-fixed
+
+# 4. Use it — kubelogin will open a browser for authentication
+kubectl --kubeconfig /tmp/omni-cluster-kubeconfig-oidc-fixed get nodes
+```
+
+On headless machines, use the device-code flow:
+```bash
+kubectl --kubeconfig /tmp/omni-cluster-kubeconfig-oidc-fixed \
+  get nodes --oidc-grant-type=authcode-keyboard
+```
+This prints a URL + code — visit the URL on any device with a browser, enter the code, and authenticate.
+
+### How the Proxy Works
+
+The kubeconfig's `server: https://<omni-ip>:8095` points to Omni's **workload proxy** — a built-in component on the Omni server that tunnels Kubernetes API traffic through SideroLink. This means:
+
+- **No load balancer needed** — the Kubernetes API is accessed through the proxy, not directly
+- **No port forwarding needed** — `talosctl` also works through Omni, not directly to nodes
+- **Works from anywhere** — as long as you can reach the Omni server, you can access the cluster
 
 ---
 
