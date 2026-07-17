@@ -293,7 +293,9 @@ This is fundamentally different from package-based upgrades (apt/yum upgrade) us
 
 ### Omni (Sidero Management Plane)
 
-> Omni architecture, SideroLink explanation, connection flow, transport modes, TLS requirements, network requirements, SaaS vs self-hosted comparison, and port reference are documented in [talos-omni.md](talos-omni.md).
+[Sidero Omni](https://www.siderolabs.com/platform/sidero-omni/) is a Kubernetes lifecycle management platform for Talos clusters that automates cluster creation, scaling, upgrades, and node management through a web UI, CLI, and API.
+
+> For full architecture details — SideroLink, connection flow, transport modes, TLS requirements, network requirements, SaaS vs self-hosted comparison, and port reference — see [talos-omni.md](talos-omni.md).
 
 ---
 
