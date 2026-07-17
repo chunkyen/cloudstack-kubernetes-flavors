@@ -40,18 +40,19 @@ SideroLink is the **management overlay network** that connects Talos nodes to Om
 │  │  ┌─────────────────┐  │    │  │ CP-1  CP-2  CP-3     │    │   │
 │  │  │ Omni container   │  │    │  │ (Talos Linux)        │    │   │
 │  │  │ port 443 (HTTPS)  │  │    │  └──────────────────────┘    │   │
-│  │  │ port 8090 (gRPC)  │  │    │  ┌──────────────────────┐    │   │
-│  │  │ port 50180/UDP   │  │    │  │ Worker-1  Worker-2   │    │   │
-│  │  │ (WireGuard)       │  │    │  │ (Talos Linux)        │    │   │
-│  │  ├─────────────────┤  │    │  └──────────────────────┘    │   │
-│  │  │ Dex (OIDC)       │  │    │         │                   │   │
-│  │  │ port 5556 (HTTPS)│  │    │ SideroLink│                  │   │
-│  │  └─────────────────┘  │    │ (WireGuard)│                 │   │
+│  │  │ port 8090 (gRPC)  │◄─┼────┼──┤ SideroLink           │    │   │
+│  │  │ port 50180/UDP   │◄─┼────┼──┤ (WireGuard tunnel)   │    │   │
+│  │  │ (WireGuard)       │  │    │  └──────────────────────┘    │   │
+│  │  ├─────────────────┤  │    │  ┌──────────────────────┐    │   │
+│  │  │ Dex (OIDC)       │  │    │  │ Worker-1  Worker-2   │    │   │
+│  │  │ port 5556 (HTTPS)│  │    │  │ (Talos Linux)        │    │   │
+│  │  └─────────────────┘  │    │  └──────────────────────┘    │   │
 │  │         │              │    │         │                   │   │
 │  │         └──────────────┼────┼───────────┘                 │   │
 │  └──────────────────────┘    └──────────────────────────────┘   │
 │                                                                  │
-│  All VMs need L3 reachability — routing between networks works fine  │
+│  ⚠️ Nodes need L3 reachability to Omni — routing between networks works │
+│  ⚠️ NAT / port forwarding does NOT work for SideroLink           │
 └──────────────────────────────────────────────────────────────────┘
 ```
 
@@ -95,9 +96,42 @@ Talos Node                    Omni VM
 
 Enable gRPC tunnel mode with `--siderolink-use-grpc-tunnel` on Omni. This adds overhead but works through NAT.
 
+## Critical Network Requirement
+
+**Self-hosted Omni requires the Talos nodes to be able to initiate outbound connections to the Omni VM.** The connection is **initiated by the Talos node** — it reaches out to the Omni VM's SideroLink API endpoint and establishes the tunnel. This means:
+
+- The Talos node must be able to **initiate a TCP connection** to the Omni VM's IP (port 8090)
+- The Talos node must be able to **send/receive UDP packets** to/from the Omni VM's IP (port 50180)
+- NAT, port forwarding, or proxy-based access **does not work** for the SideroLink connection
+
+**On CloudStack, the Omni VM and Talos nodes should ideally be on the same network.** However, if the nodes can reach Omni outbound through existing routing (e.g., via a virtual router that bridges networks), the network is not the blocker — TLS certificate trust is.
+
 ## TLS Requirement
 
-The initial gRPC connection uses HTTPS by default. If you use a self-signed CA, the Talos nodes will reject the connection. Use `grpc://` scheme in the machine API URL to skip TLS, or use a publicly trusted certificate (see [TLS Certificate Trust](../setup/talos/talos-omni.md#2-tls-certificate-trust-the-real-blocker) in the main guide).
+The SideroLink connection from Talos nodes to Omni uses HTTPS. If you use a **self-signed CA**, the Talos nodes will reject the connection because they don't trust the CA. There is no `--insecure-skip-tls-verify` equivalent for SideroLink, and the system trust store in Talos is immutable at runtime — `machine.acceptedCAs` only affects the node's own certificate identity, not outbound TLS connections.
+
+**Two solutions:**
+
+1. **Public trusted certificate** (recommended) — Use Let's Encrypt. Talos trusts public CAs by default.
+2. **gRPC scheme** (air-gapped) — Use `grpc://` instead of `https://` in the machine API URL. The SideroLink controller interprets `grpc://` as "skip TLS" and connects without encryption. The WireGuard tunnel still encrypts the data plane. **This was verified working in our lab.**
+
+## Import vs Create
+
+When you import an existing Talos cluster into Omni, the cluster is initially **locked** as a safety measure. Once you verify the import, unlock it with `omnictl cluster unlock <cluster-name>` — after that, Omni takes over full lifecycle management (scaling, upgrades, config changes). The lock is not a permanent limitation; it's a safety step before handing over control.
+
+**Note:** During import, Omni performs a health check that tries to reach the Kubernetes API through the SideroLink tunnel. If the Kubernetes API is exposed through a public IP (port forwarding), use `--skip-health-check` to avoid a timeout.
+
+## SaaS vs Self-Hosted
+
+| Factor | SaaS Omni | Self-Hosted Omni |
+|--------|-----------|-----------------|
+| **Network requirements** | None (uses relay/proxy) | Outbound connectivity from nodes to Omni |
+| **TLS** | Handled by Sidero | You must manage certificates (use `grpc://` or Let's Encrypt) |
+| **NAT'd / isolated nodes** | ✅ Works | ✅ Works if nodes can reach Omni outbound |
+| **Setup time** | Minutes | Hours |
+| **Maintenance** | None | You manage updates, backups |
+
+For CloudStack environments, **SaaS Omni is simpler** but self-hosted is viable with the `grpc://` scheme for TLS.
 
 ## Ports
 
