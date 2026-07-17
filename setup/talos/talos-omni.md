@@ -741,7 +741,7 @@ EOF
 omnictl apply -f add-machine.yaml
 ```
 
-See [Service Account Key Scope](#15-service-account-key-scope) for details on creating a write-capable key.
+See [Service Account Keys Are Read-Only](#15-service-account-keys-are-read-only) for details on using OIDC auth for write access.
 
 ### Upgrades
 
@@ -1251,21 +1251,23 @@ Setting a label (e.g., `type: worker`) on a machine in the Omni UI does **not** 
 
 This is the documented manual scaling workflow per the [official Omni blog](https://www.siderolabs.com/blog/automatic-cluster-scaling-with-omni/). The Machine Class + label approach is for **automatic** scaling (e.g., when machines are dynamically provisioned by an auto-scaling group).
 
-### 15. Service Account Key Scope
+### 15. Service Account Keys Are Read-Only
 
-When creating a service account in the Omni UI, the key's access scope is determined at creation time. If the key was created with read-only scope, `omnictl apply` and `omnictl create` will fail with:
+Service account keys created via the Omni UI are **read-only** — there is no option to set write scope during creation. This means `omnictl apply` and `omnictl create` will fail with:
 
 ```
 Error: rpc error: code = PermissionDenied desc = only read access is permitted
 ```
 
-This is not a limitation of the Admin role — it's a matter of how the key was configured during creation. A service account with the Admin role **can** have write access if the key is created with the appropriate scope.
+For write operations via `omnictl`, authenticate interactively using OIDC:
 
-**To get a write-capable key:**
-- When creating the service account in the Omni UI, ensure the key scope includes write permissions
-- Alternatively, use **OIDC authentication** as `admin@omni.internal` which has full write access by default
+```bash
+omnictl auth login
+```
 
-**To scale a cluster via `omnictl` with a write-capable key:**
+This opens a browser-based OIDC flow as `admin@omni.internal` which has full write access. The token is cached locally for the session.
+
+**To scale a cluster via `omnictl` (after OIDC login):**
 
 ```bash
 cat > add-machine.yaml <<EOF
@@ -1295,7 +1297,7 @@ If we were to deploy self-hosted Omni on CloudStack again:
 5. **Consider SaaS Omni** if the operational complexity of self-hosted is not justified for your use case
 6. **Always inject SideroLinkConfig userdata** — kernel args alone are not enough; pass the full YAML as base64-encoded `userdata` in `cmk deploy virtualmachine`
 7. **Use the UI for scaling, not labels** — setting labels on a machine does not add it to the cluster; use **Clusters → Cluster Scaling** to manually add machines
-8. **Service account key scope matters** — a key created with read-only scope can't write via `omnictl`; create the key with write scope or use OIDC auth
+8. **Use `omnictl auth login` (OIDC) for write access** — service account keys are read-only; authenticate interactively for `omnictl apply` to work
 
 ---
 ## References
