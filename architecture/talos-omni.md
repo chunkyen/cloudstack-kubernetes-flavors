@@ -25,6 +25,40 @@ SideroLink is the **management overlay network** that connects Talos nodes to Om
 - The Kubernetes API is exposed through Omni's workload proxy (no LB needed)
 - Nodes register themselves — you don't need to know their IPs
 
+## Dex (OIDC Provider)
+
+Dex is the built-in OIDC identity provider that ships alongside Omni. It handles user authentication for both the Omni web UI and `kubectl` access to managed clusters.
+
+**Authentication flow:**
+
+```
+User Browser              Omni (port 443)           Dex (port 5556)
+     │                         │                         │
+     │  1. Access Omni UI      │                         │
+     │  ─────────────────────►│                         │
+     │                         │  2. Redirect to Dex     │
+     │  ◄─────────────────────│                         │
+     │                         │                         │
+     │  3. Login page          │                         │
+     │  ───────────────────────────────────────────────►│
+     │  4. Credentials         │                         │
+     │  ───────────────────────────────────────────────►│
+     │                         │                         │
+     │  5. Auth code           │                         │
+     │  ◄───────────────────────────────────────────────│
+     │                         │  6. Consume auth code   │
+     │  ─────────────────────►│                         │
+     │  7. Session cookie      │                         │
+     │  ◄─────────────────────│                         │
+```
+
+**Key details:**
+- Dex runs as a separate Docker container on the Omni VM, serving HTTPS on port 5556
+- Both Omni and Dex use the same self-signed CA certificate
+- Dex supports multiple authentication backends: local password database, LDAP/Active Directory, GitHub, SAML, and other OIDC providers
+- For `kubectl` access, the OIDC flow goes through `kubelogin` which opens a browser to Dex, then caches the token locally
+- The Omni server validates tokens by calling Dex's OIDC discovery endpoint
+
 ## Architecture Diagram
 
 ```
