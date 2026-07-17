@@ -1,5 +1,18 @@
 # Talos Omni Architecture
 
+> **Reference:** [Omni Documentation](https://docs.siderolabs.com/omni/latest/) | [Run Omni On-Prem](https://docs.siderolabs.com/omni/self-hosted/run-omni-on-prem/) | [SideroLink Overview](https://www.siderolabs.com/platform/sidero-omni/)
+
+## What is Omni?
+
+[Sidero Omni](https://www.siderolabs.com/platform/sidero-omni/) is a Kubernetes management platform by Sidero Labs that automates the creation, scaling, and lifecycle management of Talos Linux clusters. It provides a central control plane for managing multiple Talos clusters through a web UI, CLI (`omnictl`), and API.
+
+Key capabilities:
+- **Cluster lifecycle** — create, scale, upgrade, and delete clusters
+- **Machine management** — register, label, and organize nodes into machine classes
+- **OIDC authentication** — users authenticate via Dex (built-in OIDC provider)
+- **SideroLink** — secure overlay network for management traffic (see below)
+- **Workload proxy** — exposes Kubernetes API through the Omni server (no load balancer needed)
+
 ## What is SideroLink?
 
 SideroLink is the **management overlay network** that connects Talos nodes to Omni. It's a WireGuard-based tunnel that replaces the need for direct network access to each node.
@@ -44,7 +57,7 @@ SideroLink is the **management overlay network** that connects Talos nodes to Om
 
 ## Key Points
 
-- **SideroLink** — Omni establishes a WireGuard-encrypted tunnel to each registered machine. See [What is SideroLink?](#what-is-siderolink) for a detailed explanation of how the connection works.
+- **SideroLink** — Omni establishes a WireGuard-encrypted tunnel to each registered machine.
 - **No LB for cluster** — Omni provides the Kubernetes API endpoint through the SideroLink tunnel. You don't need a CloudStack load balancer rule for port 6443.
 - **No port forwarding for talosctl** — `talosctl` communicates through Omni, not directly to nodes.
 - **Private IP only** — on a shared CloudStack network, all VMs (Omni + Talos nodes) can be on the same L2 segment, but they don't have to be. The Talos nodes just need L3 reachability to the Omni VM (routing between networks works fine). No public IP or port forwarding is required for Omni to function. The Omni UI is accessed directly at the private IP.
@@ -84,7 +97,7 @@ Enable gRPC tunnel mode with `--siderolink-use-grpc-tunnel` on Omni. This adds o
 
 ## TLS Requirement
 
-The initial gRPC connection uses HTTPS by default. If you use a self-signed CA, the Talos nodes will reject the connection. Use `grpc://` scheme in the machine API URL to skip TLS, or use a publicly trusted certificate (see [TLS Certificate Trust](#2-tls-certificate-trust-the-real-blocker) in the main guide).
+The initial gRPC connection uses HTTPS by default. If you use a self-signed CA, the Talos nodes will reject the connection. Use `grpc://` scheme in the machine API URL to skip TLS, or use a publicly trusted certificate (see [TLS Certificate Trust](../setup/talos/talos-omni.md#2-tls-certificate-trust-the-real-blocker) in the main guide).
 
 ## Ports
 
@@ -96,3 +109,15 @@ The initial gRPC connection uses HTTPS by default. If you use a self-signed CA, 
 | 8100 | TCP | Kubernetes proxy |
 | 5556 | TCP | Dex OIDC (HTTPS, same self-signed cert) |
 | 50180 | UDP | WireGuard (SideroLink) |
+
+## Further Reading
+
+- [Omni Documentation](https://docs.siderolabs.com/omni/latest/) — official docs
+- [Run Omni On-Prem](https://docs.siderolabs.com/omni/self-hosted/run-omni-on-prem/) — deployment guide
+- [Omni On-Prem Hardware Requirements](https://docs.siderolabs.com/omni/self-hosted/omni-on-prem-hardware-requirements/)
+- [SideroLink Overview](https://www.siderolabs.com/platform/sidero-omni/)
+- [Machine Registration](https://docs.siderolabs.com/omni/latest/infrastructure-and-extensions/machine-registration/)
+- [Create a Cluster](https://docs.siderolabs.com/omni/latest/getting-started/create-a-cluster/)
+- [Import Talos Clusters](https://docs.siderolabs.com/omni/cluster-management/importing-talos-clusters/)
+- [Omni Firewall and Egress Requirements](https://docs.siderolabs.com/omni/omni-cluster-setup/omni-firewall-egress-requirement/)
+- [Expose Omni with Nginx (HTTPS)](https://docs.siderolabs.com/omni/self-hosted/expose-omni-with-nginx-https/)
