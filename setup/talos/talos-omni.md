@@ -745,6 +745,19 @@ Set machineallocation.machineclass + machinecount on MachineSet
 
 For CloudStack, implementing a custom infrastructure provider is possible but requires significant effort — see [Write an Infrastructure Provider](https://docs.siderolabs.com/omni/infrastructure-and-extensions/writing-infrastructure-providers).
 
+### Node Management
+
+Omni provides built-in node management capabilities through the UI, accessible by clicking on a machine in the cluster view:
+
+- **Reboot** — gracefully reboot a node
+- **Shutdown** — power off a node
+- **View logs** — stream real-time Talos kernel and service logs
+- **Monitor metrics** — CPU, memory, disk, and network usage per node
+- **Kubeconfig download** — download the admin kubeconfig for the cluster
+- **Support bundle** — generate a support bundle for troubleshooting
+
+These operations work through the SideroLink tunnel, so no direct network access to the nodes is required — everything is proxied through Omni.
+
 ### Upgrades
 
 ```bash
