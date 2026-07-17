@@ -85,7 +85,9 @@ Enable gRPC tunnel mode with `--siderolink-use-grpc-tunnel` on Omni. This adds o
 
 **TLS requirement:** The initial gRPC connection uses HTTPS by default. If you use a self-signed CA, the Talos nodes will reject the connection. Use `grpc://` scheme in the machine API URL to skip TLS, or use a publicly trusted certificate (see [TLS Certificate Trust](#2-tls-certificate-trust-the-real-blocker)).
 
-### Architecture
+---
+
+## Architecture
 
 ```
 ┌──────────────────────────────────────────────────────────────────┐
