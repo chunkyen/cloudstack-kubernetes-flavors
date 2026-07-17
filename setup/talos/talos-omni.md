@@ -722,26 +722,7 @@ Manual scaling is done through the **Omni UI**:
 
 > **Note:** Labels and Machine Classes are used for **automatic** scaling (machines auto-join when they match a Machine Class). For manual scaling, use the Cluster Scaling page in the UI. See [Labels Do Not Auto-Assign Machines to Clusters](#14-labels-do-not-auto-assign-machines-to-clusters) in Lessons Learned.
 
-If you have a service account with write access, you can also scale via `omnictl` by creating a `ClusterMachine` resource:
-
-```bash
-cat > add-machine.yaml <<EOF
-metadata:
-    namespace: default
-    type: ClusterMachines.omni.sidero.dev
-    id: <machine-id>
-    labels:
-        omni.sidero.dev/cluster: omni-cluster
-        omni.sidero.dev/machine-set: omni-cluster-workers
-        omni.sidero.dev/role-worker: ""
-spec:
-    kubernetes_version: 1.36.2
-EOF
-
-omnictl apply -f add-machine.yaml
-```
-
-See [Service Account Keys Are Read-Only](#15-service-account-keys-are-read-only) for details on using OIDC auth for write access.
+If you have a service account with write access, you can also create resources like MachineClasses and MachineLabels via `omnictl apply`. However, ClusterMachines are **controller-managed** — they can only be created by the Omni controllers, not directly via `omnictl`. See [Controller-Managed Resources](#15-controller-managed-resources-cannot-be-created-via-omnictl-apply) for details.
 
 ### Upgrades
 
@@ -1251,40 +1232,27 @@ Setting a label (e.g., `type: worker`) on a machine in the Omni UI does **not** 
 
 This is the documented manual scaling workflow per the [official Omni blog](https://www.siderolabs.com/blog/automatic-cluster-scaling-with-omni/). The Machine Class + label approach is for **automatic** scaling (e.g., when machines are dynamically provisioned by an auto-scaling group).
 
-### 15. Service Account Keys Are Read-Only
+### 15. Controller-Managed Resources Cannot Be Created via `omnictl apply`
 
-Service account keys created via the Omni UI are **read-only** — there is no option to set write scope during creation. This means `omnictl apply` and `omnictl create` will fail with:
+Some resources in Omni are **controller-managed** — they have an `owner` field set by an internal controller (e.g., `MachineSetStatusController`). Attempting to create or modify these via `omnictl apply` will fail with:
 
 ```
 Error: rpc error: code = PermissionDenied desc = only read access is permitted
 ```
 
-For write operations via `omnictl`, authenticate interactively using OIDC:
+This is **not** a service account permission issue — it's a resource ownership constraint. The service account key (even with Admin role) cannot create or modify resources that are owned by internal controllers.
 
-```bash
-omnictl auth login
-```
+**Resources that are controller-managed:**
+- `ClusterMachines.omni.sidero.dev` — owned by `MachineSetStatusController`
+- `ClusterMachineConfigs`, `ClusterMachineStatuses`, etc.
 
-This opens a browser-based OIDC flow as `admin@omni.internal` which has full write access. The token is cached locally for the session.
+**Resources that can be created via `omnictl apply`:**
+- `MachineClasses.omni.sidero.dev`
+- `MachineLabels.omni.sidero.dev`
+- `Clusters.omni.sidero.dev`
+- `MachineSets.omni.sidero.dev`
 
-**To scale a cluster via `omnictl` (after OIDC login):**
-
-```bash
-cat > add-machine.yaml <<EOF
-metadata:
-    namespace: default
-    type: ClusterMachines.omni.sidero.dev
-    id: <machine-id>
-    labels:
-        omni.sidero.dev/cluster: omni-cluster
-        omni.sidero.dev/machine-set: omni-cluster-workers
-        omni.sidero.dev/role-worker: ""
-spec:
-    kubernetes_version: 1.36.2
-EOF
-
-omnictl apply -f add-machine.yaml
-```
+**To scale a cluster, use the Omni UI** (Clusters → Cluster Scaling) — this is the correct workflow since ClusterMachines are controller-managed.
 
 ### 16. Summary: What We'd Do Differently
 
@@ -1297,7 +1265,7 @@ If we were to deploy self-hosted Omni on CloudStack again:
 5. **Consider SaaS Omni** if the operational complexity of self-hosted is not justified for your use case
 6. **Always inject SideroLinkConfig userdata** — kernel args alone are not enough; pass the full YAML as base64-encoded `userdata` in `cmk deploy virtualmachine`
 7. **Use the UI for scaling, not labels** — setting labels on a machine does not add it to the cluster; use **Clusters → Cluster Scaling** to manually add machines
-8. **Use `omnictl auth login` (OIDC) for write access** — service account keys are read-only; authenticate interactively for `omnictl apply` to work
+8. **ClusterMachines are controller-managed** — they can't be created via `omnictl apply`; use the UI's Cluster Scaling page to add machines to a cluster
 
 ---
 ## References
