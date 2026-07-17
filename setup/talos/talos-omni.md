@@ -1244,7 +1244,7 @@ If we were to deploy self-hosted Omni on CloudStack again:
 3. **Create new clusters through Omni** — avoids the import complexity entirely
 4. **Pin the Omni version** and test flag changes before restarting
 5. **Back up the service account key** immediately after creation
-6. **Consider SaaS Omni** if the network topology doesn't support direct connectivity
+6. **Consider SaaS Omni** if the operational complexity of self-hosted is not justified for your use case
 
 ---
 ## References
