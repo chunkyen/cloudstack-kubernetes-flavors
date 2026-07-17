@@ -164,17 +164,6 @@ When you import an existing Talos cluster into Omni, the cluster is initially **
 
 **Note:** During import, Omni performs a health check that tries to reach the Kubernetes API through the SideroLink tunnel. If the Kubernetes API is exposed through a public IP (port forwarding), use `--skip-health-check` to avoid a timeout.
 
-## Ports
-
-| Port | Protocol | Purpose |
-|------|----------|---------|
-| 443 | TCP | Omni UI and API (HTTPS, self-signed cert) |
-| 8090 | TCP | SideroLink gRPC API |
-| 8091 | TCP | Event sink |
-| 8100 | TCP | Kubernetes proxy |
-| 5556 | TCP | Dex OIDC (HTTPS, same self-signed cert) |
-| 50180 | UDP | WireGuard (SideroLink) |
-
 ## Further Reading
 
 - [Omni Documentation](https://docs.siderolabs.com/omni/latest/) — official docs
