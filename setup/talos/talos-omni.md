@@ -111,6 +111,8 @@ newgrp docker
 
 All commands below run on the Omni VM. Both Omni and Dex serve HTTPS using the same self-signed CA. Install the CA certificate in your browser's trust store to avoid TLS warnings (see [Step 7](#step-7-access-the-omni-ui)).
 
+> **If using a public CA (e.g., Let's Encrypt):** The cert generation steps below can be skipped. See [Step 2](#step-2-generate-tls-certificates) for what changes.
+
 > **Hostname vs IP:** The official Sidero guide uses `omni.internal` and `auth.internal` hostnames with `/etc/hosts` entries. This guide uses the private IP (`${OMNI_IP}`) directly — no DNS or hosts file needed. If you prefer hostnames, replace `${OMNI_IP}` with your FQDN throughout and ensure DNS (or `/etc/hosts` on every client) resolves it to the Omni VM's IP.
 
 ### Step 1: Install cfssl
@@ -131,6 +133,8 @@ sudo mv cfssl cfssljson /usr/local/bin/
 ```
 
 ### Step 2: Generate TLS Certificates
+
+> **If using a public CA (e.g., Let's Encrypt):** Skip this step and the CA trust steps below. Instead, obtain a certificate for your Omni VM's FQDN (e.g., `omni.example.com`) via certbot or your preferred ACME client. You'll need a public IP and DNS record pointing to the Omni VM. The resulting `fullchain.pem` and `privkey.pem` replace the `server-chain.pem` and `server-key.pem` used in the Docker run command. You also won't need to install a CA in your browser or on Talos nodes — public CAs are trusted by default. The `grpc://` workaround for SideroLink is also unnecessary; use `https://` with the FQDN.
 
 ```bash
 cd ~/omni-setup
@@ -345,7 +349,8 @@ docker run -d \
 > - `--initial-users=admin@omni.internal` — authorizes this user on first start. Must match the email in Dex's `staticPasswords`
 > - `--private-key-source=file:///etc/omni/omni.asc` — the GPG key for etcd encryption (note the `file://` prefix)
 > - `--etcd-embedded` — uses embedded etcd (no external database needed)
-> - `--machine-api-advertised-url=grpc://${OMNI_IP}:8090/` — tells Talos nodes to connect to the SideroLink API without TLS. If omitted, Omni defaults to `https://`, which will fail if you use a self-signed CA (Talos nodes don't trust it). The `grpc://` scheme skips TLS — the WireGuard tunnel (SideroLink) still encrypts all data traffic. If you have a publicly trusted certificate, use `https://` instead.
+> - `--machine-api-advertised-url=grpc://${OMNI_IP}:8090/` — uses `grpc://` to skip TLS for self-signed certs. **If using a public CA**, change this to `https://<fqdn>:8090/` and the Talos nodes will trust the connection automatically
+> - `-v $(pwd)/ca.pem:/etc/ssl/certs/ca-certificates.crt:ro` — mounts the self-signed CA so the Omni container trusts Dex's certs. **If using a public CA**, this volume mount is not needed
 
 ### Step 6: Verify Omni is Running
 
@@ -367,6 +372,8 @@ curl -sk https://${OMNI_IP}:5556/.well-known/openid-configuration | head -5
 ### Step 7: Access the Omni UI
 
 Open `https://<omni-private-ip>:443` in your browser. You'll see a TLS warning because the certificate is self-signed — accept the risk and proceed. You'll see a second TLS warning when redirected to Dex on port 5556 — accept that too.
+
+> **If using a public CA:** No TLS warnings will appear. Access Omni at `https://<fqdn>:443` instead of the private IP.
 
 **To eliminate both warnings**, install the self-signed CA certificate in your browser's trust store:
 
@@ -1068,6 +1075,8 @@ To use Let's Encrypt:
 2. Set up a DNS A record pointing to the Omni VM's IP
 3. Use `certbot` or `acme.sh` to obtain a certificate
 4. Pass the Let's Encrypt cert and key to the Omni container instead of the self-signed cert
+
+> See [Step 2](#step-2-generate-tls-certificates) for a summary of what changes when using a public CA vs self-signed certs throughout the guide.
 
 If a public IP is not available, use the **DNS-01 challenge** with a DNS provider that supports it (e.g., Cloudflare, AWS Route53). This works with private IPs.
 
