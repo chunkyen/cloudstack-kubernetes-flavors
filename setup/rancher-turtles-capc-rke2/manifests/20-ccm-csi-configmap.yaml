@@ -17,8 +17,8 @@ data:
       cloud-config: |
         [Global]
         api-url = http://<management-server>:8080/client/api
-        api-key = "***"
-        secret-key = "<your-secret-key>"
+        api-key = "YOUR_API_KEY"
+        secret-key = "YOUR_SECRET_KEY"
         ssl-no-verify = "false"
     ---
     apiVersion: v1
