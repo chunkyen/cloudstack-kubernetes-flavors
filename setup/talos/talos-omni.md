@@ -30,7 +30,6 @@
 |--------|-------------------|-----------|
 | Config generation | `talosctl gen config` | Automatic |
 | Bootstrap | `talosctl bootstrap` | Automatic |
-| etcd management | Automatic (Talos handles membership) | Automatic |
 | Kubernetes API endpoint | Load balancer + port forwarding | SideroLink (WireGuard tunnel) |
 | Node registration | Full Talos config in userdata (from `talosctl gen config`) | SideroLinkConfig in userdata — machine appears in Omni inventory, then added to cluster via UI or `omnictl apply` |
 | Upgrades | `talosctl upgrade` per node | Automatic rolling upgrades |
@@ -987,7 +986,6 @@ Dex includes built-in cycle detection to prevent infinite loops.
 | VM provisioning | Manual `cmk` commands | Terraform `apply` | Manual (registration) or automatic (provider) |
 | Config generation | `talosctl gen config` | `talosctl gen config` | Automatic |
 | Bootstrap | `talosctl bootstrap` | `talosctl bootstrap` | Automatic |
-| etcd management | Automatic (Talos handles membership) | Automatic (Talos handles membership) | Automatic |
 | Kubernetes API endpoint | Load balancer (6443) | Load balancer (6443) | SideroLink tunnel |
 | talosctl access | Port forwarding (50000) | Port forwarding (50000) | Via Omni |
 | Scaling | Deploy VM + configure | Terraform apply | UI only (Cluster Scaling) — `omnictl apply` cannot create ClusterMachines, see [Controller-Managed Resources](#14-controller-managed-resources-cannot-be-created-via-omnictl-apply) |
