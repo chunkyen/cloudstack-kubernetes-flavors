@@ -56,6 +56,50 @@ Everything else — Rancher, Turtles, CAPC, CloudStack credentials, networking, 
 
 > **CloudStack fundamentals are the same:** The CloudStack-specific parts of the cluster manifest — template selection, service offering, zone, network, reserved public IP, `syncWithACS`, `host-passthrough` — work identically for both kubeadm and RKE2. For details on creating/uploading templates, reserving public IPs, network options, and manifest field reference, see the [CAPC setup guide](../capc/capc.md).
 
+## Template Requirements
+
+### Generic OS vs. CAPI image
+
+RKE2 CAPC uses a **generic Linux OS template** — not a CAPI-specific image.
+
+| | Kubeadm CAPC | RKE2 CAPC |
+|---|---|---|
+| **Template type** | CAPI image (containerd, kubelet, kubeadm, kubectl, cloud-init pre-installed) | Generic Linux OS (Ubuntu, Rocky, Debian, etc.) |
+| **Kubernetes binaries** | Pre-installed in template | Installed by RKE2 at bootstrap |
+| **Container runtime** | Pre-installed (containerd) | Installed by RKE2 at bootstrap |
+| **CNI** | Installed post-bootstrap | Installed by RKE2 at bootstrap |
+| **Bootstrap mechanism** | cloud-init runs `kubeadm init/join` | CAPRKE2 pushes RKE2 tarball; cloud-init executes the install script |
+
+### What the generic template needs
+
+| Requirement | Why | Checked by |
+|---|---|---|
+| **cloud-init installed** | CAPRKE2 generates a cloud-init `userData` script that downloads and installs RKE2. CloudStack injects this userData into the VM at first boot. | `cloud-init --version` |
+| **SSH server running** | For **human admin troubleshooting only** — not used by CAPRKE2 for bootstrap. | `systemctl status ssh` |
+| **SSH access** (optional) | Admin SSH login to debug boot issues. Use the `sshKey` field in `CloudStackMachineTemplate` — CloudStack injects this keypair. | CloudStack UI / `cmk list sshkeypairs` |
+
+### How CAPRKE2 bootstraps (no SSH needed)
+
+CAPRKE2 does **not** use the `sshKey` from `CloudStackMachineTemplate` for bootstrap. The key is purely for human admin access.
+
+The actual bootstrap flow:
+
+1. **CAPRKE2 generates bootstrap data** — creates a cloud-init `userData` script with RKE2 config
+2. **CAPC passes userData to CloudStack** — CloudStack injects it into the VM at boot
+3. **cloud-init runs on first boot** — executes the CAPRKE2-generated script
+4. **RKE2 tarball downloaded** — from the internet (default) or pre-staged internal source (air-gap)
+5. **RKE2 installs itself** — containerd, kubelet, etcd, CNI all from the tarball
+
+### Common template choices
+
+| OS | Notes |
+|---|---|
+| **Ubuntu 24.04 cloud image** | Most tested. cloud-init pre-installed. Good for both Calico and Cilium. |
+| **Rocky Linux 9** | RHEL-compatible. cloud-init pre-installed. |
+| **Debian 12** | Lightweight. cloud-init pre-installed. |
+
+> **Note:** Do **not** use a CAPI image-builder image for RKE2 — it contains pre-installed kubeadm/kubelet that RKE2 will try to replace, causing conflicts.
+
 ## Step 1: Install CAPRKE2 Providers
 
 Create the `CAPIProvider` resources for the RKE2 bootstrap and control-plane providers:
