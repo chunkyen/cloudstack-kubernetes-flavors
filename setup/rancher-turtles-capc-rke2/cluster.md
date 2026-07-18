@@ -38,16 +38,17 @@ Post-creation:
 
 ## What This Adds vs. Kubeadm-Based CAPC
 
-| | Kubeadm (existing) | RKE2 (this guide) |
-|---|---|---|
-| Bootstrap provider | `kubeadm` | `rke2` |
-| Control plane provider | `kubeadm` | `rke2` |
-| **CNI** | Manual (Calico/Flannel/Cilium) | Built-in (Calico default; Canal, Cilium, Flannel, or none configurable) |
-| CNI install | Helm chart or manifest | RKE2 auto-installs at bootstrap |
-| `preKubeadmCommands` / `preRKE2Commands` | Available | Available |
-| Provider ID | Same `cloudstack:///{{ ds.meta_data.instance_id }}` | Same |
-| `guest.cpu.mode: host-passthrough` | Required for Calico x86-64-v2 | Required for Calico x86-64-v2 |
-| CCM/CSI deployment | ClusterResourceSet or manual | Same |
+|| | Kubeadm (existing) | RKE2 (this guide) |
+|---|---|---|---|
+|| Bootstrap provider | `kubeadm` | `rke2` |
+|| Control plane provider | `kubeadm` | `rke2` |
+|| **CNI** | Manual (Calico/Flannel/Cilium) | Built-in (Calico default; Canal, Cilium, Flannel, or none configurable) |
+|| CNI install | Helm chart or manifest | RKE2 auto-installs at bootstrap |
+|| `preKubeadmCommands` / `preRKE2Commands` | Available | Available |
+|| Provider ID | Same `cloudstack:///{{ ds.meta_data.instance_id }}` | Same |
+|| `guest.cpu.mode: host-passthrough` | Required for Calico x86-64-v2 | Required for Calico x86-64-v2 |
+|| **CloudStack template** | CAPI image (containerd, kubelet, kubeadm, cloud-init pre-installed) | Generic Linux OS (RKE2 installs itself via tarball) |
+|| CCM/CSI deployment | ClusterResourceSet or manual | Same |
 
 Everything else — Rancher, Turtles, CAPC, CloudStack credentials, networking, ClusterResourceSet mechanics — is identical. See [Rancher+CAPC architecture](../../architecture/rancher-turtles-capc.md#bootstrap-provider-choice-kubeadm-vs-rke2) for a detailed comparison of why to choose RKE2 over kubeadm.
 
