@@ -11,8 +11,8 @@
 | Option | Description | Complexity | Best For |
 |--------|-------------|------------|----------|
 | **Omni SaaS** | Fully managed by Sidero Labs. No infrastructure to manage. | None | Most users; quick start, no ops overhead |
-| **Self-hosted (Docker)** | Single VM running Omni as a Docker container with embedded etcd. | Low | Most self-hosted environments; home labs, dev, production up to ~200 nodes |
-| **Self-hosted (Kubernetes)** | Omni deployed on a separate Kubernetes cluster (not managed by Omni). | Medium | Environments needing faster pod recovery or standardized K8s operations |
+| **Self-hosted (Docker)** | Single VM running Omni as a Docker container with embedded etcd. | Medium-High | Most self-hosted environments; home labs, dev, production up to ~200 nodes |
+| **Self-hosted (Kubernetes)** | Omni deployed on a separate Kubernetes cluster (not managed by Omni). | High | Environments needing faster pod recovery or standardized K8s operations |
 | **Self-hosted (HA)** | Multiple Omni instances backed by external etcd, HA registry, HA Image Factory, HA auth. | Very high | Strict uptime requirements (~99.99%); mature ops teams |
 
 **This guide focuses on the self-hosted Docker (single VM) approach** for the following reasons:
@@ -30,11 +30,11 @@
 |--------|-------------------|-----------|
 | Config generation | `talosctl gen config` | Automatic |
 | Bootstrap | `talosctl bootstrap` | Automatic |
-| etcd management | Manual join/remove | Automatic |
+| etcd management | Automatic (Talos handles membership) | Automatic |
 | Kubernetes API endpoint | Load balancer + port forwarding | SideroLink (WireGuard tunnel) |
-| Node registration | Embedded userdata | Machines register with Omni |
+| Node registration | Full Talos config in userdata (from `talosctl gen config`) | SideroLinkConfig in userdata — machine appears in Omni inventory, then added to cluster via UI or `omnictl apply` |
 | Upgrades | `talosctl upgrade` per node | Automatic rolling upgrades |
-| Scaling | Terraform + manual etcd | `omnictl apply` (YAML) |
+| Scaling | Deploy new VM + configure | UI only (Cluster Scaling) — see [Controller-Managed Resources](#14-controller-managed-resources-cannot-be-created-via-omnictl-apply) |
 | Monitoring | Manual | Omni UI |
 | talosctl access | Direct to node IPs | Via Omni through SideroLink |
 
@@ -987,10 +987,10 @@ Dex includes built-in cycle detection to prevent infinite loops.
 | VM provisioning | Manual `cmk` commands | Terraform `apply` | Manual (registration) or automatic (provider) |
 | Config generation | `talosctl gen config` | `talosctl gen config` | Automatic |
 | Bootstrap | `talosctl bootstrap` | `talosctl bootstrap` | Automatic |
-| etcd management | Manual | Manual (or auto-join) | Automatic |
+| etcd management | Automatic (Talos handles membership) | Automatic (Talos handles membership) | Automatic |
 | Kubernetes API endpoint | Load balancer (6443) | Load balancer (6443) | SideroLink tunnel |
 | talosctl access | Port forwarding (50000) | Port forwarding (50000) | Via Omni |
-| Scaling | Manual VMs + LB + etcd | Terraform apply + etcd | `omnictl apply` (YAML) |
+| Scaling | Deploy VM + configure | Terraform apply | UI only (Cluster Scaling) — `omnictl apply` cannot create ClusterMachines, see [Controller-Managed Resources](#14-controller-managed-resources-cannot-be-created-via-omnictl-apply) |
 | Upgrades | `talosctl upgrade` per node | `talosctl upgrade` per node | Automatic rolling |
 | CCM/CSI install | Manual | Manual | Manual (same) |
 | Monitoring | Manual | Manual | Omni UI |
