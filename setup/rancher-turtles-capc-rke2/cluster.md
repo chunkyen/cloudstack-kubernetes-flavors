@@ -135,24 +135,7 @@ The `Cluster` manifest includes the label `capc-rke2-ccm-csi: "true"` which matc
 | `preRKE2Commands` | `sleep 30` | Gives CloudStack time to fully provision the VM before RKE2 bootstrap starts. |
 | `capc-rke2-ccm-csi: "true"` | Cluster label | Matches the `ClusterResourceSet` selector so CCM + CSI are auto-deployed. |
 
-## Step 4: Create the CloudStack Secret (required for CCM + CSI)
-
-The upstream CCM and CSI manifests reference a secret named `cloudstack-secret` in `kube-system`. Create this on the workload cluster **after** the control plane is reachable:
-
-```bash
-# First, get the workload kubeconfig
-kubectl get secret capc-rke2-cluster-1-kubeconfig -n capc-rke2-cluster-1 \
-  -o jsonpath='{.data.value}' | base64 -d > workload-kubeconfig
-
-# Create the cloudstack-secret in kube-system on the workload cluster
-KUBECONFIG=workload-kubeconfig kubectl create secret generic cloudstack-secret -n kube-system \
-  --from-literal=cloud-config="[Global]
-api-url = http://<cloudstack-host>:8080/client/api
-api-key = <your-api-key>
-secret-key = <your-secret-key>"
-```
-
-The ClusterResourceSet controller detects the cluster is ready and automatically applies CCM + CSI to the workload cluster. Once the secret exists, the CCM and CSI pods can authenticate with CloudStack.
+> **Note:** The `cloudstack-secret` containing CloudStack API credentials is embedded in the ConfigMap (`20-ccm-csi-configmap.yaml`) and is created automatically on the workload cluster by ClusterResourceSet — no separate manual step needed. Replace the placeholder values (`api-url`, `api-key`, `secret-key`) in the ConfigMap before applying.
 
 ## Verification
 
@@ -235,7 +218,9 @@ The `provider-id` must be `cloudstack:///{{ ds.meta_data.instance_id }}` — no 
 
 ## Standalone Manifests (optional — without ClusterResourceSet)
 
-If you need to apply CCM + CSI manually (e.g. to an existing cluster not created with `cluster.md`), use the individual files in `manifests/`:
+If you need to apply CCM + CSI manually (e.g. to an existing cluster not created with `cluster.md`), use the individual files in `manifests/`.
+
+> **Secret required:** When deploying manually, you must also create the `cloudstack-secret` in `kube-system` on the workload cluster separately. The CRS ConfigMap embeds this secret automatically; standalone manifests do not.
 
 | File | Source | Notes |
 |---|---|---|

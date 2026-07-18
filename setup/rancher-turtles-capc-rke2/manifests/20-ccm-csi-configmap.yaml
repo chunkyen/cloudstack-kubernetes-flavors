@@ -6,6 +6,21 @@ metadata:
 data:
   ccm.yaml: |
     ---
+    # CloudStack credentials secret for CCM and CSI
+    apiVersion: v1
+    kind: Secret
+    metadata:
+      name: cloudstack-secret
+      namespace: kube-system
+    type: Opaque
+    stringData:
+      cloud-config: |
+        [Global]
+        api-url = http://<management-server>:8080/client/api
+        api-key = "***"
+        secret-key = "<your-secret-key>"
+        ssl-no-verify = "false"
+    ---
     apiVersion: v1
     kind: ServiceAccount
     metadata:
