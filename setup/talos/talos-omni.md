@@ -221,6 +221,7 @@ Dex serves over **HTTPS** using the same self-signed CA and certificate as Omni.
 
 ```
 Browser ──HTTPS──→ Omni (port 443, self-signed cert)
+Omni   ──redirect──→ Dex (port 5556)
 Browser ──HTTPS──→ Dex  (port 5556, same self-signed cert)
 Dex     ──HTTPS──→ Browser (redirect back to Omni)
 Browser ──HTTPS──→ Omni (port 443, /oidc/consume)
