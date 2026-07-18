@@ -234,18 +234,40 @@ kubectl apply -f 10-minimal-cluster.yaml
 | `registrationMethod` | `internal-first` | Nodes register via internal IP first, falling back to external. |
 | `preRKE2Commands` | `sleep 30` | Gives CloudStack time to fully provision the VM before RKE2 bootstrap starts. |
 
-## Step 4: Deploy CCM and CSI via ClusterResourceSet
+## Step 4: Deploy CCM and CSI
 
-The ConfigMap at `manifests/20-ccm-csi-configmap.yaml` contains the **exact upstream YAML** from the official repos — no modifications to the CCM RBAC or deployment. This means the CCM includes the proper `extension-apiserver-authentication-reader` RoleBinding and correct ClusterRole with `configmaps` access out of the box.
+### Option A: Standalone manifests (apply directly to the workload cluster)
 
-The only change from upstream is the removal of the `/run/cloud-init/` hostPath mount from the CSI node DaemonSet, since RKE2 nodes use RKE2's own bootstrap (not cloud-init) and that directory doesn't exist.
+If you prefer individual files or want to deploy without ClusterResourceSet:
 
-| Component | Source | Image |
-|---|---|---|
-| **CCM** | [upstream deployment.yaml](https://github.com/apache/cloudstack-kubernetes-provider/blob/main/deployment.yaml) | `apache/cloudstack-kubernetes-provider:v1.2.0` |
-| **CSI** | [upstream deploy/k8s/](https://github.com/cloudstack/cloudstack-csi-driver/tree/main/deploy/k8s) | `ghcr.io/cloudstack/cloudstack-csi-driver:main` |
+```bash
+# CCM — exact upstream, no modifications
+kubectl apply -f manifests/cloudstack-ccm.yaml
 
-### 4a. Create the CloudStack secret in the workload cluster
+# CSI — apply in order
+kubectl apply -f manifests/cloudstack-csi-rbac.yaml
+kubectl apply -f manifests/cloudstack-csi-snapshot-crds.yaml
+kubectl apply -f manifests/cloudstack-csi-volume-snapshot-class.yaml
+kubectl apply -f manifests/cloudstack-csi-driver.yaml
+kubectl apply -f manifests/cloudstack-csi-controller-deployment.yaml
+kubectl apply -f manifests/cloudstack-csi-node-daemonset-rke2.yaml   # RKE2-patched
+```
+
+| File | Source | Image | Notes |
+|---|---|---|---|
+| `cloudstack-ccm.yaml` | [upstream deployment.yaml](https://github.com/apache/cloudstack-kubernetes-provider/blob/main/deployment.yaml) | `apache/cloudstack-kubernetes-provider:v1.2.0` | Exact upstream — no changes |
+| `cloudstack-csi-rbac.yaml` | [upstream rbac.yaml](https://github.com/cloudstack/cloudstack-csi-driver/tree/main/deploy/k8s) | — | Exact upstream |
+| `cloudstack-csi-controller-deployment.yaml` | [upstream controller-deployment.yaml](https://github.com/cloudstack/cloudstack-csi-driver/tree/main/deploy/k8s) | `ghcr.io/cloudstack/cloudstack-csi-driver:main` | Exact upstream |
+| `cloudstack-csi-driver.yaml` | [upstream csidriver.yaml](https://github.com/cloudstack/cloudstack-csi-driver/tree/main/deploy/k8s) | — | Exact upstream |
+| `cloudstack-csi-snapshot-crds.yaml` | [upstream 00-snapshot-crds.yaml](https://github.com/cloudstack/cloudstack-csi-driver/tree/main/deploy/k8s) | — | Exact upstream |
+| `cloudstack-csi-volume-snapshot-class.yaml` | [upstream volume-snapshot-class.yaml](https://github.com/cloudstack/cloudstack-csi-driver/tree/main/deploy/k8s) | — | Exact upstream |
+| `cloudstack-csi-node-daemonset-rke2.yaml` | [upstream node-daemonset.yaml](https://github.com/cloudstack/cloudstack-csi-driver/tree/main/deploy/k8s) | `ghcr.io/cloudstack/cloudstack-csi-driver:main` | `/run/cloud-init/` mount removed for RKE2 |
+
+### Option B: ClusterResourceSet (auto-deployed by CAPI after cluster creation)
+
+The ConfigMap at `manifests/20-ccm-csi-configmap.yaml` contains the **exact upstream YAML** — no modifications to the CCM RBAC or CSI controller. The only change from upstream is the removal of the `/run/cloud-init/` hostPath mount from the CSI node DaemonSet, since RKE2 nodes use RKE2's own bootstrap (not cloud-init) and that directory doesn't exist.
+
+#### 4a. Create the CloudStack secret in the workload cluster
 
 The official manifests expect a secret named `cloudstack-secret` in `kube-system`:
 
@@ -258,7 +280,7 @@ secret-key = <your-secret-key>
 ssl-no-verify = false"
 ```
 
-### 4b. Create the ConfigMap with all manifests
+#### 4b. Create the ConfigMap with all manifests
 
 ```yaml
 # 20-ccm-csi-configmap.yaml
@@ -290,11 +312,11 @@ data:
     ...
 ```
 
-> **Note:** The full content of each file is the exact YAML from the upstream repos. See the [official CCM deployment.yaml](https://github.com/apache/cloudstack-kubernetes-provider/blob/main/deployment.yaml) and [CSI deploy/k8s/](https://github.com/cloudstack/cloudstack-csi-driver/tree/main/deploy/k8s) for the complete manifests.
+> **Note:** The full content of each key is the exact YAML from the upstream repos. See the [official CCM deployment.yaml](https://github.com/apache/cloudstack-kubernetes-provider/blob/main/deployment.yaml) and [CSI deploy/k8s/](https://github.com/cloudstack/cloudstack-csi-driver/tree/main/deploy/k8s) for the complete manifests. If you prefer individual files, the `manifests/` directory also contains each as a standalone file (see the table above).
 >
 > **RKE2-specific change:** The `/run/cloud-init/` hostPath mount was removed from the CSI node DaemonSet because RKE2 nodes use RKE2's own bootstrap (not cloud-init) and that directory doesn't exist. Without this removal, the CSI node container crashes with exit code 2 on RKE2 nodes.
 
-### 4c. Create the ClusterResourceSet
+#### 4c. Create the ClusterResourceSet
 
 ```yaml
 # 21-clusterresourceset.yaml
@@ -313,7 +335,7 @@ spec:
   strategy: Reconcile
 ```
 
-### 4d. Label the cluster and apply
+#### 4d. Label the cluster and apply
 
 ```bash
 kubectl label cluster capc-rke2-cluster-1 -n capc-rke2-cluster-1 capc-rke2-ccm-csi=true --overwrite
