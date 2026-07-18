@@ -168,6 +168,24 @@ KUBECONFIG=workload-kubeconfig kubectl get pods -A
 
 Expected result: 3 nodes (1 control-plane + 2 workers), all `Ready`, with Calico, CoreDNS, CCM, and CSI running.
 
+### Verify CCM and CSI specifically
+
+```bash
+# CCM
+KUBECONFIG=workload-kubeconfig kubectl get deployment -n kube-system cloud-controller-manager
+
+# CSI controller and node daemonset
+KUBECONFIG=workload-kubeconfig kubectl get deployment -n kube-system cloudstack-csi-controller
+KUBECONFIG=workload-kubeconfig kubectl get daemonset -n kube-system cloudstack-csi-node
+
+# CSIDriver registered
+KUBECONFIG=workload-kubeconfig kubectl get csidriver
+
+# ClusterResourceSet applied successfully
+kubectl get clusterresourcesetbinding -n capc-rke2-cluster-1
+# → resources[0].applied: true
+```
+
 ## Troubleshooting
 
 ### Calico crashes with `Fatal glibc error: CPU does not support x86-64-v2`
@@ -189,6 +207,45 @@ If the control plane is `NotReady` due to Calico, apply the host-passthrough fix
 ### Provider ID format
 
 The `provider-id` must be `cloudstack:///{{ ds.meta_data.instance_id }}` — no quotes around the template expression. If quotes are present, the literal string `{{ ds.meta_data.instance_id }}` is used instead of the resolved value.
+
+### CSI node container crashes with exit code 2
+
+**Cause:** The upstream CSI node DaemonSet mounts `/run/cloud-init/` to read instance metadata, but RKE2 nodes do **not** use cloud-init — RKE2 installs itself via tarball at bootstrap — so this directory does not exist.
+
+**Fix:** The ConfigMap (`20-ccm-csi-configmap.yaml`) and the standalone `cloudstack-csi-node-daemonset-rke2.yaml` both have this mount removed. If you are using your own upstream manifests, remove the `cloud-init-dir` volumeMount and volume:
+
+```yaml
+# Remove this from the CSI node DaemonSet container:
+- name: cloud-init-dir
+  mountPath: /run/cloud-init
+
+# Remove this from the CSI node DaemonSet volumes:
+- name: cloud-init-dir
+  hostPath:
+    path: /run/cloud-init
+```
+
+### CSI controller pod stays Pending
+
+**Cause:** The upstream CSI controller Deployment sets `replicas: 2` with `podAntiAffinity` requiring deployment across different hosts. On a single-node RKE2 control plane, the second replica can never schedule.
+
+**Fix:** The ConfigMap (`20-ccm-csi-configmap.yaml`) and the standalone `cloudstack-csi-controller-deployment-rke2.yaml` both set `replicas: 1` and remove `podAntiAffinity`. If you are using your own upstream manifests, change to `replicas: 1` and remove the `podAntiAffinity` block.
+
+## Standalone Manifests (optional — without ClusterResourceSet)
+
+If you need to apply CCM + CSI manually (e.g. to an existing cluster not created with `cluster.md`), use the individual files in `manifests/`:
+
+| File | Source | Notes |
+|---|---|---|
+| `cloudstack-ccm.yaml` | [upstream](https://github.com/apache/cloudstack-kubernetes-provider/blob/main/deployment.yaml) | Exact upstream — no changes |
+| `cloudstack-csi-rbac.yaml` | [upstream](https://github.com/cloudstack/cloudstack-csi-driver/tree/main/deploy/k8s) | Exact upstream |
+| `cloudstack-csi-snapshot-crds.yaml` | [upstream](https://github.com/cloudstack/cloudstack-csi-driver/tree/main/deploy/k8s) | Exact upstream |
+| `cloudstack-csi-volume-snapshot-class.yaml` | [upstream](https://github.com/cloudstack/cloudstack-csi-driver/tree/main/deploy/k8s) | Exact upstream |
+| `cloudstack-csi-driver.yaml` | [upstream](https://github.com/cloudstack/cloudstack-csi-driver/tree/main/deploy/k8s) | Exact upstream |
+| `cloudstack-csi-controller-deployment-rke2.yaml` | [upstream](https://github.com/cloudstack/cloudstack-csi-driver/tree/main/deploy/k8s) | **RKE2 patch:** `replicas: 1`, removed `podAntiAffinity` |
+| `cloudstack-csi-node-daemonset-rke2.yaml` | [upstream](https://github.com/cloudstack/cloudstack-csi-driver/tree/main/deploy/k8s) | **RKE2 patch:** removed `/run/cloud-init/` mount |
+
+The exact RKE2 changes are documented as inline YAML comments in both `-rke2` files.
 
 ## Cleanup
 
