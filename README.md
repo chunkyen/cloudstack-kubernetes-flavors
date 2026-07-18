@@ -54,6 +54,16 @@ These components are required or recommended for **every flavor**:
 
 The Rancher Turtles integration combines three layers — Rancher (management plane with UI, Fleet GitOps, RBAC), Turtles (CAPI operator for declarative provider management), and CAPC (CloudStack infrastructure provider). See [Rancher+CAPC architecture](architecture/rancher-turtles-capc.md) for the full architecture breakdown.
 
+Two bootstrap providers are supported:
+
+| | Kubeadm | RKE2 |
+|---|---|---|
+| **Bootstrap** | `kubeadm` | `rke2` |
+| **Control plane** | `kubeadm` | `rke2` |
+| **CNI** | Manual install (Calico/Flannel/Cilium) | Built-in Calico |
+| **Image** | CAPI-compatible image (kubelet + kubeadm pre-installed) | Standard OS template |
+| **RKE2 advantage** | — | No custom image build; RKE2 auto-installs via tarball; built-in CNI; etcd encryption by default; CIS-hardened; simpler upgrades |
+
 **Phase 1 — Deploy Management Plane:**
 
 - [Deploy Rancher on CKS](setup/rancher-turtles-capc/rancher.md)
@@ -61,28 +71,22 @@ The Rancher Turtles integration combines three layers — Rancher (management pl
 
 **Phase 2 — Create & Manage Workload Clusters:**
 
+**Kubeadm-based:**
 - [Create workload clusters](setup/rancher-turtles-capc/cluster.md) — minimal/HA cluster creation, scaling, upgrade, troubleshooting
 - [Full-stack onboarding (CNI + CCM + CSI)](setup/rancher-turtles-capc/full-stack-onboarding.md) — auto-install all components via ClusterResourceSet
 - [Fleet GitOps](setup/rancher-turtles-capc/fleet.md) — automate cluster management with Fleet
 - [Manifests README](setup/rancher-turtles-capc/manifests/README.md) — all YAML manifests with descriptions
 
-> **ClusterClass note:** CAPI ClusterClass (topology-based clusters) is **not available** for CAPC because CAPC does not implement `CloudStackClusterTemplate`, the CRD required by ClusterClass's `infrastructure.templateRef`. Clusters must use explicit CRD references. See [Rancher+CAPC architecture](architecture/rancher-turtles-capc.md#clusterclass--not-available-for-capc) for details.
->
-> **CNI/CCM/CSI:** For Kubeadm-based CAPC clusters (no built-in CNI), use [ClusterResourceSet](https://turtles.docs.rancher.com/turtles/stable/en/user/applications.html) — the approach recommended by the Rancher Turtles documentation — to auto-install bootstrap applications. See [Full-stack onboarding](setup/rancher-turtles-capc/full-stack-onboarding.md).
-
-#### Rancher Turtles + CAPC + RKE2
-
-An alternative to the kubeadm-based CAPC clusters above: use **CAPRKE2** (the RKE2 bootstrap/control-plane provider) instead of kubeadm. RKE2 bundles its own CNI (Calico), CoreDNS, and ingress controller — no separate CNI installation needed. CCM and CSI are deployed via ClusterResourceSet, same as the kubeadm variant.
-
+**RKE2-based:**
 - [Cluster creation](setup/rancher-turtles-capc-rke2/cluster.md) — RKE2 cluster provisioning on CloudStack
 - [CCM + CSI deployment](setup/rancher-turtles-capc-rke2/ccm-csi.md) — CloudStack CCM and CSI with RKE2 patches
 - [Manifests](setup/rancher-turtles-capc-rke2/manifests/) — all YAML files
 
-> **Key differences from kubeadm-based CAPC:**
-> - Uses `RKE2ControlPlane` + `RKE2ConfigTemplate` instead of `KubeadmControlPlane` + `KubeadmConfigTemplate`
-> - RKE2 installs itself via tarball at bootstrap — no custom image needed, standard OS templates work
-> - Built-in Calico (set via `serverConfig.cni: calico`) — no separate CNI manifest
-> - Requires `guest.cpu.mode: host-passthrough` on CloudStackMachineTemplates because Calico ≥v3.28 needs x86-64-v2 CPU instructions
+> **ClusterClass note:** CAPI ClusterClass (topology-based clusters) is **not available** for CAPC because CAPC does not implement `CloudStackClusterTemplate`, the CRD required by ClusterClass's `infrastructure.templateRef`. Clusters must use explicit CRD references. See [Rancher+CAPC architecture](architecture/rancher-turtles-capc.md#clusterclass--not-available-for-capc) for details.
+>
+> **CNI/CCM/CSI:** For Kubeadm-based CAPC clusters (no built-in CNI), use [ClusterResourceSet](https://turtles.docs.rancher.com/turtles/stable/en/user/applications.html) — the approach recommended by the Rancher Turtles documentation — to auto-install bootstrap applications. See [Full-stack onboarding](setup/rancher-turtles-capc/full-stack-onboarding.md).
+>
+> For RKE2-based CAPC clusters, CNI is built-in (Calico). Only CCM + CSI need deployment via ClusterResourceSet or standalone manifests. See [ccm-csi.md](setup/rancher-turtles-capc-rke2/ccm-csi.md).
 
 #### Talos Linux
 

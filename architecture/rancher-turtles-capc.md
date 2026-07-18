@@ -24,8 +24,10 @@ The result: declarative, GitOps-driven Kubernetes cluster provisioning on CloudS
 │  │  │ Rancher      │  │ Turtles Controller               │  │   │
 │  │  │ Server       │  │                                  │  │   │
 │  │  │              │  │  CAPIProvider: core              │  │   │
-│  │  │  Fleet       │◄─┼─ CAPIProvider: kubeadm-bootstrap │  │   │
-│  │  │  (GitOps)    │  │  CAPIProvider: kubeadm-cp        │  │   │
+│  │  │              │  │  CAPIProvider: kubeadm-bootstrap │  │   │
+│  │  │  Fleet       │◄─┼─ CAPIProvider: kubeadm-cp        │  │   │
+│  │  │  (GitOps)    │  │  CAPIProvider: rke2-bootstrap    │  │   │
+│  │  │              │  │  CAPIProvider: rke2-cp           │  │   │
 │  │  │              │  │  CAPIProvider: cloudstack        │  │   │
 │  │  │  Cluster UI  │  │                                  │  │   │
 │  │  │  + Project   │  └──────────────┬───────────────────┘  │   │
@@ -74,7 +76,38 @@ The bootstrap cluster is where Rancher and Turtles run. It can be:
 | `cluster-api` | core | CAPI core controllers |
 | `kubeadm` | bootstrap | Kubeadm bootstrap data generation |
 | `kubeadm` | controlPlane | Control plane machine lifecycle |
+| `rke2` | bootstrap | RKE2 bootstrap data generation |
+| `rke2` | controlPlane | RKE2 control plane lifecycle |
 | `cloudstack` | infrastructure | CloudStack VM provisioning (CAPC) |
+
+> **Note:** You install either kubeadm *or* rke2 bootstrap/control-plane providers — not both. kubeadm is the default CAPI bootstrap provider. rke2 is an alternative that bundles its own CNI and etcd encryption.
+
+### Bootstrap Provider Choice: Kubeadm vs RKE2
+
+Turtles supports two bootstrap/control-plane providers for CAPC clusters:
+
+| Aspect | Kubeadm | RKE2 |
+|--------|---------|------|
+| **CNI** | Manual install (Calico, Flannel, Cilium) | Built-in Calico (CNI auto-installed) |
+| **OS image** | CAPI-compatible image (kubelet + kubeadm pre-installed) | Standard Ubuntu/Rocky template |
+| **Bootstrap method** | cloud-init runs `kubeadm init/join` | RKE2 tarball auto-extracts and installs at bootstrap |
+| **etcd encryption** | Manual configuration | Enabled by default |
+| **CIS hardening** | Optional, manual | Built-in, applied automatically |
+| **Upgrade complexity** | New image + rolling replace | In-place rolling upgrade via `rke2-server` |
+| **Use case** | Fine-grained control, custom CNI | Simplicity, built-in security, faster provisioning |
+
+**When to choose RKE2:**
+- You want to avoid building and maintaining CAPI-compatible images
+- You prefer Calico as CNI and don't need custom CNI choices
+- You want etcd encryption and CIS hardening out of the box
+- You want simpler cluster upgrades (in-place vs image replacement)
+- You have standard OS templates available in CloudStack
+
+**When to stick with Kubeadm:**
+- You need a CNI other than Calico (e.g. Cilium, Flannel)
+- You want full control over the bootstrap process
+- You already have a CAPI-compatible image pipeline
+- You need features only available in kubeadm (e.g. specific kubeadm configuration)
 
 ### Layer 3: CAPC (Workload Clusters)
 
@@ -102,7 +135,7 @@ CAPC runs inside the management cluster and:
 5. CAPC controller provisions CloudStack VMs
          │
          ▼
-6. VMs boot with cloud-init → kubeadm init/join
+6. VMs boot with cloud-init → kubeadm init/join (or RKE2 tarball auto-install)
          │
          ▼
 7. Cluster becomes Ready — Rancher Turtles auto-imports it into Rancher UI
@@ -125,6 +158,7 @@ CAPC runs inside the management cluster and:
 | **Upgrade path** | Manual provider + cluster | Helm upgrade + CAPI rolling update |
 | **Cluster templates** | Manual YAML | Manual YAML (ClusterClass not available — see below) |
 | **Bootstrap apps (CNI/CCM/CSI)** | Manual `kubectl apply` | ClusterResourceSet (CAPI-native) or Fleet GitOps |
+| **Bootstrap provider** | kubeadm only | kubeadm or RKE2 |
 
 ## ClusterResourceSet — Bootstrap Application Injection
 
