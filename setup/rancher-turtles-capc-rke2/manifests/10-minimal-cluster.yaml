@@ -1,4 +1,5 @@
 # Minimal CAPC + RKE2 cluster — 1 control plane + 2 workers
+# Includes ClusterResourceSet label for automatic CCM + CSI deployment
 # Concrete values for CloudStack lab (cyz1 zone)
 ---
 apiVersion: cluster.x-k8s.io/v1beta1
@@ -8,6 +9,7 @@ metadata:
   namespace: capc-rke2-cluster-1
   labels:
     cluster-api.cattle.io/rancher-auto-import: "true"
+    capc-rke2-ccm-csi: "true"
 spec:
   clusterNetwork:
     pods:

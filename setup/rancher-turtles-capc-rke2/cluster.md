@@ -102,10 +102,15 @@ kubectl create secret generic cloudstack-credentials \
   --from-literal=api-url="http://<cloudstack-host>:8080/client/api"
 ```
 
-## Step 3: Deploy the Cluster
+## Step 3: Deploy the Cluster (with CCM + CSI via ClusterResourceSet)
+
+This step deploys three resources together — the cluster itself plus the ClusterResourceSet that automatically installs CCM and CSI after the cluster comes up.
 
 ```bash
-kubectl apply -f manifests/10-minimal-cluster.yaml
+# Deploy cluster + ConfigMap + ClusterResourceSet together
+kubectl apply -f manifests/10-minimal-cluster.yaml \
+  -f manifests/20-ccm-csi-configmap.yaml \
+  -f manifests/21-clusterresourceset.yaml
 ```
 
 Wait for the cluster to become ready:
@@ -114,6 +119,8 @@ Wait for the cluster to become ready:
 kubectl get cluster -n capc-rke2-cluster-1 -w
 kubectl get machines -n capc-rke2-cluster-1 -w
 ```
+
+The `Cluster` manifest includes the label `capc-rke2-ccm-csi: "true"` which matches the `ClusterResourceSet` selector. Once the cluster's API server is reachable, the ClusterResourceSet controller automatically applies CCM and CSI to the workload cluster — no manual post-step required.
 
 ### Key details in the manifest
 
@@ -124,10 +131,7 @@ kubectl get machines -n capc-rke2-cluster-1 -w
 | `cni` | `calico` | RKE2's built-in CNI. Calico is installed as a Helm chart by RKE2 automatically. |
 | `registrationMethod` | `internal-first` | Nodes register via internal IP first, falling back to external. |
 | `preRKE2Commands` | `sleep 30` | Gives CloudStack time to fully provision the VM before RKE2 bootstrap starts. |
-
-## Step 4: Deploy CCM and CSI
-
-See [ccm-csi.md](./ccm-csi.md) for full CCM and CSI deployment instructions — both standalone manifests and ClusterResourceSet options.
+| `capc-rke2-ccm-csi: "true"` | Cluster label | Matches the `ClusterResourceSet` selector so CCM + CSI are auto-deployed. |
 
 ## Verification
 

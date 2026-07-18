@@ -1,6 +1,11 @@
 # Deploy CloudStack CCM and CSI on RKE2
 
-Deploy the CloudStack **Cloud Controller Manager (CCM)** and **CSI Driver** on an RKE2 cluster provisioned via Rancher Turtles + CAPC.
+The CloudStack **Cloud Controller Manager (CCM)** and **CSI Driver** are deployed automatically as part of cluster provisioning via **ClusterResourceSet** (see [`cluster.md` Step 3](./cluster.md)).
+
+This document details the manifests, upstream sources, and RKE2-specific patches. You only need this if you are:
+- **Debugging** the auto-deployed components
+- **Deploying manually** to an existing cluster (not via `cluster.md`)
+- **Modifying** the ClusterResourceSet ConfigMap
 
 ## Architecture
 
@@ -14,9 +19,11 @@ ClusterResourceSet (CAPI addon)
        └─ csidriver.yaml → CSIDriver resource
 ```
 
-## Option A: Standalone manifests (apply directly to the workload cluster)
+> **Default path:** The `Cluster` manifest at `manifests/10-minimal-cluster.yaml` already includes the `capc-rke2-ccm-csi: "true"` label. When you apply `10-minimal-cluster.yaml` + `20-ccm-csi-configmap.yaml` + `21-clusterresourceset.yaml` together, CCM + CSI are installed automatically. No post-step needed.
 
-If you prefer individual files or want to deploy without ClusterResourceSet:
+## Standalone manifests (for existing clusters or debugging)
+
+If you need to apply CCM + CSI manually to a cluster that was not created with the ClusterResourceSet label:
 
 ```bash
 # CCM — exact upstream, no modifications
@@ -54,9 +61,24 @@ kubectl apply -f manifests/cloudstack-csi-node-daemonset-rke2.yaml         # RKE
 
 The exact changes are documented as inline YAML comments in both files.
 
-## Option B: ClusterResourceSet (auto-deployed by CAPI after cluster creation)
+## ClusterResourceSet (default — used by cluster.md)
 
-The ConfigMap at `manifests/20-ccm-csi-configmap.yaml` contains the **exact upstream YAML** — no modifications to the CCM RBAC or CSI controller. The only change from upstream is the removal of the `/run/cloud-init/` hostPath mount from the CSI node DaemonSet, since RKE2 nodes use RKE2's own bootstrap (not cloud-init) and that directory doesn't exist.
+The ClusterResourceSet at `manifests/21-clusterresourceset.yaml` automatically applies CCM + CSI to any cluster matching the label selector `capc-rke2-ccm-csi: "true"`.
+
+### How it works
+
+1. The `Cluster` manifest (`10-minimal-cluster.yaml`) includes the label `capc-rke2-ccm-csi: "true"` — this is already set; no extra step needed.
+2. The ConfigMap (`20-ccm-csi-configmap.yaml`) contains the bundled CCM + CSI YAML.
+3. The ClusterResourceSet (`21-clusterresourceset.yaml`) watches for clusters with the matching label and applies the ConfigMap contents to the workload cluster's API server.
+4. Once the workload cluster's control plane is reachable, CCM and CSI are installed automatically.
+
+### Apply all three resources together
+
+```bash
+kubectl apply -f manifests/10-minimal-cluster.yaml \
+  -f manifests/20-ccm-csi-configmap.yaml \
+  -f manifests/21-clusterresourceset.yaml
+```
 
 ### 1. Create the CloudStack secret in the workload cluster
 
@@ -71,48 +93,34 @@ secret-key = <your-secret-key>
 ssl-no-verify = false"
 ```
 
-### 2. Create the ConfigMap with all manifests
+### 2. Verify the ClusterResourceSet applied
 
 ```bash
-kubectl apply -f manifests/20-ccm-csi-configmap.yaml
+kubectl get clusterresourceset -n capc-rke2-cluster-1
+# Expected: capc-rke2-cluster-1-ccm-csi   strategy: Reconcile
+
+# Check resources were applied to workload cluster
+KUBECONFIG=workload-kubeconfig kubectl get pods -n kube-system
+# Expected: cloudstack-ccm-xxx Running, cloudstack-csi-controller-xxx Running, cloudstack-csi-node-xxx Running
 ```
 
-The ConfigMap contains 5 keys:
-- `ccm.yaml` — full CCM manifest from upstream
-- `csi-rbac.yaml` — CSI RBAC
-- `csi-controller.yaml` — CSI controller Deployment
-- `csi-node.yaml` — CSI node DaemonSet (RKE2-patched)
-- `csidriver.yaml` — CSIDriver resource
+The ConfigMap contains the **exact upstream YAML** — no modifications to the CCM RBAC or CSI controller. The only change from upstream is the removal of the `/run/cloud-init/` hostPath mount from the CSI node DaemonSet, since RKE2 nodes use RKE2's own bootstrap (not cloud-init) and that directory doesn't exist.
 
-> **Note:** The full content of each key is the exact YAML from the upstream repos. See the [official CCM deployment.yaml](https://github.com/apache/cloudstack-kubernetes-provider/blob/main/deployment.yaml) and [CSI deploy/k8s/](https://github.com/cloudstack/cloudstack-csi-driver/tree/main/deploy/k8s) for the complete manifests. If you prefer individual files, the `manifests/` directory also contains each as a standalone file.
->
-> **RKE2-specific change:** The `/run/cloud-init/` hostPath mount was removed from the CSI node DaemonSet because RKE2 nodes use RKE2's own bootstrap (not cloud-init) and that directory doesn't exist. Without this removal, the CSI node container crashes with exit code 2 on RKE2 nodes.
+### Troubleshooting CRS
 
-### 3. Create the ClusterResourceSet
+If the ClusterResourceSet doesn't apply, check:
 
 ```bash
-kubectl apply -f manifests/21-clusterresourceset.yaml
-```
+# Is the label on the cluster?
+kubectl get cluster capc-rke2-cluster-1 -n capc-rke2-cluster-1 --show-labels
+# Should include: capc-rke2-ccm-csi=true
 
-### 4. Label the cluster
-
-```bash
-kubectl label cluster capc-rke2-cluster-1 -n capc-rke2-cluster-1 capc-rke2-ccm-csi=true --overwrite
-```
-
-The CRS controller will apply all manifests to the workload cluster automatically. Verify:
-
-```bash
-# On the management cluster
+# Did the CRS controller see the cluster?
 kubectl get clusterresourcesetbinding -n capc-rke2-cluster-1
-# → resources[0].applied: true
-
-# On the workload cluster:
-kubectl get deployment -n kube-system cloud-controller-manager
-kubectl get deployment -n kube-system cloudstack-csi-controller
-kubectl get daemonset -n kube-system cloudstack-csi-node
-kubectl get csidriver
+# → resources[0].applied: true when successful
 ```
+
+> **RKE2-specific change:** The `/run/cloud-init/` hostPath mount was removed from the CSI node DaemonSet because RKE2 nodes use RKE2's own bootstrap (not cloud-init) and that directory doesn't exist. Without this removal, the CSI node container crashes with exit code 2 on RKE2 nodes.
 
 ## Troubleshooting
 
