@@ -330,17 +330,6 @@ data:
           priorityClassName: system-cluster-critical
           serviceAccountName: cloudstack-csi-controller
           affinity:
-            podAntiAffinity:
-              preferredDuringSchedulingIgnoredDuringExecution:
-              - weight: 100
-                podAffinityTerm:
-                  labelSelector:
-                    matchExpressions:
-                    - key: "app.kubernetes.io/name"
-                      operator: In
-                      values:
-                      - cloudstack-csi-controller
-                  topologyKey: "kubernetes.io/hostname"
             nodeAffinity:
               requiredDuringSchedulingIgnoredDuringExecution:
                 nodeSelectorTerms:
