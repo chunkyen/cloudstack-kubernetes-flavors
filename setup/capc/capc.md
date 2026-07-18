@@ -6,6 +6,19 @@ This guide walks through deploying a Kubernetes cluster on Apache CloudStack usi
 
 ## Prerequisites
 
+### Management Cluster Setup
+
+CAPC requires an existing Kubernetes cluster as the **management cluster** — this is where CAPC controllers run and manage workload clusters.
+
+You have two options for setting up CAPC on the management cluster:
+
+| Approach | Tool | Documentation |
+|---|---|---|
+| **Manual (standalone)** | `clusterctl init` | This guide — Step 1 + Step 3 below |
+| **Rancher Turtles** | `CAPIProvider` CRD | [rancher-turtles-capc/turtles.md](../rancher-turtles-capc/turtles.md) |
+
+Use this guide if you are deploying CAPC manually without Rancher. If you are using Rancher Turtles, follow the Turtles guide instead — it handles provider installation declaratively.
+
 ### CloudStack Resources
 
 > **⚠️ Important: What CAPC Creates Automatically**
@@ -144,7 +157,9 @@ Base64-encode it and export as an environment variable:
 export CLOUDSTACK_B64ENCODED_SECRET=$(base64 -w0 -i cloud-config)
 ```
 
-## Step 3: Build and Deploy CAPC Controller
+## Step 3: Install CAPC onto the Management Cluster
+
+This step deploys the CAPC controllers into the management cluster so it can provision workload clusters on CloudStack.
 
 ### Option A: Use Prebuilt Image (Recommended)
 
