@@ -1183,7 +1183,25 @@ docker run --rm ghcr.io/siderolabs/omni:latest --help | grep <flag-name>
 
 Pin your Omni version and test flag changes in a non-production environment first.
 
-### 13. Controller-Managed Resources Cannot Be Created via `omnictl apply`
+### 13. Labels and Machine Classes Do Not Work Without an Infra Provider
+
+Omni's documentation describes a workflow where you label machines (e.g., `type=control-plane`, `type=worker`), create Machine Classes with label selectors, and then define a cluster YAML referencing those Machine Classes. When the cluster is created, Omni automatically selects matching machines.
+
+**We tested this on CloudStack and it does not work.** The reason is that this workflow is designed for **automatic scaling with an infrastructure provider** — Omni provisions VMs on demand, labels them automatically, and the Machine Class selector picks them up. Without an infra provider:
+
+- Labels set manually on machines are not automatically consumed by the cluster creation flow
+- The `machineallocation.machineclass` + `machinecount` fields in the cluster spec only work when Omni itself provisions the VMs
+- Manually deployed VMs (via `cmk deploy`) must be added to a cluster through the **UI's Create Cluster or Cluster Scaling page**, where you select machines directly
+
+**For CloudStack, the correct workflow is:**
+1. Deploy VMs with SideroLinkConfig userdata
+2. VMs appear in Omni's machine inventory
+3. Use the UI to create a cluster (select machines directly) or scale an existing cluster (Cluster Scaling page)
+4. Labels and Machine Classes are not needed
+
+See [Why Manual Scaling Is the Only Option for CloudStack](#why-manual-scaling-is-the-only-option-for-cloudstack) for more detail.
+
+### 14. Controller-Managed Resources Cannot Be Created via `omnictl apply`
 
 Some resources in Omni are **controller-managed** — they have an `owner` field set by an internal controller (e.g., `MachineSetStatusController`). Attempting to create or modify these via `omnictl apply` will fail with:
 
@@ -1205,7 +1223,7 @@ This is **not** a service account permission issue — it's a resource ownership
 
 **To scale a cluster, use the Omni UI** (Clusters → Cluster Scaling) — this is the correct workflow since ClusterMachines are controller-managed.
 
-### 14. Summary: What We'd Do Differently
+### 15. Summary: What We'd Do Differently
 
 If we were to deploy self-hosted Omni on CloudStack again:
 
