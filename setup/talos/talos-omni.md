@@ -33,7 +33,7 @@
 | Kubernetes API endpoint | Load balancer + port forwarding | SideroLink (WireGuard tunnel) |
 | Node registration | Full Talos config in userdata (from `talosctl gen config`) | SideroLinkConfig in userdata — machine appears in Omni inventory, then added to cluster via UI or `omnictl apply` |
 | Upgrades | `talosctl upgrade` per node | Automatic rolling upgrades |
-| Scaling | Deploy new VM + configure | UI only (Cluster Scaling) — see [Controller-Managed Resources](#14-controller-managed-resources-cannot-be-created-via-omnictl-apply) |
+| Scaling | Deploy new VM + configure | `omnictl cluster template sync` (add UUID to template) |
 | Monitoring | Manual | Omni UI |
 | talosctl access | Direct to node IPs | Via Omni through SideroLink |
 
@@ -466,13 +466,13 @@ Create a userdata YAML that tells Talos to connect to Omni on boot:
 
 ```bash
 cat > omni-userdata.yaml <<EOF
-version: v1alpha1
+apiVersion: v1alpha1
 kind: SideroLinkConfig
 apiUrl: grpc://<omni-ip>:8090/?jointoken=<token>
 EOF
 ```
 
-> **Note:** Use `grpc://` scheme to skip TLS verification (for self-signed certs). Use `https://` if you have a publicly trusted cert.
+> **Note:** Use `apiVersion: v1alpha1` (not `version: v1alpha1`). The `&` in the URL must be quoted in YAML — use `apiUrl: "grpc://..."` to prevent YAML from interpreting it as an anchor character.
 
 ### Step 4: Deploy Talos VMs
 
@@ -514,24 +514,50 @@ Look for your new machines — they should show `connected=true` and be in maint
 
 ### Step 6: Create the Cluster
 
-With the machines connected and in maintenance mode, create the cluster through the **Omni UI**:
+With the machines connected and in maintenance mode, create the cluster using a **cluster template** — this works via `omnictl` without needing the UI:
 
-1. Go to **Clusters → Create Cluster**
-2. Give the cluster a name (e.g., `omni-cluster`)
-3. Select the control plane machine(s) from the available machines list
-4. Select the worker machine(s)
-5. Choose the Kubernetes and Talos versions
-6. Confirm
+```bash
+# Get the machine IDs
+omnictl get machines
+
+# Create a cluster template
+cat > omni-cluster-template.yaml <<EOF
+kind: Cluster
+name: omni-cluster
+kubernetes:
+  version: 1.36.2
+talos:
+  version: 1.13.6
+---
+kind: ControlPlane
+machines:
+  - <control-plane-machine-uuid>
+---
+kind: Workers
+machines:
+  - <worker-machine-uuid>
+---
+kind: Machine
+name: <control-plane-machine-uuid>
+---
+kind: Machine
+name: <worker-machine-uuid>
+EOF
+
+# Apply the template
+omnictl cluster template sync -f omni-cluster-template.yaml
+```
 
 Omni will:
-1. Generate and apply Talos configs to the selected machines
-2. Bootstrap the cluster
-3. Set up the Kubernetes API endpoint via SideroLink
-4. Install Flannel (default CNI)
+1. Create the cluster, MachineSets, and assign the machines
+2. Generate and apply Talos configs to the selected machines
+3. Bootstrap the cluster
+4. Set up the Kubernetes API endpoint via SideroLink
+5. Install Flannel (default CNI)
 
 The cluster transitions through: `UNKNOWN` → `PROVISIONING` → `RUNNING Ready`.
 
-> **Note:** Labels and Machine Classes are **not needed** for CloudStack. They are used for automatic scaling with an infrastructure provider (AWS, vSphere, etc.), which CloudStack does not have. For CloudStack, you select machines directly in the UI when creating or scaling a cluster.
+> **Note:** Labels and Machine Classes are **not needed** for CloudStack. They are used for automatic scaling with an infrastructure provider (AWS, vSphere, etc.), which CloudStack does not have. For CloudStack, you assign machines directly in the cluster template.
 
 ---
 
@@ -676,14 +702,45 @@ kubectl apply -f cloudstack-ssd.yaml
 
 ### Scaling
 
-Manual scaling is done through the **Omni UI**:
+To add a new machine to an existing cluster, update the cluster template with the new machine's UUID and re-sync:
 
-1. Go to **Clusters → `<cluster-name>` → Cluster Scaling**
-2. Select the machine you want to add from the list of available machines
-3. Choose the target MachineSet (e.g., `omni-test-workers`)
-4. Confirm
+```bash
+# Get the new machine's UUID
+omnictl get machines
 
-> **Note:** Labels and Machine Classes are **not needed** for CloudStack. They are used for automatic scaling with an infrastructure provider (AWS, vSphere, etc.), which CloudStack does not have. For CloudStack, you select machines directly in the UI when creating or scaling a cluster.
+# Add it to the template under Workers.machines and add a Machine entry
+cat > omni-cluster-template.yaml <<EOF
+kind: Cluster
+name: omni-cluster
+kubernetes:
+  version: 1.36.2
+talos:
+  version: 1.13.6
+---
+kind: ControlPlane
+machines:
+  - <existing-cp-uuid>
+---
+kind: Workers
+machines:
+  - <existing-worker-uuid>
+  - <new-worker-uuid>
+---
+kind: Machine
+name: <existing-cp-uuid>
+---
+kind: Machine
+name: <existing-worker-uuid>
+---
+kind: Machine
+name: <new-worker-uuid>
+EOF
+
+# Sync the updated template — Omni creates the MachineSetNode and provisions the new machine
+omnictl cluster template sync -f omni-cluster-template.yaml
+```
+
+> **Note:** The cluster template approach works for both initial creation and scaling. You can also use the **Omni UI** (Clusters → Cluster Scaling) to add machines manually. Labels and Machine Classes are **not needed** for CloudStack — they are used for automatic scaling with an infrastructure provider (AWS, vSphere, etc.), which CloudStack does not have.
 
 #### Why Manual Scaling Is the Only Option for CloudStack
 
@@ -693,7 +750,7 @@ CloudStack does **not** have an Omni infrastructure provider. Without one:
 
 - Omni cannot auto-provision VMs — you must deploy them manually via `cmk deploy`
 - The Machine Class + label auto-join path is designed for VMs that Omni itself provisions, not manually deployed ones
-- The only way to add a manually deployed machine to a cluster is the **UI's Cluster Scaling page**
+- You must add manually deployed machines to a cluster by UUID via the **cluster template** (`omnictl cluster template sync`) or the **UI's Cluster Scaling page**
 
 **With a supported infra provider**, the flow would be:
 
@@ -950,7 +1007,7 @@ Dex includes built-in cycle detection to prevent infinite loops.
 | Bootstrap | `talosctl bootstrap` | `talosctl bootstrap` | Automatic |
 | Kubernetes API endpoint | Load balancer (6443) | Load balancer (6443) | SideroLink tunnel |
 | talosctl access | Port forwarding (50000) | Port forwarding (50000) | Via Omni |
-| Scaling | Deploy VM + configure | Terraform apply | UI only (Cluster Scaling) — `omnictl apply` cannot create ClusterMachines, see [Controller-Managed Resources](#14-controller-managed-resources-cannot-be-created-via-omnictl-apply) |
+| Scaling | Deploy VM + configure | Terraform apply | `omnictl cluster template sync` (add UUID to template) |
 | Upgrades | `talosctl upgrade` per node | `talosctl upgrade` per node | Automatic rolling |
 | CCM/CSI install | Manual | Manual | Manual (same) |
 | Monitoring | Manual | Manual | Omni UI |
@@ -1192,37 +1249,31 @@ Omni's documentation describes a workflow where you label machines (e.g., `type=
 
 - Labels set manually on machines are not automatically consumed by the cluster creation flow
 - The `machineallocation.machineclass` + `machinecount` fields in the cluster spec only work when Omni itself provisions the VMs
-- Manually deployed VMs (via `cmk deploy`) must be added to a cluster through the **UI's Create Cluster or Cluster Scaling page**, where you select machines directly
+- Manually deployed VMs (via `cmk deploy`) must be assigned to a cluster by UUID
 
 **For CloudStack, the correct workflow is:**
-1. Deploy VMs with SideroLinkConfig userdata
+1. Deploy VMs with SideroLinkConfig userdata (`apiVersion: v1alpha1`, URL quoted)
 2. VMs appear in Omni's machine inventory
-3. Use the UI to create a cluster (select machines directly) or scale an existing cluster (Cluster Scaling page)
-4. Labels and Machine Classes are not needed
+3. Create a cluster template with the machine UUIDs and sync via `omnictl cluster template sync`
+4. To scale, add the new machine's UUID to the template and re-sync
+5. Labels and Machine Classes are not needed
 
-See [Why Manual Scaling Is the Only Option for CloudStack](#why-manual-scaling-is-the-only-option-for-cloudstack) for more detail.
+See [Use Cluster Templates for Creation and Scaling](#14-use-cluster-templates-for-creation-and-scaling) for details.
 
-### 14. Controller-Managed Resources Cannot Be Created via `omnictl apply`
+### 14. Use Cluster Templates for Creation and Scaling
 
-Some resources in Omni are **controller-managed** — they have an `owner` field set by an internal controller (e.g., `MachineSetStatusController`). Attempting to create or modify these via `omnictl apply` will fail with:
+Omni's **cluster template** feature (`omnictl cluster template sync`) is the correct way to create and scale clusters on CloudStack. It works with service account keys (no OIDC login needed) and handles the full lifecycle:
 
+- **Creating a cluster:** Define the cluster, control plane, workers, and machine UUIDs in a template file
+- **Scaling:** Add the new machine's UUID to the template and re-sync — Omni creates the `MachineSetNode` and provisions the machine
+- **No labels or machine classes needed** — machines are assigned by UUID directly
+
+The template approach avoids the controller-managed resource issue because `MachineSetNodes` are created by the template sync controller, not by direct `omnictl apply`.
+
+To export a template from an existing cluster:
+```bash
+omnictl cluster template export --cluster <cluster-name>
 ```
-Error: rpc error: code = PermissionDenied desc = only read access is permitted
-```
-
-This is **not** a service account permission issue — it's a resource ownership constraint. The service account key (even with Admin role) cannot create or modify resources that are owned by internal controllers.
-
-**Resources that are controller-managed:**
-- `ClusterMachines.omni.sidero.dev` — owned by `MachineSetStatusController`
-- `ClusterMachineConfigs`, `ClusterMachineStatuses`, etc.
-
-**Resources that can be created via `omnictl apply`:**
-- `MachineClasses.omni.sidero.dev`
-- `MachineLabels.omni.sidero.dev`
-- `Clusters.omni.sidero.dev`
-- `MachineSets.omni.sidero.dev`
-
-**To scale a cluster, use the Omni UI** (Clusters → Cluster Scaling) — this is the correct workflow since ClusterMachines are controller-managed.
 
 ### 15. Summary: What We'd Do Differently
 
@@ -1233,8 +1284,8 @@ If we were to deploy self-hosted Omni on CloudStack again:
 3. **Create new clusters through Omni** — avoids the import complexity entirely
 4. **Pin the Omni version** and test flag changes before restarting
 5. **Consider SaaS Omni** if the operational complexity of self-hosted is not justified for your use case
-6. **Use the UI for cluster creation and scaling** — select machines directly; labels and machine classes are not needed for CloudStack
-7. **CloudStack has no Omni infra provider** — automatic scaling (Machine Classes + `machineallocation.machineclass`) requires an infra provider; without one, manual UI scaling is the only option
+6. **Use cluster templates for creation and scaling** — `omnictl cluster template sync` with machine UUIDs; no labels or machine classes needed for CloudStack
+7. **CloudStack has no Omni infra provider** — automatic scaling (Machine Classes + `machineallocation.machineclass`) requires an infra provider; without one, you assign machines by UUID in the template
 
 ---
 ## References

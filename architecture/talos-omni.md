@@ -37,10 +37,10 @@ Omni supports **infrastructure providers** that automate VM provisioning — you
 
 1. Deploy Talos VMs on CloudStack with a SideroLinkConfig pointing to Omni
 2. VMs boot, connect to Omni via SideroLink, and register themselves
-3. Create the cluster in the Omni UI — select the machines directly from the available list
+3. Create a cluster template with the machine UUIDs and sync via `omnictl cluster template sync`
 4. Omni generates configs, bootstraps, and manages the cluster
 
-This is the approach documented in the [setup guide](../setup/talos/talos-omni.md).
+Scaling follows the same pattern — add the new machine's UUID to the template and re-sync. See the [setup guide](../setup/talos/talos-omni.md) for detailed steps.
 
 ## SideroLink
 
