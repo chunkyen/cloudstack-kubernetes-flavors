@@ -476,9 +476,55 @@ EOF
 >
 > **Official docs:** [SideroLinkConfig Reference](https://docs.siderolabs.com/talos/latest/reference/configuration/v1alpha1/config/#siderolinkconfig) | [Machine Registration](https://docs.siderolabs.com/omni/latest/infrastructure-and-extensions/machine-registration/)
 
+### Step 3b (Alternative): Embed the Join Token in a CloudStack Template
+
+Instead of passing SideroLinkConfig via userdata on every deploy, you can bake the join token directly into a Talos ISO and upload it as a CloudStack template. VMs booted from this template connect to Omni automatically — no userdata needed.
+
+**How to create the template:**
+
+1. In the Omni UI, go to **Installation Media** → **Download Installation Media**
+2. Select the Talos version, architecture, and any extensions
+3. Under **Options**, the join token for your Omni instance is automatically embedded
+4. Download the resulting ISO
+5. Upload it to CloudStack as a new template (format: RAW)
+
+```bash
+# Register the template in CloudStack
+cmk register template \
+  name=talos-omni-1.13.6 \
+  displaytext=talos-omni-1.13.6 \
+  url=http://<your-storage>/talos-omni-1.13.6.iso \
+  zoneid=<zone-id> \
+  format=RAW \
+  hypervisor=KVM \
+  ostypeid=<linux-ostype-id>
+```
+
+**Deploy VMs using the embedded template** — no `userdata` parameter needed:
+
+```bash
+cmk deploy virtualmachine \
+  zoneid=<zone-id> \
+  templateid=<omni-embedded-template-id> \
+  serviceofferingid=<cp-offering-id> \
+  networkids=<network-id> \
+  name=omni-cluster-cp-1 \
+  rootdisksize=20 \
+  details[0].guest.cpu.mode=host-passthrough
+```
+
+> **Note:** The `details[0].guest.cpu.mode=host-passthrough` syntax is correct. Do **not** use `details[0].key=guest.cpu.mode details[0].value=host-passthrough` — that flattens the details and causes boot loops on KVM hosts.
+
+**Pros and Cons:**
+
+| Approach | Pros | Cons |
+|----------|------|------|
+| **Userdata** (Step 3) | No template upload needed; can change join token per deploy | Must pass `userdata` on every deploy; YAML quoting issues with `&` |
+| **Embedded template** (Step 3b) | No userdata needed; simpler `cmk deploy` command; token can't be forgotten | Must upload a new template when join token changes; one template per Talos version |
+
 ### Step 4: Deploy Talos VMs
 
-On the CloudStack management server:
+On the CloudStack management server, using the **userdata** approach:
 
 ```bash
 # Deploy control plane VM
@@ -503,6 +549,8 @@ cmk deploy virtualmachine \
   userdata=$(base64 -w0 omni-userdata.yaml) \
   details[0].guest.cpu.mode=host-passthrough
 ```
+
+If using the **embedded template** approach (Step 3b), omit the `userdata` parameter and use the embedded template ID instead.
 
 ### Step 5: Verify Machines Connect
 
