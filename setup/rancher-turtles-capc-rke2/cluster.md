@@ -274,6 +274,118 @@ If you need to apply CCM + CSI manually (e.g. to an existing cluster not created
 
 The exact RKE2 changes are documented as inline YAML comments in both `-rke2` files.
 
+## Air-Gapped / Offline Deployment
+
+RKE2 is designed for air-gapped environments — all core components (containerd, etcd, CNI, CoreDNS, ingress) ship in a single tarball. CAPC + Rancher Turtles adds a few extra pieces that need addressing.
+
+### What's already offline-capable
+
+| Component | Offline support | Notes |
+|---|---|---|
+| RKE2 bootstrap tarball | ✅ Built-in | Single tarball contains all Kubernetes, CNI, and containerd images |
+| Cilium CNI | ✅ Built-in | RKE2's `cni: cilium` installs from the embedded tarball |
+| Calico CNI | ✅ Built-in | Same — embedded in RKE2 tarball |
+| CAPRKE2 providers | ✅ No internet needed | Providers run on the management cluster; cluster provisioning is orchestrated from there |
+
+### What needs preparation
+
+| Component | Action needed |
+|---|---|
+| **OS template** | Upload a CloudStack template with RKE2-compatible OS (Ubuntu 24.04 / Rocky 9) pre-baked |
+| **CloudStack API** | Management server must be reachable from the management cluster (private IP or VPN) |
+| **CCM image** | Host `apache/cloudstack-kubernetes-provider` image in a private registry |
+| **CSI driver image** | Host `apache/cloudstack-csi-driver` image in a private registry |
+| **CSI sidecar images** | Host `csi-provisioner`, `csi-attacher`, `csi-resizer`, `csi-node-driver-registrar`, `livenessprobe` in a private registry |
+| **ClusterResourceSet manifests** | The CRS ConfigMap (`20-ccm-csi-configmap.yaml`) references images by upstream tag. In air-gap, update image references to your private registry |
+
+### Required image list for air-gapped CCM + CSI
+
+Pull these on an internet-connected machine, save to a tarball, and import to your private registry:
+
+```bash
+# CCM
+apache/cloudstack-kubernetes-provider:v1.2.0
+
+# CSI driver
+apache/cloudstack-csi-driver:latest
+
+# CSI sidecars (versions may vary — match what's in your CRS ConfigMap)
+registry.k8s.io/sig-storage/csi-provisioner:v5.0.1
+registry.k8s.io/sig-storage/csi-attacher:v4.6.1
+registry.k8s.io/sig-storage/csi-resizer:v1.11.1
+registry.k8s.io/sig-storage/csi-node-driver-registrar:v2.11.1
+registry.k8s.io/sig-storage/livenessprobe:v2.13.1
+```
+
+Save and transfer:
+
+```bash
+# On internet-connected machine
+for img in \
+  apache/cloudstack-kubernetes-provider:v1.2.0 \
+  apache/cloudstack-csi-driver:latest \
+  registry.k8s.io/sig-storage/csi-provisioner:v5.0.1 \
+  registry.k8s.io/sig-storage/csi-attacher:v4.6.1 \
+  registry.k8s.io/sig-storage/csi-resizer:v1.11.1 \
+  registry.k8s.io/sig-storage/csi-node-driver-registrar:v2.11.1 \
+  registry.k8s.io/sig-storage/livenessprobe:v2.13.1; do
+  docker pull $img
+done
+
+docker save -o cloudstack-ccm-csi-images.tar \
+  apache/cloudstack-kubernetes-provider:v1.2.0 \
+  apache/cloudstack-csi-driver:latest \
+  registry.k8s.io/sig-storage/csi-provisioner:v5.0.1 \
+  registry.k8s.io/sig-storage/csi-attacher:v4.6.1 \
+  registry.k8s.io/sig-storage/csi-resizer:v1.11.1 \
+  registry.k8s.io/sig-storage/csi-node-driver-registrar:v2.11.1 \
+  registry.k8s.io/sig-storage/livenessprobe:v2.13.1
+```
+
+Import on each workload node (or push to private registry):
+
+```bash
+# On air-gapped nodes
+ctr -n k8s.io images import cloudstack-ccm-csi-images.tar
+```
+
+### Using a private registry
+
+If you have a private registry (e.g. `registry.internal:5000`), update all image references in the CRS ConfigMap (`20-ccm-csi-configmap.yaml`) before applying:
+
+```yaml
+# In 20-ccm-csi-configmap.yaml — replace all image: lines
+image: registry.internal:5000/apache/cloudstack-kubernetes-provider:v1.2.0
+image: registry.internal:5000/apache/cloudstack-csi-driver:latest
+image: registry.internal:5000/sig-storage/csi-provisioner:v5.0.1
+# ... etc for all sidecars
+```
+
+Also set the RKE2 `system-default-registry` so all RKE2 core images pull from your registry:
+
+```yaml
+# In 10-minimal-cluster.yaml, RKE2ControlPlane spec:
+    systemDefaultRegistry: registry.internal:5000
+```
+
+### CAPC-specific considerations
+
+| Concern | Guidance |
+|---|---|
+| **CloudStack credentials secret** | The `cloudstack-credentials` secret on the management cluster references the CloudStack API. This API must be reachable from the management cluster — use private IP or VPN if needed. |
+| **CAPC controller image** | The CAPC controller runs on the management cluster. Ensure the management cluster's nodes can reach your private registry (if pulling CAPC via Rancher Turtles). |
+| **RKE2 tarball download** | CAPRKE2 downloads the RKE2 tarball from the public internet by default. In air-gap, pre-stage the tarball on your CloudStack template or host it on an internal HTTP server and reference it via `rke2Config` `serverURL` / `agentConfig` `token` fields. See [CAPRKE2 air-gap docs](https://caprke2.docs.rancher.com/). |
+
+### Simplified approach (no private registry)
+
+If you don't have a private registry, you can:
+
+1. Pre-pull the CCM + CSI images into the OS template (as part of the CloudStack template build).
+2. Update the CRS ConfigMap to use the pre-loaded image names (same tags, just already present on the node).
+3. Ensure containerd's `imagePullPolicy` handles the already-present images correctly.
+
+This avoids registry setup but requires maintaining a custom template per image release.
+
 ## Cleanup
 
 ```bash
