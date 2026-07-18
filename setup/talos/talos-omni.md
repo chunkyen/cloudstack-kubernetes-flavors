@@ -483,25 +483,28 @@ Instead of passing SideroLinkConfig via userdata on every deploy, you can bake t
 **How to create the template:**
 
 1. In the Omni UI, go to **Installation Media** → **Download Installation Media**
-2. Select the Talos version, architecture, and any extensions
-3. Under **Options**, the join token for your Omni instance is automatically embedded
-4. Download the resulting ZIP file (contains a raw disk image)
-5. Unzip the raw image and upload it to CloudStack as a new template
+2. Select **CloudStack** as the platform/cloud provider
+3. Choose the Talos version, architecture, and any optional extensions
+4. The join token for your Omni instance is automatically embedded
+5. Download the resulting ZIP file (contains a raw disk image)
+6. Unzip the raw image and upload it to CloudStack as a new template
 
 ```bash
 # Unzip the downloaded image
-unzip talos-omni-<version>.zip
+unzip talos-omni-<version>-cloudstack.zip
 
 # Register the raw image as a CloudStack template
 cmk register template \
   name=talos-omni-1.13.6 \
   displaytext=talos-omni-1.13.6 \
-  url=http://<your-storage>/talos-omni-1.13.6.raw \
+  url=http://<your-storage>/talos-omni-1.13.6-cloudstack.raw \
   zoneid=<zone-id> \
   format=RAW \
   hypervisor=KVM \
   ostypeid=<linux-ostype-id>
 ```
+
+> **Official docs:** [Register Machines with Omni](https://docs.siderolabs.com/omni/omni-cluster-setup/registering-machines/register-machines-with-omni/) | [Talos on CloudStack](https://docs.siderolabs.com/talos/latest/platform-specific-installations/cloud-platforms/cloudstack/)
 
 **Deploy VMs using the embedded template** — no `userdata` parameter needed:
 
