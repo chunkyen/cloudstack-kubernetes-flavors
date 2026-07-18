@@ -2,6 +2,9 @@
 
 This guide covers provisioning **RKE2** clusters on **CloudStack** using **Cluster API** with **Rancher Turtles** — combining the CloudStack infrastructure provider (CAPC) with the RKE2 bootstrap/control-plane provider (CAPRKE2).
 
+> **Prerequisites assumed:** Rancher + Turtles + CAPC already deployed.
+> See [`rancher.md`](../rancher-turtles-capc/rancher.md) for Rancher deployment and [`turtles.md`](../rancher-turtles-capc/turtles.md) for Turtles + CAPC provider installation.
+
 ## Architecture
 
 ```
@@ -13,14 +16,20 @@ Rancher Manager
             └─ ClusterResourceSet — deploys CCM + CSI post-creation
 ```
 
-## Prerequisites
+## What This Adds vs. Kubeadm-Based CAPC
 
-- **Rancher Manager** with **Turtles** installed and configured
-- **CAPC provider** already installed via `CAPIProvider` CRD
-- CloudStack credentials secret in the target namespace
-- A CloudStack network with `DefaultNetworkOfferingforKubernetesService`
-- Standard Ubuntu/Rocky Linux template (e.g. `capc-ubuntu24-1.35`)
-- Compute offerings for control plane and worker nodes
+| | Kubeadm (existing) | RKE2 (this guide) |
+|---|---|---|
+| Bootstrap provider | `kubeadm` | `rke2` |
+| Control plane provider | `kubeadm` | `rke2` |
+| CNI | Manual (Calico/Flannel/Cilium) | Built-in (Calico by default) |
+| CNI install | Helm chart or manifest | RKE2 auto-installs at bootstrap |
+| `preKubeadmCommands` / `preRKE2Commands` | Available | Available |
+| Provider ID | Same `cloudstack:///{{ ds.meta_data.instance_id }}` | Same |
+| `guest.cpu.mode: host-passthrough` | Required for Calico x86-64-v2 | Required for Calico x86-64-v2 |
+| CCM/CSI deployment | ClusterResourceSet or manual | Same |
+
+Everything else — Rancher, Turtles, CAPC, CloudStack credentials, networking — is identical.
 
 ## Step 1: Install CAPRKE2 Providers
 
@@ -57,11 +66,13 @@ kubectl get capiproviders
 
 ## Step 2: Create the Cluster Namespace and Credentials
 
+Identical to the kubeadm-based CAPC workflow:
+
 ```bash
 kubectl create namespace capc-rke2-cluster-1
 ```
 
-Create the CloudStack credentials secret (used by CAPC to provision VMs):
+Create the CloudStack credentials secret:
 
 ```bash
 kubectl create secret generic cloudstack-credentials \
@@ -113,6 +124,28 @@ KUBECONFIG=workload-kubeconfig kubectl get pods -A
 ```
 
 Expected result: 3 nodes (1 control-plane + 2 workers), all `Ready`, with Calico, CoreDNS, CCM, and CSI running.
+
+## Troubleshooting
+
+### Calico crashes with `Fatal glibc error: CPU does not support x86-64-v2`
+
+**Cause:** The Calico version bundled with RKE2 ≥v1.30 requires x86-64-v2 CPU instructions, but CloudStack VMs default to QEMU's virtual CPU model which may not expose these features.
+
+**Fix:** Add `details: guest.cpu.mode: host-passthrough` to both `CloudStackMachineTemplate` resources (control-plane and worker). This passes the host CPU features through to the guest.
+
+### Workers not created
+
+The `MachineSet` shows `desired: 2, current: 0`. CAPRKE2 waits for the control plane to be fully healthy before provisioning workers. Check:
+
+```bash
+kubectl get rke2controlplane -n capc-rke2-cluster-1 -o yaml
+```
+
+If the control plane is `NotReady` due to Calico, apply the host-passthrough fix above, delete the cluster, and recreate.
+
+### Provider ID format
+
+The `provider-id` must be `cloudstack:///{{ ds.meta_data.instance_id }}` — no quotes around the template expression. If quotes are present, the literal string `{{ ds.meta_data.instance_id }}` is used instead of the resolved value.
 
 ## Cleanup
 
