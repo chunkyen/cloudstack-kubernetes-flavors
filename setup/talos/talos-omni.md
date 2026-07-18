@@ -485,15 +485,18 @@ Instead of passing SideroLinkConfig via userdata on every deploy, you can bake t
 1. In the Omni UI, go to **Installation Media** → **Download Installation Media**
 2. Select the Talos version, architecture, and any extensions
 3. Under **Options**, the join token for your Omni instance is automatically embedded
-4. Download the resulting ISO
-5. Upload it to CloudStack as a new template (format: RAW)
+4. Download the resulting ZIP file (contains a raw disk image)
+5. Unzip the raw image and upload it to CloudStack as a new template
 
 ```bash
-# Register the template in CloudStack
+# Unzip the downloaded image
+unzip talos-omni-<version>.zip
+
+# Register the raw image as a CloudStack template
 cmk register template \
   name=talos-omni-1.13.6 \
   displaytext=talos-omni-1.13.6 \
-  url=http://<your-storage>/talos-omni-1.13.6.iso \
+  url=http://<your-storage>/talos-omni-1.13.6.raw \
   zoneid=<zone-id> \
   format=RAW \
   hypervisor=KVM \
