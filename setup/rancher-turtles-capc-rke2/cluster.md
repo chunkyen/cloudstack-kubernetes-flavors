@@ -53,6 +53,8 @@ Everything else — Rancher, Turtles, CAPC, CloudStack credentials, networking, 
 
 > **Tip:** RKE2's CNI is not limited to Calico. You can switch to [Cilium](#switching-cni-from-calico-to-cilium) or other CNIs by changing a single field.
 
+> **CloudStack fundamentals are the same:** The CloudStack-specific parts of the cluster manifest — template selection, service offering, zone, network, reserved public IP, `syncWithACS`, `host-passthrough` — work identically for both kubeadm and RKE2. For details on creating/uploading templates, reserving public IPs, network options, and manifest field reference, see the [CAPC setup guide](../capc/capc.md).
+
 ## Step 1: Install CAPRKE2 Providers
 
 Create the `CAPIProvider` resources for the RKE2 bootstrap and control-plane providers:
