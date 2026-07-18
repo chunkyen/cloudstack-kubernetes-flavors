@@ -216,6 +216,57 @@ The `provider-id` must be `cloudstack:///{{ ds.meta_data.instance_id }}` — no 
 
 **Fix:** The ConfigMap (`20-ccm-csi-configmap.yaml`) and the standalone `cloudstack-csi-controller-deployment-rke2.yaml` both set `replicas: 1` and remove `podAntiAffinity`. If you are using your own upstream manifests, change to `replicas: 1` and remove the `podAntiAffinity` block.
 
+## Switching CNI from Calico to Cilium
+
+RKE2 installs **Calico** by default via `cni: calico`. To use **Cilium** instead, you have two options.
+
+### Option A: Deploy with Cilium from the start
+
+Change the `cni` field in `10-minimal-cluster.yaml` before applying:
+
+```yaml
+# In 10-minimal-cluster.yaml, RKE2ControlPlane spec:
+    cni: none          # ← disable RKE2's built-in CNI
+```
+
+Then add a ClusterResourceSet (or post-bootstrap Helm install) to deploy Cilium after the cluster is Ready:
+
+```bash
+# After the cluster shows Ready, get workload kubeconfig
+kubectl get secret capc-rke2-cluster-1-kubeconfig -n capc-rke2-cluster-1 \
+  -o jsonpath='{.data.value}' | base64 -d > workload-kubeconfig
+
+# Install Cilium via Helm
+helm repo add cilium https://helm.cilium.io/
+helm install cilium cilium/cilium --kubeconfig workload-kubeconfig \
+  --namespace kube-system \
+  --set ipam.mode=kubernetes \
+  --set operator.replicas=1
+```
+
+> **Note:** Cilium requires kernel 4.9+ with eBPF support. Ubuntu 24.04 (the template used in `10-minimal-cluster.yaml`) satisfies this.
+
+### Option B: Switch an existing Calico cluster to Cilium
+
+If the cluster is already running with Calico, migration requires draining and rebooting nodes — this is disruptive. The recommended path is to **delete and recreate** the cluster with `cni: none` (Option A).
+
+### Cilium + CloudStack considerations
+
+| Concern | Guidance |
+|---|---|
+| **IPAM** | Use `ipam.mode=kubernetes` (Cilium allocates pod IPs from the Kubernetes Node CIDR). This avoids conflicts with CloudStack's IP management. |
+| **Host firewall** | Cilium's eBPF-based host firewall is compatible with CloudStack's isolated network model. No special rules needed. |
+| **CCM + CSI** | Cilium operates independently of CCM and CSI. All three coexist without conflict. |
+
+### Verification (Cilium)
+
+```bash
+KUBECONFIG=workload-kubeconfig kubectl get pods -n kube-system -l app.kubernetes.io/name=cilium
+KUBECONFIG=workload-kubeconfig kubectl get pods -n kube-system -l app.kubernetes.io/name=cilium-operator
+```
+
+Expected: all Cilium pods Running and Cilium operator 1/1.
+
 ## Standalone Manifests (optional — without ClusterResourceSet)
 
 If you need to apply CCM + CSI manually (e.g. to an existing cluster not created with `cluster.md`), use the individual files in `manifests/`.
