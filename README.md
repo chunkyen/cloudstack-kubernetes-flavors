@@ -60,7 +60,7 @@ Two bootstrap providers are supported:
 |---|---|---|
 | **Bootstrap** | `kubeadm` | `rke2` |
 | **Control plane** | `kubeadm` | `rke2` |
-| **CNI** | Manual install (Calico/Flannel/Cilium) | Built-in Calico |
+| **CNI** | Manual install (Calico/Flannel/Cilium) | Built-in (Calico default; Canal, Cilium, Flannel, or none configurable) |
 | **Image** | CAPI-compatible image (kubelet + kubeadm pre-installed) | Standard OS template |
 | **RKE2 advantage** | — | No custom image build; RKE2 auto-installs via tarball; built-in CNI; etcd encryption by default; CIS-hardened; simpler upgrades |
 

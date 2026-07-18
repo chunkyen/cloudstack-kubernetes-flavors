@@ -22,7 +22,7 @@ Rancher Manager
 |---|---|---|
 | Bootstrap provider | `kubeadm` | `rke2` |
 | Control plane provider | `kubeadm` | `rke2` |
-| CNI | Manual (Calico/Flannel/Cilium) | Built-in (Calico by default) |
+| **CNI** | Manual (Calico/Flannel/Cilium) | Built-in (Calico default; Canal, Cilium, Flannel, or none configurable) |
 | CNI install | Helm chart or manifest | RKE2 auto-installs at bootstrap |
 | `preKubeadmCommands` / `preRKE2Commands` | Available | Available |
 | Provider ID | Same `cloudstack:///{{ ds.meta_data.instance_id }}` | Same |

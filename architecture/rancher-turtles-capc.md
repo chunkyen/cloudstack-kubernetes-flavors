@@ -88,7 +88,7 @@ Turtles supports two bootstrap/control-plane providers for CAPC clusters:
 
 | Aspect | Kubeadm | RKE2 |
 |--------|---------|------|
-| **CNI** | Manual install (Calico, Flannel, Cilium) | Built-in Calico (CNI auto-installed) |
+| **CNI** | Manual install (Calico, Flannel, Cilium) | Built-in (Calico default; Canal, Cilium, Flannel, or none configurable) |
 | **OS image** | CAPI-compatible image (kubelet + kubeadm pre-installed) | Standard Ubuntu/Rocky template |
 | **Bootstrap method** | cloud-init runs `kubeadm init/join` | RKE2 tarball auto-extracts and installs at bootstrap |
 | **etcd encryption** | Manual configuration | Enabled by default |
