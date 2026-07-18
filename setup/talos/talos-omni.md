@@ -473,6 +473,8 @@ EOF
 ```
 
 > **Note:** Use `apiVersion: v1alpha1` (not `version: v1alpha1`). The `&` in the URL must be quoted in YAML — use `apiUrl: "grpc://..."` to prevent YAML from interpreting it as an anchor character.
+>
+> **Official docs:** [SideroLinkConfig Reference](https://docs.siderolabs.com/talos/latest/reference/configuration/v1alpha1/config/#siderolinkconfig) | [Machine Registration](https://docs.siderolabs.com/omni/latest/infrastructure-and-extensions/machine-registration/)
 
 ### Step 4: Deploy Talos VMs
 
@@ -547,6 +549,8 @@ EOF
 # Apply the template
 omnictl cluster template sync -f omni-cluster-template.yaml
 ```
+
+> **Official docs:** [Export a Cluster Template](https://docs.siderolabs.com/omni/cluster-management/export-a-cluster-template-from-a-cluster-created-in-the-ui/) | [Scale a Cluster Up or Down](https://docs.siderolabs.com/omni/cluster-management/scale-your-cluster/scale-a-cluster-up-or-down/) | [Cluster Template Reference](https://docs.siderolabs.com/omni/reference/cluster-templates/)
 
 Omni will:
 1. Create the cluster, MachineSets, and assign the machines
@@ -739,6 +743,8 @@ EOF
 # Sync the updated template — Omni creates the MachineSetNode and provisions the new machine
 omnictl cluster template sync -f omni-cluster-template.yaml
 ```
+
+> **Official docs:** [Scale a Cluster Up or Down](https://docs.siderolabs.com/omni/cluster-management/scale-your-cluster/scale-a-cluster-up-or-down/) | [Cluster Template Reference](https://docs.siderolabs.com/omni/reference/cluster-templates/)
 
 > **Note:** The cluster template approach works for both initial creation and scaling. You can also use the **Omni UI** (Clusters → Cluster Scaling) to add machines manually. Labels and Machine Classes are **not needed** for CloudStack — they are used for automatic scaling with an infrastructure provider (AWS, vSphere, etc.), which CloudStack does not have.
 
