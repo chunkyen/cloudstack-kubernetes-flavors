@@ -98,7 +98,7 @@ The actual bootstrap flow:
 | **Rocky Linux 9** | RHEL-compatible. cloud-init pre-installed. |
 | **Debian 12** | Lightweight. cloud-init pre-installed. |
 
-> **Note:** You can use either a generic OS cloud image or a CAPI image-builder image with RKE2 — both work. The CAPI image already has containerd and kubelet installed, but RKE2 will manage its own versions. The generic OS is simpler and lighter if you are building templates from scratch.
+> **Recommendation:** Use a **generic OS cloud image** for RKE2. RKE2 installs containerd, kubelet, etcd, and CNI itself during bootstrap, so a pre-built CAPI image is unnecessary. A generic image is simpler to maintain, smaller, and avoids version conflicts. CAPI images work too, but they contain pre-installed kubeadm/kubelet that RKE2 will overlay anyway.
 
 ## Step 1: Install CAPRKE2 Providers
 
