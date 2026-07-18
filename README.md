@@ -62,7 +62,8 @@ Two bootstrap providers are supported:
 | **Control plane** | `kubeadm` | `rke2` |
 | **CNI** | Manual install (Calico/Flannel/Cilium) | Built-in (Calico default; Canal, Cilium, Flannel, or none configurable) |
 | **Image** | CAPI-compatible image (kubelet + kubeadm pre-installed) | Standard OS template |
-| **RKE2 advantage** | — | No custom image build; RKE2 auto-installs via tarball; built-in CNI; etcd encryption by default; CIS-hardened; simpler upgrades |
+
+See [architecture/rancher-turtles-capc.md#bootstrap-provider-choice-kubeadm-vs-rke2](architecture/rancher-turtles-capc.md#bootstrap-provider-choice-kubeadm-vs-rke2) for a detailed comparison of why to choose RKE2 over kubeadm.
 
 **Phase 1 — Deploy Management Plane:**
 

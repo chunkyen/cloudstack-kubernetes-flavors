@@ -93,21 +93,52 @@ Turtles supports two bootstrap/control-plane providers for CAPC clusters:
 | **Bootstrap method** | cloud-init runs `kubeadm init/join` | RKE2 tarball auto-extracts and installs at bootstrap |
 | **etcd encryption** | Manual configuration | Enabled by default |
 | **CIS hardening** | Optional, manual | Built-in, applied automatically |
+| **Certificate rotation** | Manual (`kubeadm certs renew`) | Automatic |
+| **etcd snapshots** | Manual (`etcdctl snapshot save`) | Built-in (`rke2 etcd-snapshot`) |
+| **Air-gap support** | Requires custom image build + registry mirror | Single tarball contains all images |
 | **Upgrade complexity** | New image + rolling replace | In-place rolling upgrade via `rke2-server` |
+| **Bundled components** | None — CNI, ingress, storage all manual | containerd, CoreDNS, CNI, ingress pre-integrated |
 | **Use case** | Fine-grained control, custom CNI | Simplicity, built-in security, faster provisioning |
 
-**When to choose RKE2:**
-- You want to avoid building and maintaining CAPI-compatible images
-- You prefer Calico as CNI and don't need custom CNI choices
-- You want etcd encryption and CIS hardening out of the box
-- You want simpler cluster upgrades (in-place vs image replacement)
-- You have standard OS templates available in CloudStack
+### Why Choose RKE2 Over Kubeadm
 
-**When to stick with Kubeadm:**
-- You need a CNI other than Calico (e.g. Cilium, Flannel)
-- You want full control over the bootstrap process
-- You already have a CAPI-compatible image pipeline
+**1. Simpler operations**
+- `rke2 server` / `rke2 agent` instead of `kubeadm init/join` + manual cert management
+- Built-in etcd snapshot/restore (`rke2 etcd-snapshot`)
+- Automatic certificate rotation
+- CIS hardening profiles built in
+
+**2. Bundled components**
+- RKE2 ships with containerd, CoreDNS, CNI (Flannel/Calico/Canal), and ingress (Traefik/nginx) pre-integrated
+- kubeadm leaves all of that as manual steps — you install CNI, ingress, storage, etc. separately
+- One less thing to configure and troubleshoot
+
+**3. No custom image required**
+- kubeadm needs a CAPI-compatible image with kubelet + kubeadm pre-installed
+- RKE2 installs from a tarball at bootstrap — any standard Ubuntu/Rocky template works
+- Eliminates image build and maintenance overhead
+
+**4. Air-gap friendly**
+- Single tarball contains all images — pull once, ship everywhere
+- Embedded registry for offline deployments
+- Critical for enterprise and regulated environments
+
+**5. Simpler upgrades**
+- RKE2 upgrades are restarting the process with a new binary — no kubeadm upgrade dance
+- CAPI + CAPRKE2 handles rolling upgrades declaratively
+- No need to build and register a new CAPI-compatible image for every Kubernetes version bump
+
+**6. Native Rancher integration**
+- Rancher's UI can provision, upgrade, and manage RKE2 clusters directly
+- Fleet GitOps, monitoring, apps, and RBAC all work out of the box
+- Cluster API + Rancher Turtles gives you both declarative CAPI lifecycle AND the Rancher UI
+
+### When to Stick with Kubeadm
+- You need a CNI other than Calico/Canal/Flannel/Cilium (e.g. a custom or specialized CNI)
+- You want full control over every bootstrap detail
+- You already have a CAPI-compatible image pipeline and don't want to change
 - You need features only available in kubeadm (e.g. specific kubeadm configuration)
+- You have a multi-control-plane HA setup where `replicas: 2` on the CSI controller is desirable
 
 ### Layer 3: CAPC (Workload Clusters)
 
