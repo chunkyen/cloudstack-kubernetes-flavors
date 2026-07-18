@@ -122,6 +122,8 @@ kubectl get machines -n capc-rke2-cluster-1 -w
 
 The `Cluster` manifest includes the label `capc-rke2-ccm-csi: "true"` which matches the `ClusterResourceSet` selector. Once the cluster's API server is reachable, the ClusterResourceSet controller automatically applies CCM and CSI to the workload cluster — no manual post-step required.
 
+> **Alternative:** If you prefer not to use ClusterResourceSet, skip the `20-ccm-csi-configmap.yaml` and `21-clusterresourceset.yaml` files. After the cluster is ready, apply the standalone CCM + CSI manifests directly to the workload cluster. See the [Standalone Manifests](#standalone-manifests-optional--without-clusterresourceset) section below.
+
 ### Key details in the manifest
 
 | Field | Value | Why |
