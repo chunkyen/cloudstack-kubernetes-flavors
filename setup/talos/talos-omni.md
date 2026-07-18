@@ -742,7 +742,7 @@ omnictl cluster template sync -f omni-cluster-template.yaml
 
 > **Note:** The cluster template approach works for both initial creation and scaling. You can also use the **Omni UI** (Clusters → Cluster Scaling) to add machines manually. Labels and Machine Classes are **not needed** for CloudStack — they are used for automatic scaling with an infrastructure provider (AWS, vSphere, etc.), which CloudStack does not have.
 
-#### Why Manual Scaling Is the Only Option for CloudStack
+#### Why Automatic Scaling (Machine Classes) Requires an Infra Provider
 
 Omni's **automatic scaling** (via Machine Classes + `machineallocation.machineclass`) requires an **infrastructure provider** — a gRPC service that Omni calls to provision VMs on demand. Supported providers include AWS, Proxmox, vSphere, KubeVirt, and libvirt.
 
@@ -750,7 +750,7 @@ CloudStack does **not** have an Omni infrastructure provider. Without one:
 
 - Omni cannot auto-provision VMs — you must deploy them manually via `cmk deploy`
 - The Machine Class + label auto-join path is designed for VMs that Omni itself provisions, not manually deployed ones
-- You must add manually deployed machines to a cluster by UUID via the **cluster template** (`omnictl cluster template sync`) or the **UI's Cluster Scaling page**
+- You assign manually deployed machines to a cluster by UUID via the **cluster template** (`omnictl cluster template sync`) or the **UI's Cluster Scaling page**
 
 **With a supported infra provider**, the flow would be:
 
