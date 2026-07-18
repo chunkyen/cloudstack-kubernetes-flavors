@@ -236,9 +236,14 @@ kubectl apply -f 10-minimal-cluster.yaml
 
 ## Step 4: Deploy CCM and CSI via ClusterResourceSet
 
-The official upstream manifests are at:
-- **CCM:** https://github.com/apache/cloudstack-kubernetes-provider (image: `apache/cloudstack-kubernetes-provider:v1.2.0`)
-- **CSI:** https://github.com/cloudstack/cloudstack-csi-driver (image: `ghcr.io/cloudstack/cloudstack-csi-driver:main`)
+The ConfigMap at `manifests/20-ccm-csi-configmap.yaml` contains the **exact upstream YAML** from the official repos — no modifications to the CCM RBAC or deployment. This means the CCM includes the proper `extension-apiserver-authentication-reader` RoleBinding and correct ClusterRole with `configmaps` access out of the box.
+
+The only change from upstream is the removal of the `/run/cloud-init/` hostPath mount from the CSI node DaemonSet, since RKE2 nodes use RKE2's own bootstrap (not cloud-init) and that directory doesn't exist.
+
+| Component | Source | Image |
+|---|---|---|
+| **CCM** | [upstream deployment.yaml](https://github.com/apache/cloudstack-kubernetes-provider/blob/main/deployment.yaml) | `apache/cloudstack-kubernetes-provider:v1.2.0` |
+| **CSI** | [upstream deploy/k8s/](https://github.com/cloudstack/cloudstack-csi-driver/tree/main/deploy/k8s) | `ghcr.io/cloudstack/cloudstack-csi-driver:main` |
 
 ### 4a. Create the CloudStack secret in the workload cluster
 
@@ -286,6 +291,8 @@ data:
 ```
 
 > **Note:** The full content of each file is the exact YAML from the upstream repos. See the [official CCM deployment.yaml](https://github.com/apache/cloudstack-kubernetes-provider/blob/main/deployment.yaml) and [CSI deploy/k8s/](https://github.com/cloudstack/cloudstack-csi-driver/tree/main/deploy/k8s) for the complete manifests.
+>
+> **RKE2-specific change:** The `/run/cloud-init/` hostPath mount was removed from the CSI node DaemonSet because RKE2 nodes use RKE2's own bootstrap (not cloud-init) and that directory doesn't exist. Without this removal, the CSI node container crashes with exit code 2 on RKE2 nodes.
 
 ### 4c. Create the ClusterResourceSet
 
@@ -367,7 +374,7 @@ The `provider-id` must be `cloudstack:///{{ ds.meta_data.instance_id }}` — no 
 
 ### CCM fails with `configmaps "extension-apiserver-authentication" is forbidden`
 
-The CCM needs the `extension-apiserver-authentication-reader` RoleBinding in `kube-system`. The official upstream `deployment.yaml` includes this — use the exact upstream manifest rather than a custom one.
+This happens if you use a hand-rolled CCM manifest that's missing the `extension-apiserver-authentication-reader` RoleBinding or the `configmaps` list/watch rule in the ClusterRole. The ConfigMap in this repo uses the **exact upstream YAML** which includes both — so this error should not occur. If it does, verify the CCM manifest matches the [upstream deployment.yaml](https://github.com/apache/cloudstack-kubernetes-provider/blob/main/deployment.yaml).
 
 ## Cleanup
 
