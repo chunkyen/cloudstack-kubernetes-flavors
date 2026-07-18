@@ -7,14 +7,34 @@ This guide covers provisioning **RKE2** clusters on **CloudStack** using **Clust
 
 ## Architecture
 
+For the full Rancher Turtles + CAPC architecture breakdown — including layer-by-layer explanation, data flow, namespace layout, credential model, and ClusterResourceSet mechanics — see [Rancher+CAPC architecture](../../architecture/rancher-turtles-capc.md).
+
+This guide focuses on the **RKE2-specific components** within that architecture:
+
 ```
-Rancher Manager
-  └─ Turtles (CAPI operator)
-       ├─ CAPC (infrastructure) — provisions CloudStack VMs
-       ├─ CAPRKE2 bootstrap — installs RKE2 on VMs
-       └─ CAPRKE2 control-plane — manages RKE2 control plane
-            └─ ClusterResourceSet — deploys CCM + CSI post-creation
+Management Cluster (Rancher + Turtles + CAPC already running)
+  │
+  └─ CAPIProvider: rke2-bootstrap        ← you add this
+  └─ CAPIProvider: rke2-control-plane    ← you add this
+       │
+       └─ RKE2ControlPlane (replaces KubeadmControlPlane)
+            │
+            ├─ CloudStackMachineTemplate (control-plane VM spec)
+            │      └─ CloudStack VM → RKE2 tarball auto-installs → Calico
+            │
+            └─ RKE2ConfigTemplate (worker bootstrap config)
+                   │
+                   └─ MachineDeployment
+                        └─ CloudStackMachineTemplate (worker VM spec)
+                               └─ CloudStack VM → RKE2 agent joins → ready
+
+Post-creation:
+  └─ ClusterResourceSet applies CCM + CSI manifests to workload cluster
 ```
+
+**Key architectural difference:**
+- **Kubeadm CAPC:** VMs boot with a pre-baked CAPI image → cloud-init runs `kubeadm init/join` → you manually install CNI via CRS
+- **RKE2 CAPC:** VMs boot with a standard OS template → CAPRKE2 pushes RKE2 tarball → RKE2 auto-installs containerd, etcd, CNI (Calico), CoreDNS, ingress → CCM + CSI applied via CRS
 
 ## What This Adds vs. Kubeadm-Based CAPC
 
@@ -29,7 +49,7 @@ Rancher Manager
 | `guest.cpu.mode: host-passthrough` | Required for Calico x86-64-v2 | Required for Calico x86-64-v2 |
 | CCM/CSI deployment | ClusterResourceSet or manual | Same |
 
-Everything else — Rancher, Turtles, CAPC, CloudStack credentials, networking — is identical.
+Everything else — Rancher, Turtles, CAPC, CloudStack credentials, networking, ClusterResourceSet mechanics — is identical. See [Rancher+CAPC architecture](../../architecture/rancher-turtles-capc.md#bootstrap-provider-choice-kubeadm-vs-rke2) for a detailed comparison of why to choose RKE2 over kubeadm.
 
 ## Step 1: Install CAPRKE2 Providers
 
