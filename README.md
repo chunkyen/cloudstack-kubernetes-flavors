@@ -74,7 +74,8 @@ The Rancher Turtles integration combines three layers — Rancher (management pl
 
 An alternative to the kubeadm-based CAPC clusters above: use **CAPRKE2** (the RKE2 bootstrap/control-plane provider) instead of kubeadm. RKE2 bundles its own CNI (Calico), CoreDNS, and ingress controller — no separate CNI installation needed. CCM and CSI are deployed via ClusterResourceSet, same as the kubeadm variant.
 
-- [Setup guide](setup/rancher-turtles-capc-rke2/README.md) — full walkthrough with manifests
+- [Cluster creation](setup/rancher-turtles-capc-rke2/cluster.md) — RKE2 cluster provisioning on CloudStack
+- [CCM + CSI deployment](setup/rancher-turtles-capc-rke2/ccm-csi.md) — CloudStack CCM and CSI with RKE2 patches
 - [Manifests](setup/rancher-turtles-capc-rke2/manifests/) — all YAML files
 
 > **Key differences from kubeadm-based CAPC:**
