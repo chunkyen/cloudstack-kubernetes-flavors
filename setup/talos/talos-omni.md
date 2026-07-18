@@ -234,7 +234,7 @@ cd ~/omni-setup
 # Generate bcrypt password hash (cost 10 required by Dex)
 python3 -c "
 import bcrypt
-password = b'omni-admin-password'
+password = b'omni-admin-password'  # ⚠️ DEFAULT PASSWORD — change this before deploying
 salt = bcrypt.gensalt(rounds=10)
 hashed = bcrypt.hashpw(password, salt).decode()
 # Go's bcrypt expects \$2a\$ prefix
@@ -394,7 +394,7 @@ sudo update-ca-certificates
 
 **Login flow:**
 1. Omni redirects to `https://<omni-ip>:5556/auth?...` (Dex login page, HTTPS)
-2. Enter **Email:** `admin@omni.internal` / **Password:** `omni-admin-password`
+2. Enter **Email:** `admin@omni.internal` / **Password:** `omni-admin-password` (set in [Step 4](#step-4-set-up-dex-oidc-provider) — change this before deploying to production)
 3. Click "Grant Access" on the approval page
 4. On the "authenticate UI access" page, click to confirm — your browser's public key is registered
 5. You are logged into the Omni dashboard
@@ -420,7 +420,7 @@ omnictl config context add cloudstack-lab \
 # Log in
 omnictl login --auth-mode=basic
 # Username: admin@omni.internal
-# Password: omni-admin-password
+# Password: omni-admin-password (set in Step 4 — change before deploying to production)
 
 # Verify
 omnictl get contexts
