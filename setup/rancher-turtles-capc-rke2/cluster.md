@@ -51,6 +51,8 @@ Post-creation:
 
 Everything else — Rancher, Turtles, CAPC, CloudStack credentials, networking, ClusterResourceSet mechanics — is identical. See [Rancher+CAPC architecture](../../architecture/rancher-turtles-capc.md#bootstrap-provider-choice-kubeadm-vs-rke2) for a detailed comparison of why to choose RKE2 over kubeadm.
 
+> **Tip:** RKE2's CNI is not limited to Calico. You can switch to [Cilium](#switching-cni-from-calico-to-cilium) or other CNIs by changing a single field.
+
 ## Step 1: Install CAPRKE2 Providers
 
 Create the `CAPIProvider` resources for the RKE2 bootstrap and control-plane providers:
@@ -130,7 +132,7 @@ The `Cluster` manifest includes the label `capc-rke2-ccm-csi: "true"` which matc
 |---|---|---|
 | `provider-id` | `cloudstack:///{{ ds.meta_data.instance_id }}` | Must match CAPC's provider ID format. No quotes around the template expression. |
 | `guest.cpu.mode` | `host-passthrough` | Required because Calico (bundled with RKE2 ≥v1.30) needs x86-64-v2 CPU instructions. Without this, `tigera-operator` crashes with `Fatal glibc error: CPU does not support x86-64-v2`. |
-| `cni` | `calico` | RKE2's built-in CNI. Calico is installed as a Helm chart by RKE2 automatically. |
+| `cni` | `calico` | RKE2's built-in CNI. Calico is installed as a Helm chart by RKE2 automatically. Change to `cilium`, `canal`, `flannel`, or `none` if desired. |
 | `registrationMethod` | `internal-first` | Nodes register via internal IP first, falling back to external. |
 | `preRKE2Commands` | `sleep 30` | Gives CloudStack time to fully provision the VM before RKE2 bootstrap starts. |
 | `capc-rke2-ccm-csi: "true"` | Cluster label | Matches the `ClusterResourceSet` selector so CCM + CSI are auto-deployed. |
@@ -218,44 +220,31 @@ The `provider-id` must be `cloudstack:///{{ ds.meta_data.instance_id }}` — no 
 
 ## Switching CNI from Calico to Cilium
 
-RKE2 installs **Calico** by default via `cni: calico`. To use **Cilium** instead, you have two options.
+RKE2 supports multiple CNI plugins out of the box: `calico` (default), `canal`, `cilium`, `flannel`, or `none`. To use **Cilium**, simply change the `cni` field in `10-minimal-cluster.yaml` before applying.
 
 ### Option A: Deploy with Cilium from the start
 
-Change the `cni` field in `10-minimal-cluster.yaml` before applying:
+Change the `cni` field in `10-minimal-cluster.yaml`:
 
 ```yaml
 # In 10-minimal-cluster.yaml, RKE2ControlPlane spec:
-    cni: none          # ← disable RKE2's built-in CNI
+    cni: cilium          # ← RKE2 installs Cilium automatically during bootstrap
 ```
 
-Then add a ClusterResourceSet (or post-bootstrap Helm install) to deploy Cilium after the cluster is Ready:
-
-```bash
-# After the cluster shows Ready, get workload kubeconfig
-kubectl get secret capc-rke2-cluster-1-kubeconfig -n capc-rke2-cluster-1 \
-  -o jsonpath='{.data.value}' | base64 -d > workload-kubeconfig
-
-# Install Cilium via Helm
-helm repo add cilium https://helm.cilium.io/
-helm install cilium cilium/cilium --kubeconfig workload-kubeconfig \
-  --namespace kube-system \
-  --set ipam.mode=kubernetes \
-  --set operator.replicas=1
-```
+That's it — RKE2 handles Cilium installation as part of the control plane bootstrap. No manual Helm install or ClusterResourceSet needed.
 
 > **Note:** Cilium requires kernel 4.9+ with eBPF support. Ubuntu 24.04 (the template used in `10-minimal-cluster.yaml`) satisfies this.
 
 ### Option B: Switch an existing Calico cluster to Cilium
 
-If the cluster is already running with Calico, migration requires draining and rebooting nodes — this is disruptive. The recommended path is to **delete and recreate** the cluster with `cni: none` (Option A).
+If the cluster is already running with Calico, migration requires draining and rebooting nodes — this is disruptive. The recommended path is to **delete and recreate** the cluster with `cni: cilium` (Option A).
 
 ### Cilium + CloudStack considerations
 
 | Concern | Guidance |
 |---|---|
-| **IPAM** | Use `ipam.mode=kubernetes` (Cilium allocates pod IPs from the Kubernetes Node CIDR). This avoids conflicts with CloudStack's IP management. |
-| **Host firewall** | Cilium's eBPF-based host firewall is compatible with CloudStack's isolated network model. No special rules needed. |
+| **IPAM** | Cilium defaults to Kubernetes host-scope IPAM mode (pod IPs from Node CIDR). This works with CloudStack's isolated network model. |
+| **Host firewall** | Cilium's eBPF-based host firewall is compatible with CloudStack isolated networks. No special rules needed. |
 | **CCM + CSI** | Cilium operates independently of CCM and CSI. All three coexist without conflict. |
 
 ### Verification (Cilium)
