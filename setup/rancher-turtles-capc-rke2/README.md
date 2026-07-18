@@ -249,19 +249,19 @@ kubectl apply -f manifests/cloudstack-csi-rbac.yaml
 kubectl apply -f manifests/cloudstack-csi-snapshot-crds.yaml
 kubectl apply -f manifests/cloudstack-csi-volume-snapshot-class.yaml
 kubectl apply -f manifests/cloudstack-csi-driver.yaml
-kubectl apply -f manifests/cloudstack-csi-controller-deployment.yaml
-kubectl apply -f manifests/cloudstack-csi-node-daemonset-rke2.yaml   # RKE2-patched
+kubectl apply -f manifests/cloudstack-csi-controller-deployment-rke2.yaml  # RKE2-patched
+kubectl apply -f manifests/cloudstack-csi-node-daemonset-rke2.yaml         # RKE2-patched
 ```
 
 | File | Source | Image | Notes |
 |---|---|---|---|
 | `cloudstack-ccm.yaml` | [upstream deployment.yaml](https://github.com/apache/cloudstack-kubernetes-provider/blob/main/deployment.yaml) | `apache/cloudstack-kubernetes-provider:v1.2.0` | Exact upstream — no changes |
 | `cloudstack-csi-rbac.yaml` | [upstream rbac.yaml](https://github.com/cloudstack/cloudstack-csi-driver/tree/main/deploy/k8s) | — | Exact upstream |
-| `cloudstack-csi-controller-deployment.yaml` | [upstream controller-deployment.yaml](https://github.com/cloudstack/cloudstack-csi-driver/tree/main/deploy/k8s) | `ghcr.io/cloudstack/cloudstack-csi-driver:main` | Exact upstream |
+| `cloudstack-csi-controller-deployment-rke2.yaml` | [upstream controller-deployment.yaml](https://github.com/cloudstack/cloudstack-csi-driver/tree/main/deploy/k8s) | `ghcr.io/cloudstack/cloudstack-csi-driver:main` | **RKE2 patch:** `replicas: 1` (was 2), removed `podAntiAffinity` (conflicts with single-node control plane) |
 | `cloudstack-csi-driver.yaml` | [upstream csidriver.yaml](https://github.com/cloudstack/cloudstack-csi-driver/tree/main/deploy/k8s) | — | Exact upstream |
 | `cloudstack-csi-snapshot-crds.yaml` | [upstream 00-snapshot-crds.yaml](https://github.com/cloudstack/cloudstack-csi-driver/tree/main/deploy/k8s) | — | Exact upstream |
 | `cloudstack-csi-volume-snapshot-class.yaml` | [upstream volume-snapshot-class.yaml](https://github.com/cloudstack/cloudstack-csi-driver/tree/main/deploy/k8s) | — | Exact upstream |
-| `cloudstack-csi-node-daemonset-rke2.yaml` | [upstream node-daemonset.yaml](https://github.com/cloudstack/cloudstack-csi-driver/tree/main/deploy/k8s) | `ghcr.io/cloudstack/cloudstack-csi-driver:main` | `/run/cloud-init/` mount removed for RKE2 |
+| `cloudstack-csi-node-daemonset-rke2.yaml` | [upstream node-daemonset.yaml](https://github.com/cloudstack/cloudstack-csi-driver/tree/main/deploy/k8s) | `ghcr.io/cloudstack/cloudstack-csi-driver:main` | **RKE2 patch:** removed `/run/cloud-init/` mount (RKE2 doesn't use cloud-init, directory absent) |
 
 ### Option B: ClusterResourceSet (auto-deployed by CAPI after cluster creation)
 

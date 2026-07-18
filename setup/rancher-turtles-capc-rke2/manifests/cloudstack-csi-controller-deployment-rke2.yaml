@@ -1,12 +1,24 @@
 # In this YAML file CloudStack CSI Controller contains the following sidecars:
 # external-attacher, external-provisioner, external-resizer, liveness-probe
+#
+# RKE2 PATCH: replicas changed from 2 → 1
+#   The upstream sets replicas: 2 with podAntiAffinity requiring different hosts.
+#   With a single RKE2 control-plane node, only 1 replica can schedule.
+#   Setting replicas: 1 avoids a Pending pod and confusing scheduler backoff.
+#
+# RKE2 PATCH: podAntiAffinity removed
+#   Removed the preferredDuringSchedulingIgnoredDuringExecution podAntiAffinity
+#   rule because it conflicts with a single-node control plane. The deployment
+#   still tolerates control-plane taints and targets control-plane nodes.
+#
+# Source: https://github.com/cloudstack/cloudstack-csi-driver/blob/main/deploy/k8s/controller-deployment.yaml
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: cloudstack-csi-controller
   namespace: kube-system
 spec:
-  replicas: 2
+  replicas: 1                           # RKE2 PATCH: was 2 in upstream
   strategy:
     type: RollingUpdate
     rollingUpdate:
@@ -23,24 +35,12 @@ spec:
     spec:
       priorityClassName: system-cluster-critical
       serviceAccountName: cloudstack-csi-controller
-      affinity:
-        podAntiAffinity:
-          preferredDuringSchedulingIgnoredDuringExecution:
-          - weight: 100
-            podAffinityTerm:
-              labelSelector:
-                matchExpressions:
-                - key: "app.kubernetes.io/name"
-                  operator: In
-                  values:
-                  - cloudstack-csi-controller
-              topologyKey: "kubernetes.io/hostname"
-        nodeAffinity:
-          requiredDuringSchedulingIgnoredDuringExecution:
-            nodeSelectorTerms:
-            - matchExpressions:
-              - key: node-role.kubernetes.io/control-plane
-                operator: Exists
+      nodeAffinity:
+        requiredDuringSchedulingIgnoredDuringExecution:
+          nodeSelectorTerms:
+          - matchExpressions:
+            - key: node-role.kubernetes.io/control-plane
+              operator: Exists
       nodeSelector:
         kubernetes.io/os: linux
       tolerations:

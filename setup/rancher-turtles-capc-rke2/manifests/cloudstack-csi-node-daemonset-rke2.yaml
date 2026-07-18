@@ -1,3 +1,17 @@
+# Source: https://github.com/cloudstack/cloudstack-csi-driver/blob/main/deploy/k8s/node-daemonset.yaml
+#
+# RKE2 PATCH: Removed /run/cloud-init/ mount and volume
+#   The upstream CSI node DaemonSet mounts /run/cloud-init/ to read instance
+#   metadata. RKE2 nodes do NOT use cloud-init — RKE2 installs itself via
+#   tarball at bootstrap — so this directory does not exist. Without removing
+#   this mount, the CSI node container crashes with exit code 2.
+#
+#   Changes made:
+#   - Removed volumeMount:  name: cloud-init-dir, mountPath: /run/cloud-init/
+#   - Removed volume:       name: cloud-init-dir, hostPath: /run/cloud-init/
+#   - Left the Ignition metadata comment intact for reference
+#
+#   All other fields are identical to upstream.
 apiVersion: apps/v1
 kind: DaemonSet
 metadata:
@@ -62,9 +76,11 @@ spec:
               mountPropagation: Bidirectional
             - name: device-dir
               mountPath: /dev
-              mountPath: /run/cloud-init/
+            # RKE2 PATCH: removed cloud-init-dir mount here
+            #   (upstream had volumeMount: name=cloud-init-dir, mountPath=/run/cloud-init/)
+            #   RKE2 does not use cloud-init — directory absent — container crashes with exit code 2
             - name: sys-dir
-              mountPath: /sys  
+              mountPath: /sys
             # Comment the above 2 lines and uncomment the next 2 lines for Ignition support
             # - name: ignition-dir
             #   mountPath: /run/metadata
@@ -170,17 +186,17 @@ spec:
           hostPath:
             path: /dev
             type: Directory
+        # RKE2 PATCH: removed cloud-init-dir volume here
+        #   (upstream had volume: name=cloud-init-dir, hostPath=/run/cloud-init/)
+        #   RKE2 does not use cloud-init — directory absent — container crashes with exit code 2
         - name: registration-dir
           hostPath:
             path: /var/lib/kubelet/plugins_registry
             type: Directory
-          hostPath:
-            path: /run/cloud-init/
-            type: Directory
         - name: sys-dir
           hostPath:
             path: /sys
-            type: Directory    
+            type: Directory
         # Comment the above 4 lines and uncomment the next 4 lines for Ignition support
         # - name: ignition-dir
         #   hostPath:
