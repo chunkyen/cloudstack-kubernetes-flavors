@@ -70,6 +70,19 @@ The Rancher Turtles integration combines three layers — Rancher (management pl
 >
 > **CNI/CCM/CSI:** For Kubeadm-based CAPC clusters (no built-in CNI), use [ClusterResourceSet](https://turtles.docs.rancher.com/turtles/stable/en/user/applications.html) — the approach recommended by the Rancher Turtles documentation — to auto-install bootstrap applications. See [Full-stack onboarding](setup/rancher-turtles-capc/full-stack-onboarding.md).
 
+#### Rancher Turtles + CAPC + RKE2
+
+An alternative to the kubeadm-based CAPC clusters above: use **CAPRKE2** (the RKE2 bootstrap/control-plane provider) instead of kubeadm. RKE2 bundles its own CNI (Calico), CoreDNS, and ingress controller — no separate CNI installation needed. CCM and CSI are deployed via ClusterResourceSet, same as the kubeadm variant.
+
+- [Setup guide](setup/rancher-turtles-capc-rke2/README.md) — full walkthrough with manifests
+- [Manifests](setup/rancher-turtles-capc-rke2/manifests/) — all YAML files
+
+> **Key differences from kubeadm-based CAPC:**
+> - Uses `RKE2ControlPlane` + `RKE2ConfigTemplate` instead of `KubeadmControlPlane` + `KubeadmConfigTemplate`
+> - RKE2 installs itself via tarball at bootstrap — no custom image needed, standard OS templates work
+> - Built-in Calico (set via `serverConfig.cni: calico`) — no separate CNI manifest
+> - Requires `guest.cpu.mode: host-passthrough` on CloudStackMachineTemplates because Calico ≥v3.28 needs x86-64-v2 CPU instructions
+
 #### Talos Linux
 
 Talos Linux is a minimal, immutable OS designed specifically for Kubernetes. It can be managed through three approaches, each documented here:
@@ -100,16 +113,16 @@ Guides:
 
 ## Quick Comparison
 
-| Feature | CKS | CAPC | Rancher+CAPC | Talos (standalone) | Talos (Omni-managed) |
-|---------|-----|------|-------------------|-------------------|---------------------|
-| **Management** | Native CloudStack UI/API | Cluster API controllers | Rancher UI/API | Talos CLI / Terraform | Omni UI / `omnictl` |
-| **Node OS** | User-defined | User-defined | User-defined | Talos Linux (immutable, no SSH) | Talos Linux (immutable, no SSH) |
-| **GitOps** | No | Yes (CAPI native) | Yes (Rancher Fleet) | Yes (talosctl + Git) | Yes (Omni + Git) |
-| **Multi-cluster** | Limited | Yes (CAPI native) | Yes (CAPI + Rancher Turtles) | Manual | Yes (Omni native) |
-| **Upgrade Strategy** | Manual | Image-based rolling update | Image-based rolling update | Image-based atomic (talosctl upgrade) | Automatic rolling (Omni-managed) |
-| **CNI/CCM/CSI** | Baked into ISO | Manual or ClusterResourceSet | Manual or ClusterResourceSet | Manual install | Manual install (same) |
-| **ClusterClass** | N/A | Not supported (no CloudStackClusterTemplate) | Not supported (no CloudStackClusterTemplate) | N/A (manual config) | N/A (Omni manages configs) |
-| **Complexity** | Low | Medium | High | Medium | High (self-hosted) / Low (SaaS) |
+| **Feature** | CKS | CAPC | Rancher+CAPC | Rancher+CAPC+RKE2 | Talos (standalone) | Talos (Omni-managed) |
+|---------|-----|------|-------------------|-------------------|-------------------|---------------------|
+| **Management** | Native CloudStack UI/API | Cluster API controllers | Rancher UI/API | Rancher UI/API | Talos CLI / Terraform | Omni UI / `omnictl` |
+| **Node OS** | User-defined | User-defined | User-defined | User-defined (RKE2 installs via tarball) | Talos Linux (immutable, no SSH) | Talos Linux (immutable, no SSH) |
+| **GitOps** | No | Yes (CAPI native) | Yes (Rancher Fleet) | Yes (Rancher Fleet) | Yes (talosctl + Git) | Yes (Omni + Git) |
+| **Multi-cluster** | Limited | Yes (CAPI native) | Yes (CAPI + Rancher Turtles) | Yes (CAPI + Rancher Turtles) | Manual | Yes (Omni native) |
+| **Upgrade Strategy** | Manual | Image-based rolling update | Image-based rolling update | RKE2 version bump (rolling) | Image-based atomic (talosctl upgrade) | Automatic rolling (Omni-managed) |
+| **CNI/CCM/CSI** | Baked into ISO | Manual or CRS | Manual or CRS | Built-in (Calico) + CRS for CCM/CSI | Manual install | Manual install (same) |
+| **ClusterClass** | N/A | Not supported (no CloudStackClusterTemplate) | Not supported (no CloudStackClusterTemplate) | Not supported (no CloudStackClusterTemplate) | N/A (manual config) | N/A (Omni manages configs) |
+| **Complexity** | Low | Medium | High | Medium | Medium | High (self-hosted) / Low (SaaS) |
 
 ## Status
 
