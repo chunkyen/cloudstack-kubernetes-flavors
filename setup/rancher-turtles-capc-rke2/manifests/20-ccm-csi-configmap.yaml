@@ -370,7 +370,7 @@ data:
             fsGroupChangePolicy: OnRootMismatch
           containers:
             - name: cloudstack-csi-controller
-              image: ghcr.io/cloudstack/cloudstack-csi-driver:main
+              image: ghcr.io/cloudstack/cloudstack-csi-driver:3.0.0
               imagePullPolicy: Always
               args:
                 - "controller"
@@ -580,7 +580,7 @@ data:
             fsGroup: 0
           containers:
             - name: cloudstack-csi-node
-              image: ghcr.io/cloudstack/cloudstack-csi-driver:main
+              image: ghcr.io/cloudstack/cloudstack-csi-driver:3.0.0
               imagePullPolicy: IfNotPresent
               args:
                 - "node"

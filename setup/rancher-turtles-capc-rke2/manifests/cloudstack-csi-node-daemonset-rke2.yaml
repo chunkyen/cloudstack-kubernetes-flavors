@@ -50,7 +50,7 @@ spec:
 
       containers:
         - name: cloudstack-csi-node
-          image: ghcr.io/cloudstack/cloudstack-csi-driver:main
+          image: ghcr.io/cloudstack/cloudstack-csi-driver:3.0.0
           imagePullPolicy: IfNotPresent
           args:
             - "node"

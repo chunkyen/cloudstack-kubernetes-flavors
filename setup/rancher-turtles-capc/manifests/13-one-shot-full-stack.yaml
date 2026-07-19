@@ -1516,7 +1516,7 @@ data:
                 - name: socket-dir
                   mountPath: /var/lib/csi/sockets/plugin.io
             - name: cloudstack-csi-driver
-              image: ghcr.io/cloudstack/cloudstack-csi-driver:main
+              image: ghcr.io/cloudstack/cloudstack-csi-driver:3.0.0
               args:
                 - controller
                 - --endpoint=$(CSI_ENDPOINT)
@@ -1556,7 +1556,7 @@ data:
           hostNetwork: true
           containers:
             - name: cloudstack-csi-driver
-              image: ghcr.io/cloudstack/cloudstack-csi-driver:main
+              image: ghcr.io/cloudstack/cloudstack-csi-driver:3.0.0
               args:
                 - node
                 - --endpoint=$(CSI_ENDPOINT)
