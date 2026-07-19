@@ -181,7 +181,7 @@ The `Cluster` manifest includes the label `capc-rke2-ccm-csi: "true"` which matc
 |---|---|---|
 | `provider-id` | `cloudstack:///{{ ds.meta_data.instance_id }}` | Must match CAPC's provider ID format. No quotes around the template expression. |
 | `guest.cpu.mode` | `host-passthrough` | Required because Calico (bundled with RKE2 ≥v1.30) needs x86-64-v2 CPU instructions. Without this, `tigera-operator` crashes with `Fatal glibc error: CPU does not support x86-64-v2`. |
-| `cni` | `calico` | RKE2's built-in CNI. Calico is installed as a Helm chart by RKE2 automatically. Change to `cilium`, `canal`, `flannel`, or `none` if desired. |
+| `cni` | `cilium` | RKE2's built-in CNI. RKE2 installs CNI automatically as a Helm chart during bootstrap. Valid values: `calico`, `cilium`, `canal`, `flannel`, or `none`. **Note:** If you use Cilium or another CNI, the `guest.cpu.mode: host-passthrough` requirement still applies because Cilium's eBPF stack also benefits from modern CPU instructions. |
 | `registrationMethod` | `internal-first` | Nodes register via internal IP first, falling back to external. |
 | `preRKE2Commands` | `sleep 30` | Gives CloudStack time to fully provision the VM before RKE2 bootstrap starts. |
 | `nodeTaints` | `node-role.kubernetes.io/control-plane:NoSchedule` | Prevents workload pods from scheduling on the control-plane node. |
@@ -383,6 +383,8 @@ If you need to apply CCM + CSI manually (e.g. to an existing cluster not created
 | `cloudstack-csi-controller-deployment-rke2.yaml` | [upstream](https://github.com/cloudstack/cloudstack-csi-driver/tree/main/deploy/k8s) | **RKE2 patch:** `replicas: 1`, removed `podAntiAffinity`; `nodeAffinity` moved under `affinity` (not directly under `spec`) |
 | `cloudstack-csi-node-daemonset-rke2.yaml` | [upstream](https://github.com/cloudstack/cloudstack-csi-driver/tree/main/deploy/k8s) | **RKE2 patch:** removed `/run/cloud-init/` mount |
 | `cloudstack-csi-storageclass.yaml` | New | **Placeholder:** Set `csi.cloudstack.apache.org/disk-offering-id` to your CloudStack disk offering **UUID** (not the name). Marked with `⚠️ REPLACE THIS VALUE ⚠️` inline comment. Run `cmk list diskofferings | grep -E "id|name"` to find it. |
+
+> **Note on Volume Snapshots:** The standalone manifests **exclude** snapshot CRDs (`volumesnapshotclasses`, `volumesnapshotcontents`, `volumesnapshots`). RKE2 bundles its own `rke2-snapshot-controller-crd` Helm chart which installs these CRDs automatically during bootstrap. Including duplicate CRDs in the ClusterResourceSet ConfigMap causes the RKE2 helm-install job to fail with "invalid ownership metadata" errors because Helm cannot adopt pre-existing CRDs that lack Helm labels/annotations. The CloudStack VolumeSnapshotClass should be created separately after the cluster is ready.
 
 The exact RKE2 changes are documented as inline YAML comments in both `-rke2` files. The StorageClass file contains a `REPLACE_WITH_YOUR_DISK_OFFERING_UUID` placeholder — run `cmk list diskofferings | grep -E "id|name"` to find the correct UUID for your CloudStack zone.
 
