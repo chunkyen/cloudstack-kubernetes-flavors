@@ -153,7 +153,7 @@ kubectl create secret generic cloudstack-credentials \
   --from-literal=api-url="http://<cloudstack-host>:8080/client/api"
 ```
 
-> ⚠️ **Do not manually create the CloudStack network.** CAPC auto-creates the isolated network specified in `failureDomains.zone.network.name` and auto-associates a free public IP. You only need to pick an available public IP for `controlPlaneEndpoint.host`.
+> 💡 **Network auto-creation:** CAPC automatically creates the isolated network specified in `failureDomains.zone.network.name` and handles IP association. Manually creating the network beforehand also works, but is redundant — CAPC handles it.
 
 ## Step 3: Deploy the Cluster (with CCM + CSI via ClusterResourceSet)
 
