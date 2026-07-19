@@ -284,6 +284,95 @@ KUBECONFIG=~/.kube/kube-rancher-config \
 
 > ⚠️ Do **not** use `kubectl delete node` directly on the workload cluster — this leaves the CAPI `Machine` and CloudStack VM in place. Always delete the `Machine` object on the management cluster so CAPI handles the full lifecycle.
 
+## Upgrading RKE2 Version
+
+CAPI + CAPRKE2 supports **rolling upgrades** by changing the `version` field in the `RKE2ControlPlane` and `MachineDeployment` objects. CAPI then creates new VMs with the new RKE2 version, joins them to the cluster, migrates etcd leadership (for control plane), and deletes the old machines.
+
+### 1. Check current version
+
+```bash
+# Nodes
+KUBECONFIG=/tmp/capc-rke2-cluster-1-kubeconfig kubectl get nodes -o wide
+
+# Machines
+KUBECONFIG=~/.kube/kube-rancher-config \
+  kubectl get machines -n capc-rke2-cluster-1
+```
+
+### 2. Patch to new version
+
+```bash
+# Upgrade control plane
+KUBECONFIG=~/.kube/kube-rancher-config \
+  kubectl patch rke2controlplane capc-rke2-cluster-1-control-plane \
+  -n capc-rke2-cluster-1 --type='merge' \
+  -p '{"spec":{"version":"v1.36.2+rke2r1"}}'
+
+# Upgrade workers
+KUBECONFIG=~/.kube/kube-rancher-config \
+  kubectl patch machinedeployment capc-rke2-cluster-1-md-0 \
+  -n capc-rke2-cluster-1 --type='merge' \
+  -p '{"spec":{"template":{"spec":{"version":"v1.36.2+rke2r1"}}}}'
+```
+
+### 3. Monitor the rolling upgrade
+
+```bash
+# Watch machines — new ones appear with new version, old ones transition to Deleting
+KUBECONFIG=~/.kube/kube-rancher-config \
+  kubectl get machines -n capc-rke2-cluster-1 -w
+
+# Watch nodes
+KUBECONFIG=/tmp/capc-rke2-cluster-1-kubeconfig kubectl get nodes -w
+```
+
+**Expected phases:**
+
+| Phase | Meaning |
+|-------|---------|
+| `Provisioning` | New VM is being created in CloudStack |
+| `Running` | VM is booted and joined the cluster |
+| `Deleting` | Old VM is being drained and removed |
+
+Control plane upgrades first (1 replica at a time by default). Workers upgrade after the control plane is stable. The `Cluster` object shows `RollingOut` during the process.
+
+### 4. Verify completion
+
+```bash
+# All nodes on new version
+KUBECONFIG=/tmp/capc-rke2-cluster-1-kubeconfig kubectl get nodes
+
+# All machines Running and Up-to-date
+KUBECONFIG=~/.kube/kube-rancher-config \
+  kubectl get machines -n capc-rke2-cluster-1
+
+# Cluster stable
+KUBECONFIG=~/.kube/kube-rancher-config \
+  kubectl get cluster -n capc-rke2-cluster-1
+```
+
+### Troubleshooting: etcd leadership transfer stuck
+
+If the control plane upgrade stalls with the new node stuck in `Provisioned` and the old node never deleted, check the `rke2-control-plane-controller-manager` logs:
+
+```bash
+KUBECONFIG=~/.kube/kube-rancher-config \
+  kubectl logs -n cattle-capi-system \
+  deployment/rke2-control-plane-controller-manager | grep -i "etcd\|leadership\|failed"
+```
+
+**Symptom:** TLS certificate errors (`remote error: tls: unknown certificate authority`) or etcd connection timeouts.
+
+**Fix:** Restart the controller manager pod to refresh its etcd client certificates:
+
+```bash
+KUBECONFIG=~/.kube/kube-rancher-config \
+  kubectl rollout restart deployment rke2-control-plane-controller-manager \
+  -n cattle-capi-system
+```
+
+After restart, the controller should successfully move etcd leadership to the new node, then delete the old control plane machine. Worker upgrades will proceed automatically.
+
 ## Troubleshooting
 
 ### Calico crashes with `Fatal glibc error: CPU does not support x86-64-v2`
