@@ -186,7 +186,7 @@ The `Cluster` manifest includes the label `capc-rke2-ccm-csi: "true"` which matc
 | `preRKE2Commands` | `sleep 30` | Gives CloudStack time to fully provision the VM before RKE2 bootstrap starts. |
 | `capc-rke2-ccm-csi: "true"` | Cluster label | Matches the `ClusterResourceSet` selector so CCM + CSI are auto-deployed. |
 
-> **Note:** The `cloudstack-secret` containing CloudStack API credentials is embedded in the ConfigMap (`20-ccm-csi-configmap.yaml`) and is created automatically on the workload cluster by ClusterResourceSet — no separate manual step needed. Replace the placeholder values (`api-url`, `api-key`, `secret-key`) in the ConfigMap before applying.
+> **Note:** The `cloudstack-secret` containing CloudStack API credentials is embedded in the ConfigMap (`20-ccm-csi-configmap.yaml`) and is created automatically on the workload cluster by ClusterResourceSet — no separate manual step needed. Replace the placeholder values (`api-url`, `api-key`, `secret-key`) in the ConfigMap before applying. The ConfigMap also includes a StorageClass with a `REPLACE_WITH_YOUR_DISK_OFFERING_UUID` placeholder — update this to match your CloudStack disk offering UUID (not the name).
 
 ## Verification
 
@@ -381,8 +381,9 @@ If you need to apply CCM + CSI manually (e.g. to an existing cluster not created
 | `cloudstack-csi-driver.yaml` | [upstream](https://github.com/cloudstack/cloudstack-csi-driver/tree/main/deploy/k8s) | Exact upstream |
 | `cloudstack-csi-controller-deployment-rke2.yaml` | [upstream](https://github.com/cloudstack/cloudstack-csi-driver/tree/main/deploy/k8s) | **RKE2 patch:** `replicas: 1`, removed `podAntiAffinity`; `nodeAffinity` moved under `affinity` (not directly under `spec`) |
 | `cloudstack-csi-node-daemonset-rke2.yaml` | [upstream](https://github.com/cloudstack/cloudstack-csi-driver/tree/main/deploy/k8s) | **RKE2 patch:** removed `/run/cloud-init/` mount |
+| `cloudstack-csi-storageclass.yaml` | New | **Placeholder:** Set `csi.cloudstack.apache.org/disk-offering-id` to your CloudStack disk offering **UUID** (not the name). Marked with `⚠️ REPLACE THIS VALUE ⚠️` inline comment. Run `cmk list diskofferings | grep -E "id|name"` to find it. |
 
-The exact RKE2 changes are documented as inline YAML comments in both `-rke2` files.
+The exact RKE2 changes are documented as inline YAML comments in both `-rke2` files. The StorageClass file contains a `REPLACE_WITH_YOUR_DISK_OFFERING_UUID` placeholder — run `cmk list diskofferings | grep -E "id|name"` to find the correct UUID for your CloudStack zone.
 
 ## Air-Gapped / Offline Deployment
 

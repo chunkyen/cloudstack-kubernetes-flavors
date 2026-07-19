@@ -43,9 +43,15 @@ data:
     \ secretName: cloudstack-secret\n      tolerations:\n      # this is required\
     \ so CCM can bootstrap itself\n      - key: node.cloudprovider.kubernetes.io/uninitialized\n\
     \        value: \"true\"\n        effect: NoSchedule\n"
-  cloudstack-csi-controller-deployment-rke2.yaml: "# In this YAML file CloudStack\
-    \ CSI Controller contains the following sidecars:\n# external-attacher, external-provisioner,\
-    \ external-resizer, liveness-probe\n#\n# RKE2 PATCH: replicas changed from 2 \u2192\
+  cloudstack-secret.yaml: "# CloudStack credentials secret for CCM and CSI\napiVersion:\
+    \ v1\nkind: Secret\nmetadata:\n  name: cloudstack-secret\n  namespace: kube-system\n\
+    type: Opaque\nstringData:\n  cloud-config: |\n    [Global]\n    api-url = http://192.168.200.1:8080/client/api\n\
+    \    api-key = DVizaa3GMF2sao28j9oGEmNqvc2xaVG_TGzwglwjSnRmqCGlDyAByOC6f_U70vdjYxQNIL52WfeU7aXHRIH4dA\n\
+    \    secret-key = Hs6FwyPrezy2c2RKTFqDCFogXwmVrCDDMA2Djn6BN_ZSzeeEqBh6Etzmhh5hgFpUIz1MC6YjlW8i7o2IUheh1Q\n\
+    \    ssl-no-verify = false\n"
+  csi-controller-deployment-rke2.yaml: "# In this YAML file CloudStack CSI Controller\
+    \ contains the following sidecars:\n# external-attacher, external-provisioner,\
+    \ external-resizer, liveness-probe\n#\n# RKE2 PATCH: replicas changed from 2 →\
     \ 1\n#   The upstream sets replicas: 2 with podAntiAffinity requiring different\
     \ hosts.\n#   With a single RKE2 control-plane node, only 1 replica can schedule.\n\
     #   Setting replicas: 1 avoids a Pending pod and confusing scheduler backoff.\n\
@@ -144,24 +150,24 @@ data:
     \ true\n            allowPrivilegeEscalation: false\n\n      volumes:\n      \
     \  - name: socket-dir\n          emptyDir: {}\n        - name: cloudstack-conf\n\
     \          secret:\n            secretName: cloudstack-secret\n"
-  cloudstack-csi-driver.yaml: "apiVersion: storage.k8s.io/v1\nkind: CSIDriver\nmetadata:\n\
-    \  name: csi.cloudstack.apache.org\nspec:\n  attachRequired: true\n  podInfoOnMount:\
+  csi-driver.yaml: "apiVersion: storage.k8s.io/v1\nkind: CSIDriver\nmetadata:\n  name:\
+    \ csi.cloudstack.apache.org\nspec:\n  attachRequired: true\n  podInfoOnMount:\
     \ false\n  # Supports only persistent volumes.\n  volumeLifecycleModes:\n    -\
     \ Persistent\n"
-  cloudstack-csi-node-daemonset-rke2.yaml: "# Source: https://github.com/cloudstack/cloudstack-csi-driver/blob/main/deploy/k8s/node-daemonset.yaml\n\
+  csi-node-daemonset-rke2.yaml: "# Source: https://github.com/cloudstack/cloudstack-csi-driver/blob/main/deploy/k8s/node-daemonset.yaml\n\
     #\n# RKE2 PATCH: Removed /run/cloud-init/ mount and volume\n#   The upstream CSI\
     \ node DaemonSet mounts /run/cloud-init/ to read instance\n#   metadata. RKE2\
-    \ nodes do NOT use cloud-init \u2014 RKE2 installs itself via\n#   tarball at\
-    \ bootstrap \u2014 so this directory does not exist. Without removing\n#   this\
-    \ mount, the CSI node container crashes with exit code 2.\n#\n#   Changes made:\n\
-    #   - Removed volumeMount:  name: cloud-init-dir, mountPath: /run/cloud-init/\n\
-    #   - Removed volume:       name: cloud-init-dir, hostPath: /run/cloud-init/\n\
-    #   - Left the Ignition metadata comment intact for reference\n#\n#   All other\
-    \ fields are identical to upstream.\napiVersion: apps/v1\nkind: DaemonSet\nmetadata:\n\
-    \  name: cloudstack-csi-node\n  namespace: kube-system\nspec:\n  selector:\n \
-    \   matchLabels:\n      app.kubernetes.io/name: cloudstack-csi-node\n  updateStrategy:\n\
-    \    type: RollingUpdate\n    rollingUpdate:\n      maxUnavailable: \"10%\"\n\
-    \  template:\n    metadata:\n      labels:\n        app.kubernetes.io/name: cloudstack-csi-node\n\
+    \ nodes do NOT use cloud-init — RKE2 installs itself via\n#   tarball at bootstrap\
+    \ — so this directory does not exist. Without removing\n#   this mount, the CSI\
+    \ node container crashes with exit code 2.\n#\n#   Changes made:\n#   - Removed\
+    \ volumeMount:  name: cloud-init-dir, mountPath: /run/cloud-init/\n#   - Removed\
+    \ volume:       name: cloud-init-dir, hostPath: /run/cloud-init/\n#   - Left the\
+    \ Ignition metadata comment intact for reference\n#\n#   All other fields are\
+    \ identical to upstream.\napiVersion: apps/v1\nkind: DaemonSet\nmetadata:\n  name:\
+    \ cloudstack-csi-node\n  namespace: kube-system\nspec:\n  selector:\n    matchLabels:\n\
+    \      app.kubernetes.io/name: cloudstack-csi-node\n  updateStrategy:\n    type:\
+    \ RollingUpdate\n    rollingUpdate:\n      maxUnavailable: \"10%\"\n  template:\n\
+    \    metadata:\n      labels:\n        app.kubernetes.io/name: cloudstack-csi-node\n\
     \        app.kubernetes.io/part-of: cloudstack-csi-driver\n    spec:\n      priorityClassName:\
     \ system-node-critical\n      serviceAccountName: cloudstack-csi-node\n      nodeSelector:\n\
     \        kubernetes.io/os: linux\n      terminationGracePeriodSeconds: 30\n  \
@@ -183,10 +189,10 @@ data:
     \        mountPropagation: Bidirectional\n            - name: device-dir\n   \
     \           mountPath: /dev\n            # RKE2 PATCH: removed cloud-init-dir\
     \ mount here\n            #   (upstream had volumeMount: name=cloud-init-dir,\
-    \ mountPath=/run/cloud-init/)\n            #   RKE2 does not use cloud-init \u2014\
-    \ directory absent \u2014 container crashes with exit code 2\n            - name:\
-    \ sys-dir\n              mountPath: /sys\n            # Comment the above 2 lines\
-    \ and uncomment the next 2 lines for Ignition support\n            # - name: ignition-dir\n\
+    \ mountPath=/run/cloud-init/)\n            #   RKE2 does not use cloud-init —\
+    \ directory absent — container crashes with exit code 2\n            - name: sys-dir\n\
+    \              mountPath: /sys\n            # Comment the above 2 lines and uncomment\
+    \ the next 2 lines for Ignition support\n            # - name: ignition-dir\n\
     \            #   mountPath: /run/metadata\n            - name: cloudstack-conf\n\
     \              mountPath: /etc/cloudstack-csi-driver\n          ports:\n     \
     \       - name: healthz\n              containerPort: 9808\n              protocol:\
@@ -229,18 +235,18 @@ data:
     \ device-dir\n          hostPath:\n            path: /dev\n            type: Directory\n\
     \        # RKE2 PATCH: removed cloud-init-dir volume here\n        #   (upstream\
     \ had volume: name=cloud-init-dir, hostPath=/run/cloud-init/)\n        #   RKE2\
-    \ does not use cloud-init \u2014 directory absent \u2014 container crashes with\
-    \ exit code 2\n        - name: registration-dir\n          hostPath:\n       \
-    \     path: /var/lib/kubelet/plugins_registry\n            type: Directory\n \
-    \       - name: sys-dir\n          hostPath:\n            path: /sys\n       \
-    \     type: Directory\n        # Comment the above 4 lines and uncomment the next\
-    \ 4 lines for Ignition support\n        # - name: ignition-dir\n        #   hostPath:\n\
-    \        #     path: /run/metadata\n        #     type: Directory\n        - name:\
-    \ cloudstack-conf\n          secret:\n            secretName: cloudstack-secret\n"
-  cloudstack-csi-rbac.yaml: "apiVersion: v1\nkind: ServiceAccount\nmetadata:\n  name:\
-    \ cloudstack-csi-controller\n  namespace: kube-system\n---\napiVersion: rbac.authorization.k8s.io/v1\n\
-    kind: ClusterRole\nmetadata:\n  name: cloudstack-csi-controller-role\nrules:\n\
-    \  - apiGroups: [\"\"]\n    resources: [\"nodes\", \"pods\"]\n    verbs: [\"get\"\
+    \ does not use cloud-init — directory absent — container crashes with exit code\
+    \ 2\n        - name: registration-dir\n          hostPath:\n            path:\
+    \ /var/lib/kubelet/plugins_registry\n            type: Directory\n        - name:\
+    \ sys-dir\n          hostPath:\n            path: /sys\n            type: Directory\n\
+    \        # Comment the above 4 lines and uncomment the next 4 lines for Ignition\
+    \ support\n        # - name: ignition-dir\n        #   hostPath:\n        #  \
+    \   path: /run/metadata\n        #     type: Directory\n        - name: cloudstack-conf\n\
+    \          secret:\n            secretName: cloudstack-secret\n"
+  csi-rbac.yaml: "apiVersion: v1\nkind: ServiceAccount\nmetadata:\n  name: cloudstack-csi-controller\n\
+    \  namespace: kube-system\n---\napiVersion: rbac.authorization.k8s.io/v1\nkind:\
+    \ ClusterRole\nmetadata:\n  name: cloudstack-csi-controller-role\nrules:\n  -\
+    \ apiGroups: [\"\"]\n    resources: [\"nodes\", \"pods\"]\n    verbs: [\"get\"\
     , \"list\", \"watch\"]\n  - apiGroups: [\"\"]\n    resources: [\"persistentvolumeclaims\"\
     ]\n    verbs: [\"get\", \"list\", \"watch\", \"update\"]\n  - apiGroups: [\"\"\
     ]\n    resources: [\"persistentvolumeclaims/status\"]\n    verbs: [\"patch\"]\n\
@@ -284,7 +290,7 @@ data:
     \  name: cloudstack-csi-snapshotter-binding\nsubjects:\n- kind: ServiceAccount\n\
     \  name: cloudstack-csi-controller\n  namespace: kube-system\nroleRef:\n  kind:\
     \ ClusterRole\n  name: cloudstack-csi-snapshotter-role\n  apiGroup: rbac.authorization.k8s.io"
-  cloudstack-csi-snapshot-crds.yaml: "## CRD for VolumeSnapshotClass from https://github.com/kubernetes-csi/external-snapshotter/blob/v8.3.0/client/config/crd/groupsnapshot.storage.k8s.io_volumegroupsnapshotclasses.yaml\n\
+  csi-snapshot-crds.yaml: "## CRD for VolumeSnapshotClass from https://github.com/kubernetes-csi/external-snapshotter/blob/v8.3.0/client/config/crd/groupsnapshot.storage.k8s.io_volumegroupsnapshotclasses.yaml\n\
     ---\napiVersion: apiextensions.k8s.io/v1\nkind: CustomResourceDefinition\nmetadata:\n\
     \  annotations:\n    api-approved.kubernetes.io: \"https://github.com/kubernetes-csi/external-snapshotter/pull/814\"\
     \n    controller-gen.kubebuilder.io/version: v0.15.0\n  name: volumesnapshotclasses.snapshot.storage.k8s.io\n\
@@ -456,11 +462,11 @@ data:
     \ || (!has(self.volumeHandle)\n                    && has(self.snapshotHandle))\n\
     \              sourceVolumeMode:\n                description: |-\n          \
     \        SourceVolumeMode is the mode of the volume whose snapshot is taken.\n\
-    \                  Can be either \u201CFilesystem\u201D or \u201CBlock\u201D.\n\
-    \                  If not specified, it indicates the source volume's mode is\
-    \ unknown.\n                  This field is immutable.\n                  This\
-    \ field is an alpha field.\n                type: string\n                x-kubernetes-validations:\n\
-    \                - message: sourceVolumeMode is immutable\n                  rule:\
+    \                  Can be either “Filesystem” or “Block”.\n                  If\
+    \ not specified, it indicates the source volume's mode is unknown.\n         \
+    \         This field is immutable.\n                  This field is an alpha field.\n\
+    \                type: string\n                x-kubernetes-validations:\n   \
+    \             - message: sourceVolumeMode is immutable\n                  rule:\
     \ self == oldSelf\n              volumeSnapshotClassName:\n                description:\
     \ |-\n                  name of the VolumeSnapshotClass from which this snapshot\
     \ was (or will be)\n                  created.\n                  Note that after\
@@ -990,234 +996,23 @@ data:
     \        required:\n        - spec\n        type: object\n    served: false\n\
     \    storage: false\n    subresources:\n      status: {}\nstatus:\n  acceptedNames:\n\
     \    kind: \"\"\n    plural: \"\"\n  conditions: []\n  storedVersions: []\n"
-  cloudstack-csi-volume-snapshot-class.yaml: "apiVersion: snapshot.storage.k8s.io/v1\n\
-    kind: VolumeSnapshotClass\nmetadata:\n  name: cloudstack-snapshot\ndriver: csi.cloudstack.apache.org\n\
-    deletionPolicy: Delete            # Deleting the snapshot object in Kubernetes\
-    \ with delete the snapshot in CloudStack; You can use policy Retain if the snapshot\
-    \ shouldn't be deleted from CloudStack"
+  csi-storageclass.yaml: "# NOTE: Replace the disk-offering-id parameter below with\
+    \ your CloudStack storage offering UUID.\n# This is the disk offering that CloudStack\
+    \ will use when provisioning volumes.\n# Find the correct UUID with: cmk list\
+    \ diskofferings\n---\napiVersion: storage.k8s.io/v1\nkind: StorageClass\nmetadata:\n\
+    \  name: cloudstack-standard\n  annotations:\n    storageclass.kubernetes.io/is-default-class:\
+    \ \"true\"\nprovisioner: csi.cloudstack.apache.org\nparameters:\n  # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\
+    \  # ⚠️  REPLACE THIS VALUE ⚠️\n  # Set to your CloudStack disk offering UUID\
+    \ (not the name!)\n  # Run: cmk list diskofferings | grep -E \"id|name\"\n  #\
+    \ ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n  csi.cloudstack.apache.org/disk-offering-id:\
+    \ \"REPLACE_WITH_YOUR_DISK_OFFERING_UUID\"\nreclaimPolicy: Delete\nvolumeBindingMode:\
+    \ Immediate\nallowVolumeExpansion: true\n"
+  csi-volume-snapshot-class.yaml: "apiVersion: snapshot.storage.k8s.io/v1\nkind: VolumeSnapshotClass\n\
+    metadata:\n  name: cloudstack-snapshot\ndriver: csi.cloudstack.apache.org\ndeletionPolicy:\
+    \ Delete            # Deleting the snapshot object in Kubernetes with delete the\
+    \ snapshot in CloudStack; You can use policy Retain if the snapshot shouldn't\
+    \ be deleted from CloudStack"
 kind: ConfigMap
 metadata:
-  annotations:
-    kubectl.kubernetes.io/last-applied-configuration: '{"apiVersion":"v1","data":{"ccm.yaml":"---\n#
-      CloudStack credentials secret for CCM and CSI\napiVersion: v1\nkind: Secret\nmetadata:\n  name:
-      cloudstack-secret\n  namespace: kube-system\ntype: Opaque\nstringData:\n  cloud-config:
-      |\n    [Global]\n    api-url = http://192.168.200.1:8080/client/api\n    api-key
-      = \"DVizaa3GMF2sao28j9oGEmNqvc2xaVG_TGzwglwjSnRmqCGlDyAByOC6f_U70vdjYxQNIL52WfeU7aXHRIH4dA\"\n    secret-key
-      = \"Hs6FwyPrezy2c2RKTFqDCFogXwmVrCDDMA2Djn6BN_ZSzeeEqBh6Etzmhh5hgFpUIz1MC6YjlW8i7o2IUheh1Q\"\n    ssl-no-verify
-      = \"false\"\n---\napiVersion: v1\nkind: ServiceAccount\nmetadata:\n  name: cloud-controller-manager\n  namespace:
-      kube-system\n---\napiVersion: rbac.authorization.k8s.io/v1\nkind: ClusterRole\nmetadata:\n  name:
-      system:cloud-controller-manager\n  annotations:\n    rbac.authorization.kubernetes.io/autoupdate:
-      \"true\"\n  labels:\n    k8s-app: cloud-controller-manager\nrules:\n- apiGroups:\n  -
-      coordination.k8s.io\n  resources:\n  - leases\n  verbs:\n  - get\n  - create\n  -
-      update\n- apiGroups:\n  - \"\"\n  resources:\n  - configmaps\n  verbs:\n  -
-      list\n  - watch\n- apiGroups:\n  - \"\"\n  resources:\n  - events\n  verbs:\n  -
-      create\n  - patch\n  - update\n- apiGroups:\n  - \"\"\n  resources:\n  - nodes\n  verbs:\n  -
-      ''*''\n- apiGroups:\n  - \"\"\n  resources:\n  - pods\n  verbs:\n  - list\n  -
-      get\n- apiGroups:\n  - \"\"\n  resources:\n  - nodes/status\n  verbs:\n  - patch\n-
-      apiGroups:\n  - \"\"\n  resources:\n  - services\n  verbs:\n  - get\n  - list\n  -
-      patch\n  - update\n  - watch\n- apiGroups:\n  - \"\"\n  resources:\n  - services/status\n  verbs:\n  -
-      list\n  - patch\n  - update\n  - watch\n- apiGroups:\n  - \"\"\n  resources:\n  -
-      serviceaccounts\n  verbs:\n  - create\n- apiGroups:\n  - \"\"\n  resources:\n  -
-      endpoints\n  verbs:\n  - create\n  - get\n  - list\n  - watch\n  - update\n-
-      apiGroups:\n  - \"\"\n  resources:\n  - persistentvolumes\n  verbs:\n  - list\n  -
-      watch\n  - patch\n---\nkind: ClusterRoleBinding\napiVersion: rbac.authorization.k8s.io/v1\nmetadata:\n  name:
-      system:cloud-controller-manager\nroleRef:\n  apiGroup: rbac.authorization.k8s.io\n  kind:
-      ClusterRole\n  name: system:cloud-controller-manager\nsubjects:\n- kind: ServiceAccount\n  name:
-      cloud-controller-manager\n  namespace: kube-system\n---\napiVersion: rbac.authorization.k8s.io/v1\nkind:
-      RoleBinding\nmetadata:\n  name: system:cloud-controller-manager:extension-apiserver-authentication-reader\n  namespace:
-      kube-system\nroleRef:\n  apiGroup: rbac.authorization.k8s.io\n  kind: Role\n  name:
-      extension-apiserver-authentication-reader\nsubjects:\n- kind: ServiceAccount\n  name:
-      cloud-controller-manager\n  namespace: kube-system\n---\napiVersion: apps/v1\nkind:
-      Deployment\nmetadata:\n  labels:\n    k8s-app: cloud-controller-manager\n  name:
-      cloud-controller-manager\n  namespace: kube-system\nspec:\n  replicas: 1\n  selector:\n    matchLabels:\n      k8s-app:
-      cloud-controller-manager\n  strategy:\n    rollingUpdate:\n      maxSurge: 25%\n      maxUnavailable:
-      25%\n    type: RollingUpdate\n  template:\n    metadata:\n      labels:\n        k8s-app:
-      cloud-controller-manager\n    spec:\n      containers:\n      - name: cloud-controller-manager\n        image:
-      apache/cloudstack-kubernetes-provider:v1.2.0\n        imagePullPolicy: IfNotPresent\n        args:\n        -
-      --leader-elect=true\n        - --cloud-provider=external-cloudstack\n        -
-      --cloud-config=/config/cloud-config\n        resources:\n          limits:\n            cpu:
-      50m\n            memory: 120Mi\n          requests:\n            cpu: 10m\n            memory:
-      60Mi\n        volumeMounts:\n        - name: config-volume\n          mountPath:
-      /config\n      restartPolicy: Always\n      serviceAccountName: cloud-controller-manager\n      terminationGracePeriodSeconds:
-      30\n      volumes:\n      - name: config-volume\n        secret:\n          secretName:
-      cloudstack-secret\n      tolerations:\n      - key: node.cloudprovider.kubernetes.io/uninitialized\n        value:
-      \"true\"\n        effect: NoSchedule\n","csi-controller.yaml":"apiVersion: apps/v1\nkind:
-      Deployment\nmetadata:\n  name: cloudstack-csi-controller\n  namespace: kube-system\nspec:\n  replicas:
-      1\n  strategy:\n    type: RollingUpdate\n    rollingUpdate:\n      maxUnavailable:
-      1\n      maxSurge: 0\n  selector:\n    matchLabels:\n      app.kubernetes.io/name:
-      cloudstack-csi-controller\n  template:\n    metadata:\n      labels:\n        app.kubernetes.io/name:
-      cloudstack-csi-controller\n        app.kubernetes.io/part-of: cloudstack-csi-driver\n    spec:\n      priorityClassName:
-      system-cluster-critical\n      serviceAccountName: cloudstack-csi-controller\n      affinity:\n        nodeAffinity:\n          requiredDuringSchedulingIgnoredDuringExecution:\n            nodeSelectorTerms:\n            -
-      matchExpressions:\n              - key: node-role.kubernetes.io/control-plane\n                operator:
-      Exists\n      nodeSelector:\n        kubernetes.io/os: linux\n      tolerations:\n        -
-      key: node-role.kubernetes.io/control-plane\n          operator: Exists\n          effect:
-      NoSchedule\n        - key: CriticalAddonsOnly\n          operator: Exists\n        -
-      effect: NoExecute\n          operator: Exists\n          tolerationSeconds:
-      300\n      securityContext:\n        runAsNonRoot: true\n        runAsUser:
-      65532\n        runAsGroup: 65532\n        fsGroup: 65532\n        fsGroupChangePolicy:
-      OnRootMismatch\n      containers:\n        - name: cloudstack-csi-controller\n          image:
-      ghcr.io/cloudstack/cloudstack-csi-driver:3.0.0\n          imagePullPolicy: Always\n          args:\n            -
-      \"controller\"\n            - \"--endpoint=$(CSI_ENDPOINT)\"\n            -
-      \"--cloudstack-config=/etc/cloudstack-csi-driver/cloud-config\"\n            -
-      \"--logging-format=text\"\n            - \"--v=4\"\n          env:\n            -
-      name: CSI_ENDPOINT\n              value: unix:///var/lib/csi/sockets/pluginproxy/csi.sock\n          volumeMounts:\n            -
-      name: socket-dir\n              mountPath: /var/lib/csi/sockets/pluginproxy/\n            -
-      name: cloudstack-conf\n              mountPath: /etc/cloudstack-csi-driver\n          ports:\n            -
-      name: healthz\n              containerPort: 9808\n              protocol: TCP\n          livenessProbe:\n            httpGet:\n              path:
-      /healthz\n              port: healthz\n            initialDelaySeconds: 10\n            timeoutSeconds:
-      3\n            periodSeconds: 10\n            failureThreshold: 5\n          resources:\n            requests:\n              cpu:
-      10m\n              memory: 40Mi\n            limits:\n              memory:
-      256Mi\n          securityContext:\n            seccompProfile:\n              type:
-      RuntimeDefault\n            readOnlyRootFilesystem: true\n            allowPrivilegeEscalation:
-      false\n        - name: external-provisioner\n          image: registry.k8s.io/sig-storage/csi-provisioner:v5.0.1\n          imagePullPolicy:
-      IfNotPresent\n          args:\n            - \"--v=4\"\n            - \"--timeout=300s\"\n            -
-      \"--csi-address=$(ADDRESS)\"\n            - \"--kube-api-qps=100\"\n            -
-      \"--kube-api-burst=100\"\n            - \"--leader-election\"\n            -
-      \"--leader-election-lease-duration=120s\"\n            - \"--leader-election-renew-deadline=60s\"\n            -
-      \"--leader-election-retry-period=30s\"\n            - \"--default-fstype=ext4\"\n            -
-      \"--feature-gates=Topology=true\"\n            - \"--strict-topology\"\n          env:\n            -
-      name: ADDRESS\n              value: /var/lib/csi/sockets/pluginproxy/csi.sock\n          volumeMounts:\n            -
-      name: socket-dir\n              mountPath: /var/lib/csi/sockets/pluginproxy/\n          securityContext:\n            seccompProfile:\n              type:
-      RuntimeDefault\n            readOnlyRootFilesystem: true\n            allowPrivilegeEscalation:
-      false\n        - name: external-attacher\n          image: registry.k8s.io/sig-storage/csi-attacher:v4.6.1\n          imagePullPolicy:
-      IfNotPresent\n          args:\n            - \"--v=4\"\n            - \"--timeout=300s\"\n            -
-      \"--csi-address=$(ADDRESS)\"\n            - \"--leader-election\"\n            -
-      \"--leader-election-lease-duration=120s\"\n            - \"--leader-election-renew-deadline=60s\"\n            -
-      \"--leader-election-retry-period=30s\"\n            - \"--kube-api-qps=100\"\n            -
-      \"--kube-api-burst=100\"\n          env:\n            - name: ADDRESS\n              value:
-      /var/lib/csi/sockets/pluginproxy/csi.sock\n          volumeMounts:\n            -
-      name: socket-dir\n              mountPath: /var/lib/csi/sockets/pluginproxy/\n          securityContext:\n            seccompProfile:\n              type:
-      RuntimeDefault\n            readOnlyRootFilesystem: true\n            allowPrivilegeEscalation:
-      false\n        - name: external-resizer\n          image: registry.k8s.io/sig-storage/csi-resizer:v1.11.1\n          args:\n            -
-      \"--v=5\"\n            - \"--csi-address=$(ADDRESS)\"\n            - --timeout=300s\n            -
-      --leader-election\n            - --leader-election-lease-duration=120s\n            -
-      --leader-election-renew-deadline=60s\n            - --leader-election-retry-period=30s\n            -
-      --kube-api-qps=100\n            - --kube-api-burst=100\n          env:\n            -
-      name: ADDRESS\n              value: /var/lib/csi/sockets/pluginproxy/csi.sock\n          imagePullPolicy:
-      \"IfNotPresent\"\n          volumeMounts:\n            - name: socket-dir\n              mountPath:
-      /var/lib/csi/sockets/pluginproxy/\n          securityContext:\n            seccompProfile:\n              type:
-      RuntimeDefault\n            readOnlyRootFilesystem: true\n            allowPrivilegeEscalation:
-      false\n        - name: csi-snapshotter\n          image: registry.k8s.io/sig-storage/csi-snapshotter:v6.3.0\n          args:\n            -
-      \"--v=5\"\n            - \"--csi-address=$(CSI_ADDRESS)\"\n            - \"--leader-election\"\n            -
-      \"--leader-election-lease-duration=30s\"\n            - \"--leader-election-renew-deadline=20s\"\n            -
-      \"--leader-election-retry-period=10s\"\n          env:\n            - name:
-      CSI_ADDRESS\n              value: /var/lib/csi/sockets/pluginproxy/csi.sock\n          volumeMounts:\n            -
-      name: socket-dir\n              mountPath: /var/lib/csi/sockets/pluginproxy/\n          resources:\n            limits:\n              cpu:
-      400m\n              memory: 200Mi\n            requests:\n              cpu:
-      10m\n              memory: 20Mi\n        - name: snapshot-controller\n          image:
-      registry.k8s.io/sig-storage/snapshot-controller:v6.3.0\n          args:\n            -
-      \"--v=5\"\n            - \"--leader-election\"\n            - \"--leader-election-lease-duration=30s\"\n            -
-      \"--leader-election-renew-deadline=20s\"\n            - \"--leader-election-retry-period=10s\"\n          resources:\n            limits:\n              cpu:
-      400m\n              memory: 200Mi\n            requests:\n              cpu:
-      10m\n              memory: 20Mi\n        - name: liveness-probe\n          imagePullPolicy:
-      IfNotPresent\n          image: registry.k8s.io/sig-storage/livenessprobe:v2.12.0\n          args:\n            -
-      \"--v=4\"\n            - \"--csi-address=$(ADDRESS)\"\n          env:\n            -
-      name: ADDRESS\n              value: /var/lib/csi/sockets/pluginproxy/csi.sock\n          volumeMounts:\n            -
-      name: socket-dir\n              mountPath: /var/lib/csi/sockets/pluginproxy/\n          securityContext:\n            readOnlyRootFilesystem:
-      true\n            allowPrivilegeEscalation: false\n      volumes:\n        -
-      name: socket-dir\n          emptyDir: {}\n        - name: cloudstack-conf\n          secret:\n            secretName:
-      cloudstack-secret\n","csi-node.yaml":"apiVersion: apps/v1\nkind: DaemonSet\nmetadata:\n  name:
-      cloudstack-csi-node\n  namespace: kube-system\nspec:\n  selector:\n    matchLabels:\n      app.kubernetes.io/name:
-      cloudstack-csi-node\n  updateStrategy:\n    type: RollingUpdate\n    rollingUpdate:\n      maxUnavailable:
-      \"10%\"\n  template:\n    metadata:\n      labels:\n        app.kubernetes.io/name:
-      cloudstack-csi-node\n        app.kubernetes.io/part-of: cloudstack-csi-driver\n    spec:\n      priorityClassName:
-      system-node-critical\n      serviceAccountName: cloudstack-csi-node\n      nodeSelector:\n        kubernetes.io/os:
-      linux\n      terminationGracePeriodSeconds: 30\n      tolerations:\n        -
-      effect: NoSchedule\n          operator: Exists\n        - effect: NoExecute\n          operator:
-      Exists\n          tolerationSeconds: 300\n      securityContext:\n        runAsNonRoot:
-      false\n        runAsUser: 0\n        runAsGroup: 0\n        fsGroup: 0\n      containers:\n        -
-      name: cloudstack-csi-node\n          image: ghcr.io/cloudstack/cloudstack-csi-driver:3.0.0\n          imagePullPolicy:
-      IfNotPresent\n          args:\n            - \"node\"\n            - \"--endpoint=$(CSI_ENDPOINT)\"\n            -
-      \"--cloudstack-config=/etc/cloudstack-csi-driver/cloud-config\"\n            -
-      \"--logging-format=text\"\n            - \"--node-name=$(NODE_NAME)\"\n            -
-      \"--v=4\"\n          env:\n            - name: CSI_ENDPOINT\n              value:
-      unix:///csi/csi.sock\n            - name: NODE_NAME\n              valueFrom:\n                fieldRef:\n                  fieldPath:
-      spec.nodeName\n          volumeMounts:\n            - name: plugin-dir\n              mountPath:
-      /csi\n            - name: kubelet-dir\n              mountPath: /var/lib/kubelet\n              mountPropagation:
-      Bidirectional\n            - name: device-dir\n              mountPath: /dev\n            -
-      name: sys-dir\n              mountPath: /sys\n            - name: cloudstack-conf\n              mountPath:
-      /etc/cloudstack-csi-driver\n          ports:\n            - name: healthz\n              containerPort:
-      9808\n              protocol: TCP\n          livenessProbe:\n            httpGet:\n              path:
-      /healthz\n              port: healthz\n            initialDelaySeconds: 10\n            timeoutSeconds:
-      3\n            periodSeconds: 10\n            failureThreshold: 5\n          resources:\n            limits:\n              cpu:
-      \"200m\"\n              memory: 200Mi\n            requests:\n              cpu:
-      \"50m\"\n              memory: 50Mi\n          securityContext:\n            privileged:
-      true\n        - name: node-driver-registrar\n          image: registry.k8s.io/sig-storage/csi-node-driver-registrar:v2.10.1\n          imagePullPolicy:
-      IfNotPresent\n          args:\n            - \"--csi-address=$(ADDRESS)\"\n            -
-      \"--kubelet-registration-path=$(DRIVER_REG_SOCK_PATH)\"\n            - \"--v=5\"\n            -
-      \"--health-port=9809\"\n          env:\n            - name: ADDRESS\n              value:
-      /csi/csi.sock\n            - name: DRIVER_REG_SOCK_PATH\n              value:
-      /var/lib/kubelet/plugins/csi.cloudstack.apache.org/csi.sock\n          volumeMounts:\n            -
-      name: plugin-dir\n              mountPath: /csi\n            - name: registration-dir\n              mountPath:
-      /registration\n          ports:\n            - containerPort: 9809\n              name:
-      healthz\n          livenessProbe:\n            exec:\n              command:\n                -
-      /csi-node-driver-registrar\n                - --kubelet-registration-path=$(DRIVER_REG_SOCK_PATH)\n                -
-      --mode=kubelet-registration-probe\n            initialDelaySeconds: 30\n            periodSeconds:
-      90\n            timeoutSeconds: 15\n          resources:\n            limits:\n              cpu:
-      \"200m\"\n              memory: 200Mi\n            requests:\n              cpu:
-      \"50m\"\n              memory: 50Mi\n          securityContext:\n            readOnlyRootFilesystem:
-      true\n            allowPrivilegeEscalation: false\n      volumes:\n        -
-      name: plugin-dir\n          hostPath:\n            path: /var/lib/kubelet/plugins/csi.cloudstack.apache.org/\n            type:
-      DirectoryOrCreate\n        - name: kubelet-dir\n          hostPath:\n            path:
-      /var/lib/kubelet\n            type: Directory\n        - name: device-dir\n          hostPath:\n            path:
-      /dev\n            type: Directory\n        - name: registration-dir\n          hostPath:\n            path:
-      /var/lib/kubelet/plugins_registry\n            type: Directory\n        - name:
-      sys-dir\n          hostPath:\n            path: /sys\n            type: Directory\n        -
-      name: cloudstack-conf\n          secret:\n            secretName: cloudstack-secret\n","csi-rbac.yaml":"apiVersion:
-      v1\nkind: ServiceAccount\nmetadata:\n  name: cloudstack-csi-controller\n  namespace:
-      kube-system\n---\napiVersion: rbac.authorization.k8s.io/v1\nkind: ClusterRole\nmetadata:\n  name:
-      cloudstack-csi-controller-role\nrules:\n  - apiGroups: [\"\"]\n    resources:
-      [\"nodes\", \"pods\"]\n    verbs: [\"get\", \"list\", \"watch\"]\n  - apiGroups:
-      [\"\"]\n    resources: [\"persistentvolumeclaims\"]\n    verbs: [\"get\", \"list\",
-      \"watch\", \"update\"]\n  - apiGroups: [\"\"]\n    resources: [\"persistentvolumeclaims/status\"]\n    verbs:
-      [\"patch\"]\n  - apiGroups: [\"\"]\n    resources: [\"persistentvolumes\"]\n    verbs:
-      [\"get\", \"list\", \"watch\", \"create\", \"delete\", \"patch\"]\n  - apiGroups:
-      [\"\"]\n    resources: [\"events\"]\n    verbs: [\"get\", \"list\", \"watch\",
-      \"create\", \"update\", \"patch\"]\n  - apiGroups: [\"coordination.k8s.io\"]\n    resources:
-      [\"leases\"]\n    verbs: [\"get\", \"watch\", \"list\", \"delete\", \"update\",
-      \"create\"]\n  - apiGroups: [\"storage.k8s.io\"]\n    resources: [\"storageclasses\",
-      \"csinodes\"]\n    verbs: [\"get\", \"list\", \"watch\"]\n  - apiGroups: [\"storage.k8s.io\"]\n    resources:
-      [\"volumeattachments\"]\n    verbs: [\"get\", \"list\", \"watch\", \"patch\"]\n  -
-      apiGroups: [\"storage.k8s.io\"]\n    resources: [\"volumeattachments/status\"]\n    verbs:
-      [\"patch\"]\n  - apiGroups: [\"snapshot.storage.k8s.io\"]\n    resources: [\"volumesnapshots\",
-      \"volumesnapshots/status\", \"volumesnapshotclasses\", \"volumesnapshotcontents\",
-      \"volumesnapshotcontents/status\"]\n    verbs: [\"get\", \"list\", \"watch\",
-      \"update\", \"create\", \"patch\", \"delete\"]\n---\napiVersion: rbac.authorization.k8s.io/v1\nkind:
-      ClusterRoleBinding\nmetadata:\n  name: cloudstack-csi-controller-binding\nsubjects:\n  -
-      kind: ServiceAccount\n    name: cloudstack-csi-controller\n    namespace: kube-system\nroleRef:\n  kind:
-      ClusterRole\n  name: cloudstack-csi-controller-role\n  apiGroup: rbac.authorization.k8s.io\n---\nkind:
-      ServiceAccount\napiVersion: v1\nmetadata:\n  name: cloudstack-csi-node\n  namespace:
-      kube-system\n---\nkind: ClusterRole\napiVersion: rbac.authorization.k8s.io/v1\nmetadata:\n  name:
-      cloudstack-csi-node-role\nrules:\n  - apiGroups: [\"\"]\n    resources: [\"nodes\"]\n    verbs:
-      [\"get\", \"patch\"]\n  - apiGroups: [ \"storage.k8s.io\" ]\n    resources:
-      [ \"volumeattachments\" ]\n    verbs: [ \"get\", \"list\", \"watch\" ]\n  -
-      apiGroups: [ \"storage.k8s.io\" ]\n    resources: [ \"csinodes\" ]\n    verbs:
-      [ \"get\" ]\n---\nkind: ClusterRoleBinding\napiVersion: rbac.authorization.k8s.io/v1\nmetadata:\n  name:
-      cloudstack-csi-node-binding\nsubjects:\n  - kind: ServiceAccount\n    name:
-      cloudstack-csi-node\n    namespace: kube-system\nroleRef:\n  kind: ClusterRole\n  name:
-      cloudstack-csi-node-role\n  apiGroup: rbac.authorization.k8s.io\n---\napiVersion:
-      rbac.authorization.k8s.io/v1\nkind: ClusterRole\nmetadata:\n  name: cloudstack-csi-snapshotter-role\nrules:\n-
-      apiGroups: [\"snapshot.storage.k8s.io\"]\n  resources: [\"volumesnapshotclasses\"]\n  verbs:
-      [\"get\", \"list\", \"watch\"]\n- apiGroups: [\"snapshot.storage.k8s.io\"]\n  resources:
-      [\"volumesnapshotcontents\"]\n  verbs: [\"create\", \"get\", \"list\", \"watch\",
-      \"update\", \"delete\"]\n- apiGroups: [\"snapshot.storage.k8s.io\"]\n  resources:
-      [\"volumesnapshots\"]\n  verbs: [\"get\", \"list\", \"watch\", \"update\"]\n-
-      apiGroups: [\"snapshot.storage.k8s.io\"]\n  resources: [\"volumesnapshotcontents/status\"]\n  verbs:
-      [\"update\"]\n---\napiVersion: rbac.authorization.k8s.io/v1\nkind: ClusterRoleBinding\nmetadata:\n  name:
-      cloudstack-csi-snapshotter-binding\nsubjects:\n- kind: ServiceAccount\n  name:
-      cloudstack-csi-controller\n  namespace: kube-system\nroleRef:\n  kind: ClusterRole\n  name:
-      cloudstack-csi-snapshotter-role\n  apiGroup: rbac.authorization.k8s.io\n","csidriver.yaml":"apiVersion:
-      storage.k8s.io/v1\nkind: CSIDriver\nmetadata:\n  name: csi.cloudstack.apache.org\nspec:\n  attachRequired:
-      true\n  podInfoOnMount: false\n  volumeLifecycleModes:\n    - Persistent\n"},"kind":"ConfigMap","metadata":{"annotations":{},"creationTimestamp":"2026-07-18T12:49:50Z","name":"capc-rke2-cluster-1-post-deploy","namespace":"capc-rke2-cluster-1","ownerReferences":[{"apiVersion":"addons.cluster.x-k8s.io/v1beta2","kind":"ClusterResourceSet","name":"capc-rke2-cluster-1-ccm-csi","uid":"e5ed9102-ce71-429c-993f-43a21bb5066a"}],"resourceVersion":"4513792","uid":"b52d30b0-1cbc-4b83-87bd-011acebec2b1"}}
-
-      '
-  creationTimestamp: '2026-07-18T12:49:50Z'
   name: capc-rke2-cluster-1-post-deploy
   namespace: capc-rke2-cluster-1
-  ownerReferences:
-  - apiVersion: addons.cluster.x-k8s.io/v1beta2
-    kind: ClusterResourceSet
-    name: capc-rke2-cluster-1-ccm-csi
-    uid: e5ed9102-ce71-429c-993f-43a21bb5066a
-  resourceVersion: '4562844'
-  uid: b52d30b0-1cbc-4b83-87bd-011acebec2b1

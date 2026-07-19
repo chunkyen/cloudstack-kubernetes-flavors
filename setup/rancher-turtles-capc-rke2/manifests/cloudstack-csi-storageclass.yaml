@@ -1,0 +1,21 @@
+# NOTE: Replace the disk-offering-id parameter below with your CloudStack storage offering UUID.
+# This is the disk offering that CloudStack will use when provisioning volumes.
+# Find the correct UUID with: cmk list diskofferings
+---
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: cloudstack-standard
+  annotations:
+    storageclass.kubernetes.io/is-default-class: "true"
+provisioner: csi.cloudstack.apache.org
+parameters:
+  # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  # ⚠️  REPLACE THIS VALUE ⚠️
+  # Set to your CloudStack disk offering UUID (not the name!)
+  # Run: cmk list diskofferings | grep -E "id|name"
+  # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  csi.cloudstack.apache.org/disk-offering-id: "REPLACE_WITH_YOUR_DISK_OFFERING_UUID"
+reclaimPolicy: Delete
+volumeBindingMode: Immediate
+allowVolumeExpansion: true
