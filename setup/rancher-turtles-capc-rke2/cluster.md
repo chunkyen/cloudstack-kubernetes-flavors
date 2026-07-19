@@ -184,6 +184,7 @@ The `Cluster` manifest includes the label `capc-rke2-ccm-csi: "true"` which matc
 | `cni` | `calico` | RKE2's built-in CNI. Calico is installed as a Helm chart by RKE2 automatically. Change to `cilium`, `canal`, `flannel`, or `none` if desired. |
 | `registrationMethod` | `internal-first` | Nodes register via internal IP first, falling back to external. |
 | `preRKE2Commands` | `sleep 30` | Gives CloudStack time to fully provision the VM before RKE2 bootstrap starts. |
+| `nodeTaints` | `node-role.kubernetes.io/control-plane:NoSchedule` | Prevents workload pods from scheduling on the control-plane node. |
 | `capc-rke2-ccm-csi: "true"` | Cluster label | Matches the `ClusterResourceSet` selector so CCM + CSI are auto-deployed. |
 
 > **Note:** The `cloudstack-secret` containing CloudStack API credentials is embedded in the ConfigMap (`20-ccm-csi-configmap.yaml`) and is created automatically on the workload cluster by ClusterResourceSet — no separate manual step needed. Replace the placeholder values (`api-url`, `api-key`, `secret-key`) in the ConfigMap before applying. The ConfigMap also includes a StorageClass with a `REPLACE_WITH_YOUR_DISK_OFFERING_UUID` placeholder — update this to match your CloudStack disk offering UUID (not the name).

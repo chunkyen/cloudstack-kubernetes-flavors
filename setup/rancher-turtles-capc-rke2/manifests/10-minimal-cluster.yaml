@@ -59,6 +59,10 @@ spec:
       extraArgs:
         - provider-id=cloudstack:///{{ ds.meta_data.instance_id }}
     nodeName: '{{ ds.meta_data.local_hostname }}'
+    nodeTaints:
+      - key: "node-role.kubernetes.io/control-plane"
+        value: "true"
+        effect: "NoSchedule"
   serverConfig:
     cni: calico
   registrationMethod: internal-first
