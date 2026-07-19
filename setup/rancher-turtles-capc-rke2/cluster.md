@@ -220,6 +220,67 @@ kubectl get clusterresourcesetbinding -n capc-rke2-cluster-1
 # → resources[0].applied: true
 ```
 
+## Scaling Workers
+
+Use the CAPI `MachineDeployment` on the **management cluster** to scale workers. Do not edit the underlying `MachineSet` directly.
+
+### Scale up (add workers)
+
+```bash
+# KUBECONFIG points at the management cluster (not the workload cluster)
+KUBECONFIG=~/.kube/kube-rancher-config \
+  kubectl scale machinedeployment \
+  <cluster-name>-md-0 \
+  --replicas=<desired-worker-count> \
+  -n <cluster-namespace>
+```
+
+**Example — add 1 worker to the default setup:**
+
+```bash
+KUBECONFIG=~/.kube/kube-rancher-config \
+  kubectl scale machinedeployment \
+  capc-rke2-cluster-1-md-0 \
+  --replicas=3 \
+  -n capc-rke2-cluster-1
+```
+
+CAPI provisions a new VM, bootstraps RKE2, and joins the node automatically. The CSI node DaemonSet will also be scheduled on the new node automatically.
+
+### Scale down (remove workers)
+
+**CAPI decides which Machine to delete** during scale-down. If you need to remove a specific node, cordon + drain it first, then delete its **Machine** object directly.
+
+**Generic scale-down (CAPI picks the machine):**
+
+```bash
+KUBECONFIG=~/.kube/kube-rancher-config \
+  kubectl scale machinedeployment \
+  capc-rke2-cluster-1-md-0 \
+  --replicas=2 \
+  -n capc-rke2-cluster-1
+```
+
+**Remove a specific node:**
+
+```bash
+# 1. Cordon + drain the node on the workload cluster
+KUBECONFIG=/tmp/capc-rke2-cluster-1-kubeconfig \
+  kubectl cordon   <node-name>
+
+KUBECONFIG=/tmp/capc-rke2-cluster-1-kubeconfig \
+  kubectl drain    <node-name> \
+  --ignore-daemonsets --delete-emptydir-data --force --timeout=300s
+
+# 2. Delete the Machine object on the management cluster
+KUBECONFIG=~/.kube/kube-rancher-config \
+  kubectl delete machine <machine-name> -n capc-rke2-cluster-1
+
+# 3. CAPI cleans up the VM automatically
+```
+
+> ⚠️ Do **not** use `kubectl delete node` directly on the workload cluster — this leaves the CAPI `Machine` and CloudStack VM in place. Always delete the `Machine` object on the management cluster so CAPI handles the full lifecycle.
+
 ## Troubleshooting
 
 ### Calico crashes with `Fatal glibc error: CPU does not support x86-64-v2`
