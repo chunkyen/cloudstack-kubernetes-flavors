@@ -99,6 +99,8 @@ The actual bootstrap flow:
 | **Debian 12** | Lightweight. cloud-init pre-installed. |
 
 > **Recommendation:** Use a **generic OS cloud image** for RKE2. RKE2 installs containerd, kubelet, etcd, and CNI itself during bootstrap, so a pre-built CAPI image is unnecessary. A generic image is simpler to maintain, smaller, and avoids version conflicts. CAPI images work too, but they contain pre-installed kubeadm/kubelet that RKE2 will overlay anyway.
+>
+> **Validated:** Ubuntu 24.04 cloud image — `ubuntu 24.04` template on CloudStack — successfully provisioned control plane and workers. CCM and CSI deployed and healthy. No CAPI-specific image required.
 
 ## Step 1: Install CAPRKE2 Providers
 
@@ -377,7 +379,7 @@ If you need to apply CCM + CSI manually (e.g. to an existing cluster not created
 | `cloudstack-csi-snapshot-crds.yaml` | [upstream](https://github.com/cloudstack/cloudstack-csi-driver/tree/main/deploy/k8s) | Exact upstream |
 | `cloudstack-csi-volume-snapshot-class.yaml` | [upstream](https://github.com/cloudstack/cloudstack-csi-driver/tree/main/deploy/k8s) | Exact upstream |
 | `cloudstack-csi-driver.yaml` | [upstream](https://github.com/cloudstack/cloudstack-csi-driver/tree/main/deploy/k8s) | Exact upstream |
-| `cloudstack-csi-controller-deployment-rke2.yaml` | [upstream](https://github.com/cloudstack/cloudstack-csi-driver/tree/main/deploy/k8s) | **RKE2 patch:** `replicas: 1`, removed `podAntiAffinity` |
+| `cloudstack-csi-controller-deployment-rke2.yaml` | [upstream](https://github.com/cloudstack/cloudstack-csi-driver/tree/main/deploy/k8s) | **RKE2 patch:** `replicas: 1`, removed `podAntiAffinity`; `nodeAffinity` moved under `affinity` (not directly under `spec`) |
 | `cloudstack-csi-node-daemonset-rke2.yaml` | [upstream](https://github.com/cloudstack/cloudstack-csi-driver/tree/main/deploy/k8s) | **RKE2 patch:** removed `/run/cloud-init/` mount |
 
 The exact RKE2 changes are documented as inline YAML comments in both `-rke2` files.
