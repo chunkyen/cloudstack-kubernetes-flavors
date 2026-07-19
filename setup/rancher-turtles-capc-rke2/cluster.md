@@ -153,6 +153,8 @@ kubectl create secret generic cloudstack-credentials \
   --from-literal=api-url="http://<cloudstack-host>:8080/client/api"
 ```
 
+> ⚠️ **Do not manually create the CloudStack network.** CAPC auto-creates the isolated network specified in `failureDomains.zone.network.name` and auto-associates a free public IP. You only need to pick an available public IP for `controlPlaneEndpoint.host`.
+
 ## Step 3: Deploy the Cluster (with CCM + CSI via ClusterResourceSet)
 
 This step deploys three resources together — the cluster itself plus the ClusterResourceSet that automatically installs CCM and CSI after the cluster comes up.
@@ -179,6 +181,8 @@ The `Cluster` manifest includes the label `capc-rke2-ccm-csi: "true"` which matc
 
 | Field | Value | Why |
 |---|---|---|
+| `controlPlaneEndpoint.host` | `"192.168.200.60"` | **Pick a free public IP** from your CloudStack public IP pool. CAPC uses this as the Kubernetes API endpoint. It must not be already allocated to another network. |
+| `failureDomains.zone.network.name` | `"capc-rke2-net"` | CAPC **auto-creates** this isolated network in CloudStack. Do not create it manually. |
 | `provider-id` | `cloudstack:///{{ ds.meta_data.instance_id }}` | Must match CAPC's provider ID format. No quotes around the template expression. |
 | `guest.cpu.mode` | `host-passthrough` | Required because Calico (bundled with RKE2 ≥v1.30) needs x86-64-v2 CPU instructions. Without this, `tigera-operator` crashes with `Fatal glibc error: CPU does not support x86-64-v2`. |
 | `cni` | `cilium` | RKE2's built-in CNI. RKE2 installs CNI automatically as a Helm chart during bootstrap. Valid values: `calico`, `cilium`, `canal`, `flannel`, or `none`. **Note:** If you use Cilium or another CNI, the `guest.cpu.mode: host-passthrough` requirement still applies because Cilium's eBPF stack also benefits from modern CPU instructions. |

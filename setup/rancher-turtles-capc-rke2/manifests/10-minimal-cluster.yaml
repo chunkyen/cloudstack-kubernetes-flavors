@@ -32,14 +32,14 @@ metadata:
   namespace: capc-rke2-cluster-1
 spec:
   controlPlaneEndpoint:
-    host: "192.168.200.60"
+    host: "192.168.200.60"    # ⚠️ PICK A FREE PUBLIC IP from your pool
     port: 6443
   failureDomains:
     - name: "cyz1"
       zone:
         name: "cyz1"
         network:
-          name: "capc-rke2-net"
+          name: "capc-rke2-net"              # CAPC auto-creates this isolated network
           offering: DefaultNetworkOfferingforKubernetesService
       acsEndpoint:
         name: cloudstack-credentials
