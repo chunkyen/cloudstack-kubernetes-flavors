@@ -354,7 +354,7 @@ Pull these on an internet-connected machine, save to a tarball, and import to yo
 apache/cloudstack-kubernetes-provider:v1.2.0
 
 # CSI driver
-apache/cloudstack-csi-driver:latest
+ghcr.io/cloudstack/cloudstack-csi-driver:3.0.0
 
 # CSI sidecars (versions may vary — match what's in your CRS ConfigMap)
 registry.k8s.io/sig-storage/csi-provisioner:v5.0.1
@@ -370,7 +370,7 @@ Save and transfer:
 # On internet-connected machine
 for img in \
   apache/cloudstack-kubernetes-provider:v1.2.0 \
-  apache/cloudstack-csi-driver:latest \
+  ghcr.io/cloudstack/cloudstack-csi-driver:3.0.0 \
   registry.k8s.io/sig-storage/csi-provisioner:v5.0.1 \
   registry.k8s.io/sig-storage/csi-attacher:v4.6.1 \
   registry.k8s.io/sig-storage/csi-resizer:v1.11.1 \
@@ -381,7 +381,7 @@ done
 
 docker save -o cloudstack-ccm-csi-images.tar \
   apache/cloudstack-kubernetes-provider:v1.2.0 \
-  apache/cloudstack-csi-driver:latest \
+  ghcr.io/cloudstack/cloudstack-csi-driver:3.0.0 \
   registry.k8s.io/sig-storage/csi-provisioner:v5.0.1 \
   registry.k8s.io/sig-storage/csi-attacher:v4.6.1 \
   registry.k8s.io/sig-storage/csi-resizer:v1.11.1 \
@@ -403,7 +403,7 @@ If you have a private registry (e.g. `registry.internal:5000`), update all image
 ```yaml
 # In 20-ccm-csi-configmap.yaml — replace all image: lines
 image: registry.internal:5000/apache/cloudstack-kubernetes-provider:v1.2.0
-image: registry.internal:5000/apache/cloudstack-csi-driver:latest
+image: registry.internal:5000/ghcr.io/cloudstack/cloudstack-csi-driver:3.0.0
 image: registry.internal:5000/sig-storage/csi-provisioner:v5.0.1
 # ... etc for all sidecars
 ```
