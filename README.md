@@ -119,6 +119,20 @@ Guides:
 - [Terraform manifests](setup/talos/manifests/terraform/) — Terraform configs for the above
 - [Sidero Omni](setup/talos/talos-omni.md) — self-hosted Omni on CloudStack: deploy the Omni VM, register Talos machines, and manage clusters via `omnictl`
 
+**Sidero Omni** is a Kubernetes management platform that automates the full cluster lifecycle — creation, scaling, upgrades, teardown — without requiring SSH access to nodes (Talos is immutable, no SSH). It can run as a SaaS offering or be self-hosted on CloudStack as a single Docker VM.
+
+Key capabilities:
+
+| Feature | Details |
+|---------|---------|
+| **Cluster lifecycle** | Create, scale, upgrade, delete clusters via `omnictl` or UI |
+| **Machine management** | Register bare Talos machines (VMs) — Omni discovers and manages them |
+| **Upgrades** | Automatic rolling upgrades — Omni orchestrates node-by-node replacement |
+| **Multi-cluster** | Native multi-cluster management from a single Omni instance |
+| **GitOps** | Cluster templates stored in Git, applied via `omnictl` |
+| **Air-gap** | Omni can operate fully offline — no internet dependency after initial setup |
+| **Self-hosted** | Single Docker VM on CloudStack (~4 GB RAM, 2 vCPU) — no Kubernetes cluster needed to run it |
+
 #### Cross-Cutting Components
 
 - [CloudStack Kubernetes Provider (CCM)](setup/cloudstack-kubernetes-provider.md)
