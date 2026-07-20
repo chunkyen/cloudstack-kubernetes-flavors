@@ -490,19 +490,6 @@ KUBECONFIG=workload-kubeconfig kubectl get pods -n kube-system -l app.kubernetes
 
 Expected: all Cilium pods Running and Cilium operator 1/1.
 
-## Standalone Manifests (optional — without ClusterResourceSet)
-
-If you need to apply CCM + CSI manually (e.g. to an existing cluster not created with `cluster.md`), extract the individual manifests from the ConfigMap (`20-ccm-csi-configmap.yaml`) or apply the upstream manifests directly.
-
-> **Secret required:** When deploying manually, you must also create the `cloudstack-secret` in `kube-system` on the workload cluster separately. The CRS ConfigMap embeds this secret automatically; standalone manifests do not.
-
-| File | Source | Notes |
-|---|---|---|
-| `cloudstack-csi-snapshot-crds.yaml` | [upstream](https://github.com/cloudstack/cloudstack-csi-driver/tree/main/deploy/k8s) | Exact upstream — apply separately after cluster is ready |
-| `cloudstack-csi-volume-snapshot-class.yaml` | [upstream](https://github.com/cloudstack/cloudstack-csi-driver/tree/main/deploy/k8s) | Exact upstream — apply separately after cluster is ready |
-
-> **Note on Volume Snapshots:** The ConfigMap intentionally **excludes** snapshot CRDs and the CloudStack VolumeSnapshotClass. RKE2 bundles its own `rke2-snapshot-controller-crd` Helm chart which installs `volumesnapshotclasses`, `volumesnapshotcontents`, and `volumesnapshots` CRDs automatically during bootstrap. Including duplicate CRDs in the ClusterResourceSet ConfigMap causes the RKE2 `helm-install` job to fail with an "invalid ownership metadata" error because Helm cannot adopt pre-existing CRDs that lack Helm labels/annotations. The CloudStack VolumeSnapshotClass and any custom VolumeSnapshotClasses should be created separately after the cluster is ready (e.g., `kubectl apply -f cloudstack-csi-volume-snapshot-class.yaml` once the snapshot CRDs exist).
-
 The StorageClass is defined in the ConfigMap with a `REPLACE_WITH_YOUR_DISK_OFFERING_UUID` placeholder — run `cmk list diskofferings | grep -E "id|name"` to find the correct UUID for your CloudStack zone.
 
 ## Air-Gapped / Offline Deployment
