@@ -678,6 +678,7 @@ spec:
     kubelet:
       extraArgs:
         - provider-id=cloudstack:///{{ ds.meta_data.instance_id }}
+        - register-with-taints=node-role.kubernetes.io/control-plane=:NoSchedule
     nodeName: '{{ ds.meta_data.local_hostname }}'
   preRKE2Commands:
     - sleep 30
