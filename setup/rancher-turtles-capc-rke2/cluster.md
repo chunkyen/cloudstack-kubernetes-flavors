@@ -377,7 +377,7 @@ KUBECONFIG=~/.kube/kube-rancher-config \
 
 After restart, the controller should successfully move etcd leadership to the new node, then delete the old control plane machine. Worker upgrades will proceed automatically.
 
-## Upgrading the OS Template
+## Upgrading Node OS Using a New Template
 
 CAPI supports **rolling OS upgrades** by creating new `CloudStackMachineTemplate` objects with the updated template name and switching the `RKE2ControlPlane` and `MachineDeployment` references to point at them. CAPI then provisions new VMs with the new OS, joins them to the cluster, and deletes the old machines.
 
@@ -458,51 +458,6 @@ kubectl rollout restart deployment rke2-control-plane-controller-manager \
 ### Java apps crash with `NullPointerException` in `ProcessorMetrics` (JDK 17 + Ubuntu 26 cgroup v2)
 
 On **Ubuntu 26** (cgroup v2), bank-of-anthos Java services using JDK 17.0.4.1 may crash with a `NullPointerException` in `ProcessorMetrics`. See [`demo-app/README.md`](../../demo-app/README.md#ubuntu-26--cgroup-v2-compatibility) for details and the patched manifests in `demo-app/manifests/cgroupv2-jdk17-compat/`.
-
-## Troubleshooting
-
-### Calico crashes with `Fatal glibc error: CPU does not support x86-64-v2`
-
-**Cause:** The Calico version bundled with RKE2 ≥v1.30 requires x86-64-v2 CPU instructions, but CloudStack VMs default to QEMU's virtual CPU model which may not expose these features.
-
-**Fix:** Add `details: guest.cpu.mode: host-passthrough` to both `CloudStackMachineTemplate` resources (control-plane and worker). This passes the host CPU features through to the guest.
-
-### Workers not created
-
-The `MachineSet` shows `desired: 2, current: 0`. CAPRKE2 waits for the control plane to be fully healthy before provisioning workers. Check:
-
-```bash
-kubectl get rke2controlplane -n capc-rke2-cluster-1 -o yaml
-```
-
-If the control plane is `NotReady` due to Calico, apply the host-passthrough fix above, delete the cluster, and recreate.
-
-### Provider ID format
-
-The `provider-id` must be `cloudstack:///{{ ds.meta_data.instance_id }}` — no quotes around the template expression. If quotes are present, the literal string `{{ ds.meta_data.instance_id }}` is used instead of the resolved value.
-
-### CSI node container crashes with exit code 2
-
-**Cause:** The upstream CSI node DaemonSet mounts `/run/cloud-init/` to read instance metadata, but RKE2 nodes do **not** use cloud-init — RKE2 installs itself via tarball at bootstrap — so this directory does not exist.
-
-**Fix:** The ConfigMap (`20-ccm-csi-configmap.yaml`) has this mount removed in the `cloudstack-csi-node-daemonset-rke2.yaml` key. If you are using your own upstream manifests, remove the `cloud-init-dir` volumeMount and volume:
-
-```yaml
-# Remove this from the CSI node DaemonSet container:
-- name: cloud-init-dir
-  mountPath: /run/cloud-init
-
-# Remove this from the CSI node DaemonSet volumes:
-- name: cloud-init-dir
-  hostPath:
-    path: /run/cloud-init
-```
-
-### CSI controller pod stays Pending
-
-**Cause:** The upstream CSI controller Deployment sets `replicas: 2` with `podAntiAffinity` requiring deployment across different hosts. On a single-node RKE2 control plane, the second replica can never schedule.
-
-**Fix:** The ConfigMap (`20-ccm-csi-configmap.yaml`) sets `replicas: 1` and removes `podAntiAffinity` in the `cloudstack-csi-controller-deployment-rke2.yaml` key. If you are using your own upstream manifests, change to `replicas: 1` and remove the `podAntiAffinity` block.
 
 ## Switching CNI from Calico to Cilium
 
@@ -655,6 +610,51 @@ If you don't have a private registry, you can:
 3. Ensure containerd's `imagePullPolicy` handles the already-present images correctly.
 
 This avoids registry setup but requires maintaining a custom template per image release.
+
+## Troubleshooting
+
+### Calico crashes with `Fatal glibc error: CPU does not support x86-64-v2`
+
+**Cause:** The Calico version bundled with RKE2 ≥v1.30 requires x86-64-v2 CPU instructions, but CloudStack VMs default to QEMU's virtual CPU model which may not expose these features.
+
+**Fix:** Add `details: guest.cpu.mode: host-passthrough` to both `CloudStackMachineTemplate` resources (control-plane and worker). This passes the host CPU features through to the guest.
+
+### Workers not created
+
+The `MachineSet` shows `desired: 2, current: 0`. CAPRKE2 waits for the control plane to be fully healthy before provisioning workers. Check:
+
+```bash
+kubectl get rke2controlplane -n capc-rke2-cluster-1 -o yaml
+```
+
+If the control plane is `NotReady` due to Calico, apply the host-passthrough fix above, delete the cluster, and recreate.
+
+### Provider ID format
+
+The `provider-id` must be `cloudstack:///{{ ds.meta_data.instance_id }}` — no quotes around the template expression. If quotes are present, the literal string `{{ ds.meta_data.instance_id }}` is used instead of the resolved value.
+
+### CSI node container crashes with exit code 2
+
+**Cause:** The upstream CSI node DaemonSet mounts `/run/cloud-init/` to read instance metadata, but RKE2 nodes do **not** use cloud-init — RKE2 installs itself via tarball at bootstrap — so this directory does not exist.
+
+**Fix:** The ConfigMap (`20-ccm-csi-configmap.yaml`) has this mount removed in the `cloudstack-csi-node-daemonset-rke2.yaml` key. If you are using your own upstream manifests, remove the `cloud-init-dir` volumeMount and volume:
+
+```yaml
+# Remove this from the CSI node DaemonSet container:
+- name: cloud-init-dir
+  mountPath: /run/cloud-init
+
+# Remove this from the CSI node DaemonSet volumes:
+- name: cloud-init-dir
+  hostPath:
+    path: /run/cloud-init
+```
+
+### CSI controller pod stays Pending
+
+**Cause:** The upstream CSI controller Deployment sets `replicas: 2` with `podAntiAffinity` requiring deployment across different hosts. On a single-node RKE2 control plane, the second replica can never schedule.
+
+**Fix:** The ConfigMap (`20-ccm-csi-configmap.yaml`) sets `replicas: 1` and removes `podAntiAffinity` in the `cloudstack-csi-controller-deployment-rke2.yaml` key. If you are using your own upstream manifests, change to `replicas: 1` and remove the `podAntiAffinity` block.
 
 ## Cleanup
 
