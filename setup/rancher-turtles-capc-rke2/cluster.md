@@ -627,13 +627,100 @@ Also set the RKE2 `system-default-registry` so all RKE2 core images pull from yo
     systemDefaultRegistry: registry.internal:5000
 ```
 
+### RKE2 air-gapped bootstrap (tarball)
+
+CAPRKE2 supports air-gapped RKE2 installation via the `agentConfig.airGapped` field. When set to `true`, the install script uses `INSTALL_RKE2_ARTIFACT_PATH=/opt/rke2-artifacts` instead of downloading from the public internet.
+
+**What you need:**
+
+| Artifact | Size | Source |
+|---|---|---|
+| `rke2.linux-amd64.tar.gz` | ~40 MB | RKE2 release (the RKE2 binary + systemd units) |
+| `rke2-images.linux-amd64.tar.zst` | ~580 MB | RKE2 release (all container images: containerd, etcd, CNI, CoreDNS, ingress) |
+| `sha256sum-amd64.txt` | ~3.5 KB | RKE2 release (checksums for verification) |
+| `install.sh` | ~27 KB | `https://get.rke2.io` (the RKE2 install script) |
+
+**Step 1: Download artifacts on an internet-connected machine**
+
+```bash
+VERSION=v1.36.2+rke2r1
+mkdir -p rke2-artifacts && cd rke2-artifacts
+
+curl -sLO "https://github.com/rancher/rke2/releases/download/${VERSION}/rke2.linux-amd64.tar.gz"
+curl -sLO "https://github.com/rancher/rke2/releases/download/${VERSION}/rke2-images.linux-amd64.tar.zst"
+curl -sLO "https://github.com/rancher/rke2/releases/download/${VERSION}/sha256sum-amd64.txt"
+curl -sLo install.sh "https://get.rke2.io"
+```
+
+**Step 2: Host the artifacts on an internal HTTP server**
+
+Serve the directory from any machine reachable by the workload VMs:
+
+```bash
+cd rke2-artifacts
+python3 -m http.server 8080
+```
+
+**Step 3: Configure the cluster manifest**
+
+Set `agentConfig.airGapped: true` and add `preRKE2Commands` to download the artifacts before RKE2 installs:
+
+```yaml
+apiVersion: controlplane.cluster.x-k8s.io/v1beta2
+kind: RKE2ControlPlane
+metadata:
+  name: capc-rke2-cluster-1-control-plane
+  namespace: capc-rke2-cluster-1
+spec:
+  version: v1.36.2+rke2r1
+  agentConfig:
+    airGapped: true
+    kubelet:
+      extraArgs:
+        - provider-id=cloudstack:///{{ ds.meta_data.instance_id }}
+    nodeName: '{{ ds.meta_data.local_hostname }}'
+  preRKE2Commands:
+    - sleep 30
+    - mkdir -p /opt/rke2-artifacts
+    - curl -sL -o /opt/rke2-artifacts/rke2.linux-amd64.tar.gz http://192.168.200.1:8080/rke2.linux-amd64.tar.gz
+    - curl -sL -o /opt/rke2-artifacts/rke2-images.linux-amd64.tar.zst http://192.168.200.1:8080/rke2-images.linux-amd64.tar.zst
+    - curl -sL -o /opt/rke2-artifacts/sha256sum-amd64.txt http://192.168.200.1:8080/sha256sum-amd64.txt
+    - curl -sL -o /opt/install.sh http://192.168.200.1:8080/install.sh
+```
+
+The same `preRKE2Commands` and `agentConfig.airGapped: true` must be set in the `RKE2ConfigTemplate` for worker nodes.
+
+> **Note:** The `agentConfig.airGappedChecksum` field exists in the CAPRKE2 CRD but generates a cloud-init `runcmd` line containing `awk '{print $1}'`. The curly braces `{}` break YAML parsing, causing cloud-init to skip the entire `runcmd` section. Omit this field and rely on the install script's built-in checksum verification instead.
+
+**Step 4: Apply and verify**
+
+```bash
+kubectl apply -f 10-airgap-cluster.yaml
+```
+
+Monitor the control plane's cloud-init logs to confirm artifacts download and RKE2 installs:
+
+```bash
+# Expected cloud-init output
+[INFO]  staging local checksums from /opt/rke2-artifacts/sha256sum-amd64.txt
+[INFO]  staging zst airgap image tarball from /opt/rke2-artifacts/rke2-images.linux-amd64.tar.zst
+[INFO]  staging tarball from /opt/rke2-artifacts/rke2.linux-amd64.tar.gz
+[INFO]  verifying airgap tarball
+[INFO]  installing airgap tarball to /var/lib/rancher/rke2/agent/images
+[INFO]  verifying tarball
+[INFO]  unpacking tarball file to /usr/local
+Created symlink /etc/systemd/system/multi-user.target.wants/rke2-server.service
+```
+
+A complete working example is available at [`manifests/10-airgap-cluster.yaml`](./manifests/10-airgap-cluster.yaml).
+
 ### CAPC-specific considerations
 
 | Concern | Guidance |
 |---|---|
 | **CloudStack credentials secret** | The `cloudstack-credentials` secret on the management cluster references the CloudStack API. This API must be reachable from the management cluster — use private IP or VPN if needed. |
 | **CAPC controller image** | The CAPC controller runs on the management cluster. Ensure the management cluster's nodes can reach your private registry (if pulling CAPC via Rancher Turtles). |
-| **RKE2 tarball download** | CAPRKE2 downloads the RKE2 tarball from the public internet by default. In air-gap, pre-stage the tarball on your CloudStack template or host it on an internal HTTP server and reference it via `rke2Config` `serverURL` / `agentConfig` `token` fields. See [CAPRKE2 air-gap docs](https://caprke2.docs.rancher.com/). |
+| **RKE2 tarball download** | CAPRKE2 downloads the RKE2 tarball from the public internet by default. In air-gap, use `agentConfig.airGapped: true` with `preRKE2Commands` to fetch artifacts from an internal HTTP server (see [RKE2 air-gapped bootstrap](#rke2-air-gapped-bootstrap-tarball) above). |
 
 ### Simplified approach (no private registry)
 

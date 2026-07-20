@@ -1,0 +1,165 @@
+# Air-gapped RKE2 cluster — 1 control plane + 1 worker
+# RKE2 artifacts served from an internal HTTP server (192.168.200.1:8080)
+# airGapped: true → install script uses INSTALL_RKE2_ARTIFACT_PATH=/opt/rke2-artifacts
+# preRKE2Commands download artifacts before install runs
+#
+# Replace the IP and port below with your internal artifact server.
+# See cluster.md § "RKE2 air-gapped bootstrap (tarball)" for full instructions.
+---
+apiVersion: cluster.x-k8s.io/v1beta1
+kind: Cluster
+metadata:
+  name: capc-rke2-cluster-1
+  namespace: capc-rke2-cluster-1
+  labels:
+    cluster-api.cattle.io/rancher-auto-import: "true"
+    capc-rke2-ccm-csi: "true"
+spec:
+  clusterNetwork:
+    pods:
+      cidrBlocks:
+        - "10.168.0.0/16"
+    serviceDomain: cluster.local
+  controlPlaneRef:
+    apiVersion: controlplane.cluster.x-k8s.io/v1beta2
+    kind: RKE2ControlPlane
+    name: capc-rke2-cluster-1-control-plane
+  infrastructureRef:
+    apiVersion: infrastructure.cluster.x-k8s.io/v1beta3
+    kind: CloudStackCluster
+    name: capc-rke2-cluster-1
+---
+apiVersion: infrastructure.cluster.x-k8s.io/v1beta3
+kind: CloudStackCluster
+metadata:
+  name: capc-rke2-cluster-1
+  namespace: capc-rke2-cluster-1
+spec:
+  controlPlaneEndpoint:
+    host: 192.168.200.61
+    port: 6443
+  failureDomains:
+  - acsEndpoint:
+      name: cloudstack-credentials
+      namespace: capc-rke2-cluster-1
+    name: cyz1
+    zone:
+      name: cyz1
+      network:
+        name: capc-rke2-cluster-1-net
+        offering: DefaultNetworkOfferingforKubernetesService
+  syncWithACS: true
+---
+apiVersion: controlplane.cluster.x-k8s.io/v1beta2
+kind: RKE2ControlPlane
+metadata:
+  name: capc-rke2-cluster-1-control-plane
+  namespace: capc-rke2-cluster-1
+spec:
+  replicas: 1
+  version: v1.36.2+rke2r1
+  agentConfig:
+    airGapped: true
+    kubelet:
+      extraArgs:
+        - provider-id=cloudstack:///{{ ds.meta_data.instance_id }}
+        - register-with-taints=node-role.kubernetes.io/control-plane=:NoSchedule
+    nodeName: '{{ ds.meta_data.local_hostname }}'
+  serverConfig:
+    cni: calico
+  registrationMethod: internal-first
+  rolloutStrategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+  preRKE2Commands:
+    - sleep 30
+    - mkdir -p /opt/rke2-artifacts
+    - curl -sL -o /opt/rke2-artifacts/rke2.linux-amd64.tar.gz http://192.168.200.1:8080/rke2.linux-amd64.tar.gz
+    - curl -sL -o /opt/rke2-artifacts/rke2-images.linux-amd64.tar.zst http://192.168.200.1:8080/rke2-images.linux-amd64.tar.zst
+    - curl -sL -o /opt/rke2-artifacts/sha256sum-amd64.txt http://192.168.200.1:8080/sha256sum-amd64.txt
+    - curl -sL -o /opt/install.sh http://192.168.200.1:8080/install.sh
+  machineTemplate:
+    spec:
+      infrastructureRef:
+        apiGroup: infrastructure.cluster.x-k8s.io
+        kind: CloudStackMachineTemplate
+        name: capc-rke2-cluster-1-control-plane
+---
+apiVersion: infrastructure.cluster.x-k8s.io/v1beta3
+kind: CloudStackMachineTemplate
+metadata:
+  name: capc-rke2-cluster-1-control-plane
+  namespace: capc-rke2-cluster-1
+spec:
+  template:
+    spec:
+      offering:
+        name: "kube control"
+      sshKey: "cylabnb-k1"
+      template:
+        name: "ubuntu 24.04"
+      details:
+        guest.cpu.mode: host-passthrough
+---
+apiVersion: cluster.x-k8s.io/v1beta1
+kind: MachineDeployment
+metadata:
+  name: capc-rke2-cluster-1-md-0
+  namespace: capc-rke2-cluster-1
+spec:
+  clusterName: capc-rke2-cluster-1
+  replicas: 1
+  selector:
+    matchLabels: null
+  template:
+    spec:
+      bootstrap:
+        configRef:
+          apiVersion: bootstrap.cluster.x-k8s.io/v1beta2
+          kind: RKE2ConfigTemplate
+          name: capc-rke2-cluster-1-md-0
+      clusterName: capc-rke2-cluster-1
+      infrastructureRef:
+        apiVersion: infrastructure.cluster.x-k8s.io/v1beta3
+        kind: CloudStackMachineTemplate
+        name: capc-rke2-cluster-1-md-0
+      version: v1.36.2+rke2r1
+---
+apiVersion: infrastructure.cluster.x-k8s.io/v1beta3
+kind: CloudStackMachineTemplate
+metadata:
+  name: capc-rke2-cluster-1-md-0
+  namespace: capc-rke2-cluster-1
+spec:
+  template:
+    spec:
+      offering:
+        name: "kube worker1"
+      sshKey: "cylabnb-k1"
+      template:
+        name: "ubuntu 24.04"
+      details:
+        guest.cpu.mode: host-passthrough
+---
+apiVersion: bootstrap.cluster.x-k8s.io/v1beta2
+kind: RKE2ConfigTemplate
+metadata:
+  name: capc-rke2-cluster-1-md-0
+  namespace: capc-rke2-cluster-1
+spec:
+  template:
+    spec:
+      preRKE2Commands:
+        - sleep 30
+        - mkdir -p /opt/rke2-artifacts
+        - curl -sL -o /opt/rke2-artifacts/rke2.linux-amd64.tar.gz http://192.168.200.1:8080/rke2.linux-amd64.tar.gz
+        - curl -sL -o /opt/rke2-artifacts/rke2-images.linux-amd64.tar.zst http://192.168.200.1:8080/rke2-images.linux-amd64.tar.zst
+        - curl -sL -o /opt/rke2-artifacts/sha256sum-amd64.txt http://192.168.200.1:8080/sha256sum-amd64.txt
+        - curl -sL -o /opt/install.sh http://192.168.200.1:8080/install.sh
+      agentConfig:
+        airGapped: true
+        kubelet:
+          extraArgs:
+            - provider-id=cloudstack:///{{ ds.meta_data.instance_id }}
+        nodeName: '{{ ds.meta_data.local_hostname }}'
