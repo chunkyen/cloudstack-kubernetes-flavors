@@ -95,12 +95,13 @@ The actual bootstrap flow:
 | OS | Notes |
 |---|---|
 | **Ubuntu 24.04 cloud image** | Most tested. cloud-init pre-installed. Good for both Calico and Cilium. |
+| **Ubuntu 26.04 cloud image** ([cloud-images.ubuntu.com/resolute/](https://cloud-images.ubuntu.com/resolute/)) | Validated. cloud-init pre-installed. Works with RKE2 v1.35+ and v1.36+. |
 | **Rocky Linux 9** | RHEL-compatible. cloud-init pre-installed. |
 | **Debian 12** | Lightweight. cloud-init pre-installed. |
 
 > **Recommendation:** Use a **generic OS cloud image** for RKE2. RKE2 installs containerd, kubelet, etcd, and CNI itself during bootstrap, so a pre-built CAPI image is unnecessary. A generic image is simpler to maintain, smaller, and avoids version conflicts. CAPI images work too, but they contain pre-installed kubeadm/kubelet that RKE2 will overlay anyway.
 >
-> **Validated:** Ubuntu 24.04 cloud image — `ubuntu 24.04` template on CloudStack — successfully provisioned control plane and workers. CCM and CSI deployed and healthy. No CAPI-specific image required.
+> **Validated:** Ubuntu 24.04 and Ubuntu 26.04 cloud images — `ubuntu 24.04` and `ubuntu 26 server` templates on CloudStack — both successfully provisioned control plane and workers. CCM and CSI deployed and healthy. No CAPI-specific image required.
 
 ## Step 1: Install CAPRKE2 Providers
 
