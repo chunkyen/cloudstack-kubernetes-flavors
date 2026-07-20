@@ -796,7 +796,7 @@ data:
         api-url = http://YOUR_CLOUDSTACK_API_URL:8080/client/api
         api-key = YOUR_API_KEY
         secret-key = YOUR_SECRET_KEY
-        ssl-no-verify = true
+        ssl-no-verify = "true"
     type: Opaque
 kind: ConfigMap
 metadata:
