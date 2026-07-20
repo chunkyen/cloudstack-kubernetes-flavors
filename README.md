@@ -10,8 +10,10 @@ This repository examines four primary approaches to running Kubernetes on CloudS
 
 1. **CKS (CloudStack Kubernetes Service)** — Native CloudStack Kubernetes integration
 2. **CAPC (Cluster API Provider for CloudStack)** — Infrastructure-as-Code approach using Cluster API (with user-defined node OS)
-3. **Rancher + CAPC** — Managed Kubernetes with Rancher as the management plane, CAPC as the CloudStack infrastructure provider (with user-defined nodes)
-4. **Talos Linux** — Minimal, immutable Linux designed for Kubernetes. Can be managed standalone (via `cmk` or Terraform), or with **Sidero Omni** — a Kubernetes management platform that automates cluster lifecycle (self-hosted on CloudStack as a single Docker VM).
+3. **Rancher + CAPC** — Managed Kubernetes with Rancher as the management plane, CAPC as the CloudStack infrastructure provider. Supports two bootstrap providers:
+   - **Kubeadm** — traditional kubeadm-based control plane and bootstrap
+   - **RKE2** — Rancher's Kubernetes distribution with built-in CNI (Calico), embedded etcd, and native air-gap support via tarball
+4. **Talos Linux** — Minimal, immutable Linux designed for Kubernetes. Can be managed standalone (via `cmk` or Terraform), or with **Sidero Omni** — a Kubernetes management platform that automates cluster lifecycle (self-hosted on CloudStack as a single Docker VM, or SaaS).
 
 ### Cross-Cutting Components
 
