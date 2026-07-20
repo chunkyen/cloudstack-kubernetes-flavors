@@ -714,6 +714,8 @@ Created symlink /etc/systemd/system/multi-user.target.wants/rke2-server.service
 
 A complete working example is available at [`manifests/10-airgap-cluster.yaml`](./manifests/10-airgap-cluster.yaml).
 
+> **Important:** The above covers RKE2 itself. CCM and CSI images are **not** included in the RKE2 tarball — they must be hosted in a private registry and the image paths in `20-ccm-csi-configmap.yaml` updated to point to that registry. See [Required image list for air-gapped CCM + CSI](#required-image-list-for-air-gapped-ccm--csi) and [Using a private registry](#using-a-private-registry) below.
+
 ### CAPC-specific considerations
 
 | Concern | Guidance |
