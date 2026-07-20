@@ -363,12 +363,19 @@ If the control plane upgrade stalls with the new node stuck in `Provisioned` and
 ```bash
 KUBECONFIG=~/.kube/kube-rancher-config \
   kubectl logs -n cattle-capi-system \
-  deployment/rke2-control-plane-controller-manager | grep -i "etcd\|leadership\|failed"
+  deployment/rke2-control-plane-controller-manager | grep -i "etcd\\|leadership\\|failed"
 ```
 
-**Symptom:** TLS certificate errors (`remote error: tls: unknown certificate authority`) or etcd connection timeouts.
+**Symptom:** Repeated errors like:
 
-**Fix:** Restart the controller manager pod to refresh its etcd client certificates:
+```
+Failed to move leadership to candidate machine
+tls: unknown certificate authority
+```
+
+**Root cause:** This is a [known bug](https://github.com/rancher/cluster-api-provider-rke2/issues/919) in the `rke2-control-plane-controller-manager`. The controller's in-memory etcd client becomes stale and can no longer connect to etcd, even though the TLS certificates on the nodes are valid. Restarting the pod clears the in-memory state.
+
+**Fix:** Restart the controller manager pod:
 
 ```bash
 KUBECONFIG=~/.kube/kube-rancher-config \
@@ -475,7 +482,7 @@ Each new VM boots with the new OS template and installs the new RKE2 version —
 
 ### Troubleshooting: etcd leadership transfer stuck
 
-Same issue as RKE2 version upgrades — if the old control plane never deletes, the `rke2-control-plane-controller-manager` may have stale etcd client certificates. Restart it:
+Same [known bug](https://github.com/rancher/cluster-api-provider-rke2/issues/919) as RKE2 version upgrades — the controller's in-memory etcd client becomes stale. Restart it:
 
 ```bash
 kubectl rollout restart deployment rke2-control-plane-controller-manager \
