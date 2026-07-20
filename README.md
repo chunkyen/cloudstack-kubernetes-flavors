@@ -80,7 +80,20 @@ See [architecture/rancher-turtles-capc.md#bootstrap-provider-choice-kubeadm-vs-r
 
 **RKE2-based:**
 - [Cluster creation](setup/rancher-turtles-capc-rke2/cluster.md) — RKE2 cluster provisioning with automatic CCM + CSI deployment
-- [Manifests](setup/rancher-turtles-capc-rke2/manifests/) — all YAML files
+- [Air-gapped / offline deployment](setup/rancher-turtles-capc-rke2/cluster.md#air-gapped--offline-deployment) — RKE2 tarball-based air-gap with internal HTTP server
+- [Template-driven manifests with ytt](setup/rancher-turtles-capc-rke2/ytt.md) — reusable cluster templates with air-gap conditionals (why ClusterClass isn't available)
+- [Manifests](setup/rancher-turtles-capc-rke2/manifests/) — all YAML files including air-gap sample
+
+RKE2 differs from kubeadm in several key ways:
+
+| Aspect | Kubeadm | RKE2 |
+|--------|---------|------|
+| **Node image** | Requires a CAPI-compatible image with kubelet + kubeadm pre-installed | Standard OS template (Ubuntu, Rocky) — RKE2 installs via tarball |
+| **CNI** | Manual install (Calico/Flannel/Cilium) | Built-in (Calico default; Canal, Cilium, Flannel, or none) |
+| **Air-gap** | Pre-bake images into template or use private registry | Built-in `airGapped: true` — tarball contains all K8s + CNI + containerd images |
+| **Upgrade** | Image-based (new template per version) | Version bump in manifest (rolling update via tarball) |
+| **Control plane taint** | Manual `kubectl taint` or kubelet config | `register-with-taints` kubelet extraArg in manifest |
+| **etcd** | External (stacked or external) | Embedded (built-in) |
 
 > **ClusterClass note:** CAPI ClusterClass (topology-based clusters) is **not available** for CAPC because CAPC does not implement `CloudStackClusterTemplate`, the CRD required by ClusterClass's `infrastructure.templateRef`. Clusters must use explicit CRD references. See [Rancher+CAPC architecture](architecture/rancher-turtles-capc.md#clusterclass--not-available-for-capc) for details.
 >
