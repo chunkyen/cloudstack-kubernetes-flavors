@@ -457,29 +457,7 @@ kubectl rollout restart deployment rke2-control-plane-controller-manager \
 
 ### Java apps crash with `NullPointerException` in `ProcessorMetrics` (JDK 17 + Ubuntu 26 cgroup v2)
 
-**Affected:** `demo-app/manifests/balance-reader.yaml`, `ledger-writer.yaml`, `transaction-history.yaml` (bank-of-anthos Java services)
-
-**Symptom:** On **Ubuntu 26** (cgroup v2), these pods crash with:
-
-```
-Cannot invoke "jdk.internal.platform.CgroupInfo.getMountPoint()" because "<parameter1>" is null
-```
-
-**Root cause:** The bank-of-anthos Java services use a container image with **JDK 17.0.4.1**, whose `jdk.internal.platform.CgroupMetrics` code path for cgroup v2 is incompatible with the containerd version bundled in RKE2 when running on **Ubuntu 26**. This is **not** an RKE2 version issue — it's a JDK 17.0.4.1 + Ubuntu 26 cgroup v2 layout incompatibility. RKE2 v1.35 bundles containerd 1.7.x which triggers this; RKE2 v1.36+ bundles containerd 2.3.x which does not, but the underlying JDK limitation remains on any RKE2 version if the containerd cgroup v2 layout happens to trigger it.
-
-**Fix:** Exclude the Spring Boot `SystemMetricsAutoConfiguration` that triggers `ProcessorMetrics`:
-
-```yaml
-env:
-  - name: NAMESPACE
-    valueFrom:
-      fieldRef:
-        fieldPath: metadata.namespace
-  - name: SPRING_AUTOCONFIGURE_EXCLUDE
-    value: org.springframework.boot.actuate.autoconfigure.metrics.SystemMetricsAutoConfiguration
-```
-
-**Patched manifests:** See `demo-app/manifests/cgroupv2-jdk17-compat/` for pre-patched versions of `balance-reader.yaml`, `ledger-writer.yaml`, and `transaction-history.yaml` with this workaround applied. Use these when deploying on **Ubuntu 26** hosts regardless of RKE2 version.
+On **Ubuntu 26** (cgroup v2), bank-of-anthos Java services using JDK 17.0.4.1 may crash with a `NullPointerException` in `ProcessorMetrics`. See [`demo-app/README.md`](../../demo-app/README.md#ubuntu-26--cgroup-v2-compatibility) for details and the patched manifests in `demo-app/manifests/cgroupv2-jdk17-compat/`.
 
 ## Troubleshooting
 
