@@ -382,6 +382,8 @@ After restart, the controller should successfully move etcd leadership to the ne
 
 CAPI supports **rolling OS upgrades** by creating new `CloudStackMachineTemplate` objects with the updated template name and switching the `RKE2ControlPlane` and `MachineDeployment` references to point at them. CAPI then provisions new VMs with the new OS, joins them to the cluster, and deletes the old machines.
 
+> **Tip:** You can combine an OS template upgrade with an RKE2 version upgrade in a single rolling update. When you patch both `version` and `infrastructureRef` at the same time, each new VM boots with the new OS **and** installs the new RKE2 version — one rolling update, one drain per node. See [Upgrading RKE2 Version](#upgrading-rke2-version) for the version patch commands, then apply them together with the template ref changes below.
+
 ### 1. Create new CloudStackMachineTemplates
 
 ```bash
@@ -446,6 +448,30 @@ kubectl get machines -n capc-rke2-cluster-1
 # Cluster stable
 kubectl get cluster -n capc-rke2-cluster-1
 ```
+
+### Combined upgrade: RKE2 version + OS template at the same time
+
+To upgrade both the RKE2 version and the OS template in a single rolling update, create the new `CloudStackMachineTemplates` first, then patch `version` and `infrastructureRef` together:
+
+```bash
+# Patch control plane — version + template ref in one call
+kubectl patch rke2controlplane capc-rke2-cluster-1-control-plane \
+  -n capc-rke2-cluster-1 --type='json' \
+  -p='[
+    {"op": "replace", "path": "/spec/version", "value": "v1.36.2+rke2r1"},
+    {"op": "replace", "path": "/spec/machineTemplate/spec/infrastructureRef/name", "value": "capc-rke2-cluster-1-control-plane-ubuntu26"}
+  ]'
+
+# Patch workers — version + template ref in one call
+kubectl patch machinedeployment capc-rke2-cluster-1-md-0 \
+  -n capc-rke2-cluster-1 --type='json' \
+  -p='[
+    {"op": "replace", "path": "/spec/template/spec/version", "value": "v1.36.2+rke2r1"},
+    {"op": "replace", "path": "/spec/template/spec/infrastructureRef/name", "value": "capc-rke2-cluster-1-md-0-ubuntu26"}
+  ]'
+```
+
+Each new VM boots with the new OS template and installs the new RKE2 version — one rolling update, one drain per node.
 
 ### Troubleshooting: etcd leadership transfer stuck
 
