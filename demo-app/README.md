@@ -68,7 +68,7 @@ Cannot invoke "jdk.internal.platform.CgroupInfo.getMountPoint()" because "<param
 kubectl apply -f manifests/cgroupv2-jdk17-compat/
 ```
 
-This applies to **any RKE2 version** running on Ubuntu 26 hosts — it's an OS-level cgroup v2 layout issue, not specific to a particular RKE2 release.
+This applies to **any Kubernetes flavor** (RKE2, kubeadm CAPC, CKS) running on Ubuntu 26 hosts — it's an OS-level cgroup v2 layout issue with JDK 17.0.4.1, not specific to a particular Kubernetes distribution. While only tested on RKE2 so far, the same JDK limitation would theoretically affect CKS and kubeadm CAPC clusters on Ubuntu 26 as well.
 
 ## Cleanup
 
