@@ -188,7 +188,7 @@ The `Cluster` manifest includes the label `capc-rke2-ccm-csi: "true"` which matc
 | `cni` | `cilium` | RKE2's built-in CNI. RKE2 installs CNI automatically as a Helm chart during bootstrap. Valid values: `calico`, `cilium`, `canal`, `flannel`, or `none`. **Note:** If you use Cilium or another CNI, the `guest.cpu.mode: host-passthrough` requirement still applies because Cilium's eBPF stack also benefits from modern CPU instructions. |
 | `registrationMethod` | `internal-first` | Nodes register via internal IP first, falling back to external. |
 | `preRKE2Commands` | `sleep 30` | Gives CloudStack time to fully provision the VM before RKE2 bootstrap starts. |
-| `nodeTaints` | `node-role.kubernetes.io/control-plane:NoSchedule` | Prevents workload pods from scheduling on the control-plane node. |
+| `kubelet extraArgs` | `register-with-taints=node-role.kubernetes.io/control-plane=:NoSchedule` | Applies the control-plane taint via kubelet flag instead of the `nodeTaints` object field (which causes a strict decoding error on `RKE2ControlPlane`). This prevents workload pods from scheduling on control-plane nodes. |
 | `capc-rke2-ccm-csi: "true"` | Cluster label | Matches the `ClusterResourceSet` selector so CCM + CSI are auto-deployed. |
 
 > **Note:** The `cloudstack-secret` containing CloudStack API credentials is embedded in the ConfigMap (`20-ccm-csi-configmap.yaml`) and is created automatically on the workload cluster by ClusterResourceSet — no separate manual step needed. Replace the placeholder values (`api-url`, `api-key`, `secret-key`) in the ConfigMap before applying. The ConfigMap also includes a StorageClass with a `REPLACE_WITH_YOUR_DISK_OFFERING_UUID` placeholder — update this to match your CloudStack disk offering UUID (not the name).
