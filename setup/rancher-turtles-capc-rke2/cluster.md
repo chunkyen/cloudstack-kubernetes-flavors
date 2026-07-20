@@ -377,21 +377,19 @@ KUBECONFIG=~/.kube/kube-rancher-config \
 
 After restart, the controller should successfully move etcd leadership to the new node, then delete the old control plane machine. Worker upgrades will proceed automatically.
 
-### Java apps crash with `NullPointerException` in `ProcessorMetrics` (JDK 17 + RKE2 ≤v1.35)
+### Java apps crash with `NullPointerException` in `ProcessorMetrics` (JDK 17 + Ubuntu 26 cgroup v2)
 
 **Affected:** `demo-app/manifests/balance-reader.yaml`, `ledger-writer.yaml`, `transaction-history.yaml` (bank-of-anthos Java services)
 
-**Symptom:** On RKE2 **v1.35.6+rke2r1**, these pods crash with:
+**Symptom:** On **Ubuntu 26** (cgroup v2), these pods crash with:
 
 ```
 Cannot invoke "jdk.internal.platform.CgroupInfo.getMountPoint()" because "<parameter1>" is null
 ```
 
-Spring Boot Micrometer `ProcessorMetrics` attempts to read cgroup v2 info, but the JDK 17.0.4.1 bundled in the `v0.6.7` image fails because the container runtime (`containerd://2.2.5-k3s2` in RKE2 1.35) exposes cgroup v2 in a way this JDK version doesn't expect.
+**Root cause:** The bank-of-anthos Java services use a container image with **JDK 17.0.4.1**, whose `jdk.internal.platform.CgroupMetrics` code path for cgroup v2 is incompatible with the containerd version bundled in RKE2 when running on **Ubuntu 26**. This is **not** an RKE2 version issue — it's a JDK 17.0.4.1 + Ubuntu 26 cgroup v2 layout incompatibility. RKE2 v1.35 bundles containerd 1.7.x which triggers this; RKE2 v1.36+ bundles containerd 2.3.x which does not, but the underlying JDK limitation remains on any RKE2 version if the containerd cgroup v2 layout happens to trigger it.
 
-**Root cause:** RKE2 v1.35 bundles **containerd 1.7.x** (`containerd://2.2.5-k3s2`). The JDK 17.0.4.1 `jdk.internal.platform.CgroupMetrics` code path for cgroup v2 expects certain hierarchy layouts that are incompatible with this containerd version on Ubuntu 26.04.
-
-**Fix (workaround for RKE2 v1.35):** Exclude the Spring Boot `SystemMetricsAutoConfiguration` that triggers `ProcessorMetrics`:
+**Fix:** Exclude the Spring Boot `SystemMetricsAutoConfiguration` that triggers `ProcessorMetrics`:
 
 ```yaml
 env:
@@ -403,9 +401,7 @@ env:
     value: org.springframework.boot.actuate.autoconfigure.metrics.SystemMetricsAutoConfiguration
 ```
 
-**Patched manifests:** See `demo-app/manifests/cgroupv2-jdk17-compat/` for pre-patched versions of `balance-reader.yaml`, `ledger-writer.yaml`, and `transaction-history.yaml` with this workaround applied.
-
-**Resolved in RKE2 v1.36.2+rke2r1:** On RKE2 v1.36.2 (Kubernetes 1.36), the upstream `demo-app/manifests/*.yaml` deploy without modification — the `v1.36→v1.36.2` upgrade also updated containerd to `containerd://2.3.2-k3s2`, which does not trigger the JDK 17.0.4.1 cgroup v2 NPE. The patched versions are only needed when running bank-of-anthos on **RKE2 ≤v1.35**.
+**Patched manifests:** See `demo-app/manifests/cgroupv2-jdk17-compat/` for pre-patched versions of `balance-reader.yaml`, `ledger-writer.yaml`, and `transaction-history.yaml` with this workaround applied. Use these when deploying on **Ubuntu 26** hosts regardless of RKE2 version.
 
 ## Troubleshooting
 

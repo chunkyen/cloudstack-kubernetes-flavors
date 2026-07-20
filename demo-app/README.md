@@ -53,6 +53,23 @@ All manifests are in the `manifests/` directory:
 | `loadgenerator.yaml` | Optional load generator |
 | `jwt-secret.yaml` | JWT signing keypair (Secret) |
 
+### Ubuntu 26 / cgroup v2 compatibility
+
+The Java services (`balance-reader`, `ledger-writer`, `transaction-history`) use a container image with **JDK 17.0.4.1**, which has a known incompatibility with cgroup v2 on **Ubuntu 26**. The Spring Boot `ProcessorMetrics` bean triggers a `NullPointerException` when the JDK attempts to read cgroup v2 info.
+
+**Symptom:** Pods crash-loop with:
+```
+Cannot invoke "jdk.internal.platform.CgroupInfo.getMountPoint()" because "<parameter1>" is null
+```
+
+**Fix:** Use the patched manifests in `manifests/cgroupv2-jdk17-compat/` instead of the upstream versions. These add the `SPRING_AUTOCONFIGURE_EXCLUDE` environment variable to skip the problematic auto-configuration:
+
+```bash
+kubectl apply -f manifests/cgroupv2-jdk17-compat/
+```
+
+This applies to **any RKE2 version** running on Ubuntu 26 hosts — it's an OS-level cgroup v2 layout issue, not specific to a particular RKE2 release.
+
 ## Cleanup
 
 ```bash
