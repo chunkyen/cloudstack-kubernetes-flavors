@@ -32,18 +32,18 @@ metadata:
   namespace: capc-rke2-cluster-1
 spec:
   controlPlaneEndpoint:
-    host: "192.168.200.60"    # ⚠️ PICK A FREE PUBLIC IP from your pool
+    host: 192.168.200.60
     port: 6443
   failureDomains:
-    - name: "cyz1"
-      zone:
-        name: "cyz1"
-        network:
-          name: "capc-rke2-net"              # CAPC auto-creates this isolated network
-          offering: DefaultNetworkOfferingforKubernetesService
-      acsEndpoint:
-        name: cloudstack-credentials
-        namespace: capc-rke2-cluster-1
+  - acsEndpoint:
+      name: cloudstack-credentials
+      namespace: capc-rke2-cluster-1
+    name: cyz1
+    zone:
+      name: cyz1
+      network:
+        name: capc-rke2-cluster-1-net
+        offering: DefaultNetworkOfferingforKubernetesService
   syncWithACS: true
 ---
 apiVersion: controlplane.cluster.x-k8s.io/v1beta2
@@ -58,11 +58,8 @@ spec:
     kubelet:
       extraArgs:
         - provider-id=cloudstack:///{{ ds.meta_data.instance_id }}
+        - register-with-taints=node-role.kubernetes.io/control-plane=:NoSchedule
     nodeName: '{{ ds.meta_data.local_hostname }}'
-    nodeTaints:
-      - key: "node-role.kubernetes.io/control-plane"
-        value: "true"
-        effect: "NoSchedule"
   serverConfig:
     cni: calico
   registrationMethod: internal-first
@@ -89,7 +86,7 @@ spec:
         name: "kube control"
       sshKey: "cylabnb-k1"
       template:
-        name: "capc-ubuntu24-1.35"
+        name: "ubuntu 26 server"
       details:
         guest.cpu.mode: host-passthrough
 ---
@@ -129,7 +126,7 @@ spec:
         name: "kube worker1"
       sshKey: "cylabnb-k1"
       template:
-        name: "capc-ubuntu24-1.35"
+        name: "ubuntu 26 server"
       details:
         guest.cpu.mode: host-passthrough
 ---
