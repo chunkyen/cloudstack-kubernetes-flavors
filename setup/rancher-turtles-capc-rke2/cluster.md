@@ -377,6 +377,84 @@ KUBECONFIG=~/.kube/kube-rancher-config \
 
 After restart, the controller should successfully move etcd leadership to the new node, then delete the old control plane machine. Worker upgrades will proceed automatically.
 
+## Upgrading the OS Template
+
+CAPI supports **rolling OS upgrades** by creating new `CloudStackMachineTemplate` objects with the updated template name and switching the `RKE2ControlPlane` and `MachineDeployment` references to point at them. CAPI then provisions new VMs with the new OS, joins them to the cluster, and deletes the old machines.
+
+### 1. Create new CloudStackMachineTemplates
+
+```bash
+# Export existing templates
+kubectl get cloudstackmachinetemplate -n capc-rke2-cluster-1 \
+  capc-rke2-cluster-1-control-plane -o yaml > /tmp/cp-template.yaml
+kubectl get cloudstackmachinetemplate -n capc-rke2-cluster-1 \
+  capc-rke2-cluster-1-md-0 -o yaml > /tmp/worker-template.yaml
+```
+
+Edit the copies: change `metadata.name` to a new name (e.g. append `-ubuntu26`) and update `spec.template.spec.template.name` to the new OS template (e.g. `ubuntu 26 server`). Remove `uid`, `resourceVersion`, `generation`, `creationTimestamp`, and `managedFields` from `metadata`.
+
+```bash
+# Apply the new templates
+kubectl apply -f /tmp/cp-template-ubuntu26.yaml
+kubectl apply -f /tmp/worker-template-ubuntu26.yaml
+```
+
+### 2. Switch references to the new templates
+
+```bash
+# Update control plane
+kubectl patch rke2controlplane capc-rke2-cluster-1-control-plane \
+  -n capc-rke2-cluster-1 --type='json' \
+  -p='[{"op": "replace", "path": "/spec/machineTemplate/spec/infrastructureRef/name", "value": "capc-rke2-cluster-1-control-plane-ubuntu26"}]'
+
+# Update workers
+kubectl patch machinedeployment capc-rke2-cluster-1-md-0 \
+  -n capc-rke2-cluster-1 --type='json' \
+  -p='[{"op": "replace", "path": "/spec/template/spec/infrastructureRef/name", "value": "capc-rke2-cluster-1-md-0-ubuntu26"}]'
+```
+
+### 3. Monitor the rolling upgrade
+
+```bash
+# Watch machines — new ones appear with the new OS, old ones transition to Deleting
+kubectl get machines -n capc-rke2-cluster-1 -w
+
+# Watch nodes
+KUBECONFIG=/tmp/capc-rke2-cluster-1-kubeconfig kubectl get nodes -w
+```
+
+**Expected phases:**
+
+| Phase | Meaning |
+|-------|---------|
+| `Provisioning` | New VM is being created in CloudStack with the new OS template |
+| `Running` | VM is booted and joined the cluster |
+| `Deleting` | Old VM is being drained and removed |
+
+Workers roll first (the `MachineDeployment` creates a new machine, waits for it to be Ready, then deletes the old one). The control plane rolls next — with 1 replica, CAPI creates the new CP, transfers etcd leadership, then deletes the old CP.
+
+### 4. Verify completion
+
+```bash
+# All nodes on new OS
+KUBECONFIG=/tmp/capc-rke2-cluster-1-kubeconfig kubectl get nodes -o wide
+
+# All machines Running and Up-to-date
+kubectl get machines -n capc-rke2-cluster-1
+
+# Cluster stable
+kubectl get cluster -n capc-rke2-cluster-1
+```
+
+### Troubleshooting: etcd leadership transfer stuck
+
+Same issue as RKE2 version upgrades — if the old control plane never deletes, the `rke2-control-plane-controller-manager` may have stale etcd client certificates. Restart it:
+
+```bash
+kubectl rollout restart deployment rke2-control-plane-controller-manager \
+  -n cattle-capi-system
+```
+
 ### Java apps crash with `NullPointerException` in `ProcessorMetrics` (JDK 17 + Ubuntu 26 cgroup v2)
 
 **Affected:** `demo-app/manifests/balance-reader.yaml`, `ledger-writer.yaml`, `transaction-history.yaml` (bank-of-anthos Java services)
