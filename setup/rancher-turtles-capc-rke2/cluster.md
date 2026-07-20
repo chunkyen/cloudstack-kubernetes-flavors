@@ -433,7 +433,7 @@ The `provider-id` must be `cloudstack:///{{ ds.meta_data.instance_id }}` — no 
 
 **Cause:** The upstream CSI node DaemonSet mounts `/run/cloud-init/` to read instance metadata, but RKE2 nodes do **not** use cloud-init — RKE2 installs itself via tarball at bootstrap — so this directory does not exist.
 
-**Fix:** The ConfigMap (`20-ccm-csi-configmap.yaml`) and the standalone `cloudstack-csi-node-daemonset-rke2.yaml` both have this mount removed. If you are using your own upstream manifests, remove the `cloud-init-dir` volumeMount and volume:
+**Fix:** The ConfigMap (`20-ccm-csi-configmap.yaml`) has this mount removed in the `cloudstack-csi-node-daemonset-rke2.yaml` key. If you are using your own upstream manifests, remove the `cloud-init-dir` volumeMount and volume:
 
 ```yaml
 # Remove this from the CSI node DaemonSet container:
@@ -450,7 +450,7 @@ The `provider-id` must be `cloudstack:///{{ ds.meta_data.instance_id }}` — no 
 
 **Cause:** The upstream CSI controller Deployment sets `replicas: 2` with `podAntiAffinity` requiring deployment across different hosts. On a single-node RKE2 control plane, the second replica can never schedule.
 
-**Fix:** The ConfigMap (`20-ccm-csi-configmap.yaml`) and the standalone `cloudstack-csi-controller-deployment-rke2.yaml` both set `replicas: 1` and remove `podAntiAffinity`. If you are using your own upstream manifests, change to `replicas: 1` and remove the `podAntiAffinity` block.
+**Fix:** The ConfigMap (`20-ccm-csi-configmap.yaml`) sets `replicas: 1` and removes `podAntiAffinity` in the `cloudstack-csi-controller-deployment-rke2.yaml` key. If you are using your own upstream manifests, change to `replicas: 1` and remove the `podAntiAffinity` block.
 
 ## Switching CNI from Calico to Cilium
 
@@ -492,24 +492,18 @@ Expected: all Cilium pods Running and Cilium operator 1/1.
 
 ## Standalone Manifests (optional — without ClusterResourceSet)
 
-If you need to apply CCM + CSI manually (e.g. to an existing cluster not created with `cluster.md`), use the individual files in `manifests/`.
+If you need to apply CCM + CSI manually (e.g. to an existing cluster not created with `cluster.md`), extract the individual manifests from the ConfigMap (`20-ccm-csi-configmap.yaml`) or apply the upstream manifests directly.
 
 > **Secret required:** When deploying manually, you must also create the `cloudstack-secret` in `kube-system` on the workload cluster separately. The CRS ConfigMap embeds this secret automatically; standalone manifests do not.
 
 | File | Source | Notes |
 |---|---|---|
-| `cloudstack-ccm.yaml` | [upstream](https://github.com/apache/cloudstack-kubernetes-provider/blob/main/deployment.yaml) | Exact upstream — no changes |
-| `cloudstack-csi-rbac.yaml` | [upstream](https://github.com/cloudstack/cloudstack-csi-driver/tree/main/deploy/k8s) | Exact upstream |
-| `cloudstack-csi-snapshot-crds.yaml` | [upstream](https://github.com/cloudstack/cloudstack-csi-driver/tree/main/deploy/k8s) | Exact upstream |
-| `cloudstack-csi-volume-snapshot-class.yaml` | [upstream](https://github.com/cloudstack/cloudstack-csi-driver/tree/main/deploy/k8s) | Exact upstream |
-| `cloudstack-csi-driver.yaml` | [upstream](https://github.com/cloudstack/cloudstack-csi-driver/tree/main/deploy/k8s) | Exact upstream |
-| `cloudstack-csi-controller-deployment-rke2.yaml` | [upstream](https://github.com/cloudstack/cloudstack-csi-driver/tree/main/deploy/k8s) | **RKE2 patch:** `replicas: 1`, removed `podAntiAffinity`; `nodeAffinity` moved under `affinity` (not directly under `spec`) |
-| `cloudstack-csi-node-daemonset-rke2.yaml` | [upstream](https://github.com/cloudstack/cloudstack-csi-driver/tree/main/deploy/k8s) | **RKE2 patch:** removed `/run/cloud-init/` mount |
-| `cloudstack-csi-storageclass.yaml` | New | **Placeholder:** Set `csi.cloudstack.apache.org/disk-offering-id` to your CloudStack disk offering **UUID** (not the name). Marked with `⚠️ REPLACE THIS VALUE ⚠️` inline comment. Run `cmk list diskofferings | grep -E "id|name"` to find it. |
+| `cloudstack-csi-snapshot-crds.yaml` | [upstream](https://github.com/cloudstack/cloudstack-csi-driver/tree/main/deploy/k8s) | Exact upstream — apply separately after cluster is ready |
+| `cloudstack-csi-volume-snapshot-class.yaml` | [upstream](https://github.com/cloudstack/cloudstack-csi-driver/tree/main/deploy/k8s) | Exact upstream — apply separately after cluster is ready |
 
 > **Note on Volume Snapshots:** The ConfigMap intentionally **excludes** snapshot CRDs and the CloudStack VolumeSnapshotClass. RKE2 bundles its own `rke2-snapshot-controller-crd` Helm chart which installs `volumesnapshotclasses`, `volumesnapshotcontents`, and `volumesnapshots` CRDs automatically during bootstrap. Including duplicate CRDs in the ClusterResourceSet ConfigMap causes the RKE2 `helm-install` job to fail with an "invalid ownership metadata" error because Helm cannot adopt pre-existing CRDs that lack Helm labels/annotations. The CloudStack VolumeSnapshotClass and any custom VolumeSnapshotClasses should be created separately after the cluster is ready (e.g., `kubectl apply -f cloudstack-csi-volume-snapshot-class.yaml` once the snapshot CRDs exist).
 
-The exact RKE2 changes are documented as inline YAML comments in both `-rke2` files. The StorageClass file contains a `REPLACE_WITH_YOUR_DISK_OFFERING_UUID` placeholder — run `cmk list diskofferings | grep -E "id|name"` to find the correct UUID for your CloudStack zone.
+The StorageClass is defined in the ConfigMap with a `REPLACE_WITH_YOUR_DISK_OFFERING_UUID` placeholder — run `cmk list diskofferings | grep -E "id|name"` to find the correct UUID for your CloudStack zone.
 
 ## Air-Gapped / Offline Deployment
 
