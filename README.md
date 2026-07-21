@@ -100,10 +100,9 @@ Two bootstrap providers are supported:
 |---|---|---|
 | **Bootstrap** | `kubeadm` | `rke2` |
 | **Control plane** | `kubeadm` | `rke2` |
-| **CNI** | Manual install (Calico/Flannel/Cilium) | Built-in (Calico default; Canal, Cilium, Flannel, or none configurable) |
 | **Image** | CAPI-compatible image (kubelet + kubeadm pre-installed) | Standard OS template |
 
-See [architecture/rancher-turtles-capc.md#bootstrap-provider-choice-kubeadm-vs-rke2](architecture/rancher-turtles-capc.md#bootstrap-provider-choice-kubeadm-vs-rke2) for a detailed comparison of why to choose RKE2 over kubeadm.
+See [architecture/rancher-turtles-capc.md#bootstrap-provider-choice-kubeadm-vs-rke2](architecture/rancher-turtles-capc.md#bootstrap-provider-choice-kubeadm-vs-rke2) for a detailed comparison.
 
 **Phase 1 — Deploy Management Plane:**
 
@@ -121,7 +120,7 @@ See [architecture/rancher-turtles-capc.md#bootstrap-provider-choice-kubeadm-vs-r
 **RKE2-based:**
 - [Cluster creation](setup/rancher-turtles-capc-rke2/cluster.md) — RKE2 cluster provisioning with automatic CCM + CSI deployment
 - [Air-gapped / offline deployment](setup/rancher-turtles-capc-rke2/cluster.md#air-gapped--offline-deployment) — RKE2 tarball-based air-gap with internal HTTP server
-- [Template-driven manifests with ytt](setup/rancher-turtles-capc-rke2/ytt.md) — reusable cluster templates with air-gap conditionals (why ClusterClass isn't available)
+- [Template-driven manifests with ytt](setup/rancher-turtles-capc-rke2/ytt.md) — reusable cluster templates with air-gap conditionals
 - [Manifests](setup/rancher-turtles-capc-rke2/manifests/) — all YAML files including air-gap sample
 
 RKE2 differs from kubeadm in several key ways:
@@ -134,12 +133,6 @@ RKE2 differs from kubeadm in several key ways:
 | **Upgrade** | Image-based (new template per version) | Version bump in manifest (rolling update via tarball) |
 | **Control plane taint** | Manual `kubectl taint` or kubelet config | `register-with-taints` kubelet extraArg in manifest |
 | **etcd** | External (stacked or external) | Embedded (built-in) |
-
-> **ClusterClass note:** CAPI ClusterClass (topology-based clusters) is **not available** for CAPC because CAPC does not implement `CloudStackClusterTemplate`, the CRD required by ClusterClass's `infrastructure.templateRef`. Clusters must use explicit CRD references. See [Rancher+CAPC architecture](architecture/rancher-turtles-capc.md#clusterclass--not-available-for-capc) for details.
->
-> **CNI/CCM/CSI:** For Kubeadm-based CAPC clusters (no built-in CNI), use [ClusterResourceSet](https://turtles.docs.rancher.com/turtles/stable/en/user/applications.html) — the approach recommended by the Rancher Turtles documentation — to auto-install bootstrap applications. See [Full-stack onboarding](setup/rancher-turtles-capc/full-stack-onboarding.md).
->
-> For RKE2-based CAPC clusters, CNI is built-in (Calico). CCM + CSI are deployed automatically via ClusterResourceSet as part of the cluster provisioning in [`cluster.md`](setup/rancher-turtles-capc-rke2/cluster.md).
 
 #### 2.2.4 Talos Linux
 
@@ -192,8 +185,6 @@ Key capabilities:
 | **GitOps** | No | Yes (CAPI native) | Yes (Rancher Fleet) | Yes (Rancher Fleet) | Yes (talosctl + Git) | Yes (Omni + Git) |
 | **Multi-cluster** | Limited | Yes (CAPI native) | Yes (CAPI + Rancher Turtles) | Yes (CAPI + Rancher Turtles) | Manual | Yes (Omni native) |
 | **Upgrade Strategy** | Manual | Image-based rolling update | Image-based rolling update | RKE2 version bump (rolling) | Image-based atomic (talosctl upgrade) | Automatic rolling (Omni-managed) |
-| **CNI/CCM/CSI** | Baked into ISO | Manual or CRS | Manual or CRS | Built-in (Calico) + CRS for CCM/CSI | Manual install | Manual install (same) |
-| **ClusterClass** | N/A | Not supported (no CloudStackClusterTemplate) | Not supported (no CloudStackClusterTemplate) | Not supported (no CloudStackClusterTemplate) | N/A (manual config) | N/A (Omni manages configs) |
 | **Complexity** | Low | Medium | High | Medium | Medium | High (self-hosted) / Low (SaaS) |
 
 ## 4. Status
