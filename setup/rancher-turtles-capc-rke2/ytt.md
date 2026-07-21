@@ -34,6 +34,31 @@ Key concepts:
 - **Overlays** — surgical patches applied after templating (like Kustomize but more powerful)
 - **Validation** — schema checking at compile time
 
+## File layout
+
+The ytt templates live in a dedicated folder separate from the static manifests:
+
+```
+setup/rancher-turtles-capc-rke2/
+├── ytt-templates/              ← ytt source files (templates + values)
+│   ├── values.yaml
+│   ├── cluster-template.yaml
+│   ├── credentials-template.yaml
+│   ├── cloudstack-secret-template.yaml
+│   └── storageclass-template.yaml
+├── manifests/                  ← static / generated manifests
+│   ├── 10-minimal-cluster.yaml
+│   ├── 10-airgap-cluster.yaml
+│   ├── 20-ccm-csi-configmap.yaml
+│   ├── 21-clusterresourceset.yaml
+│   └── rke2-providers.yaml
+├── cluster.md
+└── ytt.md                      ← this file
+```
+
+The templates in `ytt-templates/` are the **source of truth** — edit those, then run ytt
+to produce the final manifests in your project folder.
+
 ## Example: ytt for CAPRKE2
 
 ### 1. Install ytt
@@ -49,21 +74,21 @@ chmod +x /usr/local/bin/ytt
 
 ### 2. Define data values
 
-**`values.yaml`** — the variables that change per cluster:
+**`ytt-templates/values.yaml`** — the variables that change per cluster:
 
 ```yaml
 #@data/values
 ---
-# Cluster identity
+#! Cluster identity
 cluster_name: capc-rke2-cluster-1
 namespace: capc-rke2-cluster-1
 
-# RKE2
+#! RKE2
 rke2_version: v1.36.2+rke2r1
 control_plane_ip: 192.168.200.61
-worker_count: 1
+worker_count: 2
 
-# CloudStack
+#! CloudStack
 zone_name: cyz1
 network_name: capc-rke2-cluster-1-net
 network_offering: DefaultNetworkOfferingforKubernetesService
@@ -72,19 +97,23 @@ worker_offering: "kube worker1"
 ssh_key: cylabnb-k1
 template_name: "ubuntu 24.04"
 
-# Air-gap (optional — set to "" to skip)
+#! Air-gap (optional — set to "" to skip)
 artifact_server: ""
 
-# CloudStack API credentials (used by CCM and CSI on the workload cluster)
+#! CloudStack API credentials (used by CCM and CSI on the workload cluster)
 cloudstack_api_url: http://YOUR_CLOUDSTACK_API_URL:8080/client/api
 cloudstack_api_key: YOUR_API_KEY
 cloudstack_secret_key: YOUR_SECRET_KEY
 cloudstack_verify_ssl: "false"
+
+#! Disk offering UUID for CSI StorageClass
+#! Find with: cmk list diskofferings | grep -E "id|name"
+disk_offering_id: REPLACE_WITH_YOUR_DISK_OFFERING_UUID
 ```
 
 ### 3. Write the templates
 
-The repo includes three ytt templates in `manifests/`:
+The repo includes four ytt templates in `ytt-templates/`:
 
 | Template | Generates | Purpose |
 |----------|-----------|---------|
@@ -295,18 +324,26 @@ allowVolumeExpansion: true
 
 ### 4. Generate the final manifests
 
+Create a project folder for your cluster and run ytt from there:
+
 ```bash
-# Cluster resources
-ytt -f cluster-template.yaml -f values.yaml > 10-cluster.yaml
+mkdir -p ~/projects/capc-rke2-cluster-1
+cd ~/projects/capc-rke2-cluster-1
 
-# Management cluster credentials
-ytt -f credentials-template.yaml -f values.yaml > 00-cloudstack-credentials.yaml
+# Copy the templates and values
+cp -r <repo>/setup/rancher-turtles-capc-rke2/ytt-templates/ .
+cp <repo>/setup/rancher-turtles-capc-rke2/manifests/20-ccm-csi-configmap.yaml manifests/
+cp <repo>/setup/rancher-turtles-capc-rke2/manifests/21-clusterresourceset.yaml manifests/
+cp <repo>/setup/rancher-turtles-capc-rke2/manifests/rke2-providers.yaml manifests/
 
-# Workload cluster secret (for CCM/CSI)
-ytt -f cloudstack-secret-template.yaml -f values.yaml > 01-workload-secret.yaml
+# Edit values.yaml with your cluster parameters
+vim ytt-templates/values.yaml
 
-# CSI StorageClass
-ytt -f storageclass-template.yaml -f values.yaml > 02-storageclass.yaml
+# Generate all manifests
+ytt -f ytt-templates/cluster-template.yaml -f ytt-templates/values.yaml > manifests/10-cluster.yaml
+ytt -f ytt-templates/credentials-template.yaml -f ytt-templates/values.yaml > manifests/00-cloudstack-credentials.yaml
+ytt -f ytt-templates/cloudstack-secret-template.yaml -f ytt-templates/values.yaml > manifests/01-workload-secret.yaml
+ytt -f ytt-templates/storageclass-template.yaml -f ytt-templates/values.yaml > manifests/02-storageclass.yaml
 ```
 
 ### 5. Deploy
@@ -314,37 +351,43 @@ ytt -f storageclass-template.yaml -f values.yaml > 02-storageclass.yaml
 ```bash
 # Create namespace and credentials
 kubectl create namespace capc-rke2-cluster-1
-kubectl apply -f 00-cloudstack-credentials.yaml
+kubectl apply -f manifests/00-cloudstack-credentials.yaml
 
 # Deploy cluster + CCM/CSI ConfigMap + CRS
-kubectl apply -f 10-cluster.yaml \
-  -f 20-ccm-csi-configmap.yaml \
-  -f 21-clusterresourceset.yaml
+kubectl apply -f manifests/10-cluster.yaml \
+  -f manifests/20-ccm-csi-configmap.yaml \
+  -f manifests/21-clusterresourceset.yaml
 
 # After the cluster is up, apply the workload secret and storage class
 kubectl get secret capc-rke2-cluster-1-kubeconfig -n capc-rke2-cluster-1 \
   -o jsonpath='{.data.value}' | base64 -d > kubeconfig
-KUBECONFIG=kubeconfig kubectl apply -f 01-workload-secret.yaml
-KUBECONFIG=kubeconfig kubectl apply -f 02-storageclass.yaml
+KUBECONFIG=kubeconfig kubectl apply -f manifests/01-workload-secret.yaml
+KUBECONFIG=kubeconfig kubectl apply -f manifests/02-storageclass.yaml
 ```
 
 ### 6. Create a second cluster
 
-Just copy `values.yaml`, edit the variables, and re-run:
+Just copy the project folder, edit `ytt-templates/values.yaml`, and re-run:
 
 ```bash
-cp values.yaml values-cluster2.yaml
-# Edit values-cluster2.yaml: change cluster_name, control_plane_ip, etc.
+cp -r ~/projects/capc-rke2-cluster-1 ~/projects/capc-rke2-cluster-2
+cd ~/projects/capc-rke2-cluster-2
 
-ytt -f cluster-template.yaml -f values-cluster2.yaml > 10-cluster2.yaml
-ytt -f credentials-template.yaml -f values-cluster2.yaml > 00-creds2.yaml
-ytt -f cloudstack-secret-template.yaml -f values-cluster2.yaml > 01-workload-secret2.yaml
+# Edit values.yaml: change cluster_name, control_plane_ip, network_name, etc.
+vim ytt-templates/values.yaml
 
+# Regenerate
+ytt -f ytt-templates/cluster-template.yaml -f ytt-templates/values.yaml > manifests/10-cluster.yaml
+ytt -f ytt-templates/credentials-template.yaml -f ytt-templates/values.yaml > manifests/00-cloudstack-credentials.yaml
+ytt -f ytt-templates/cloudstack-secret-template.yaml -f ytt-templates/values.yaml > manifests/01-workload-secret.yaml
+ytt -f ytt-templates/storageclass-template.yaml -f ytt-templates/values.yaml > manifests/02-storageclass.yaml
+
+# Deploy
 kubectl create namespace capc-rke2-cluster-2
-kubectl apply -f 00-creds2.yaml
-kubectl apply -f 10-cluster2.yaml \
-  -f 20-ccm-csi-configmap.yaml \
-  -f 21-clusterresourceset.yaml
+kubectl apply -f manifests/00-cloudstack-credentials.yaml
+kubectl apply -f manifests/10-cluster.yaml \
+  -f manifests/20-ccm-csi-configmap.yaml \
+  -f manifests/21-clusterresourceset.yaml
 ```
 
 ## Why ClusterClass is preferred (and why it doesn't work here)
