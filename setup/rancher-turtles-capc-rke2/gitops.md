@@ -686,6 +686,75 @@ kubectl logs -n cattle-capi-system deployment/capc-controller-manager --tail=50 
 
 ### Cluster Stuck in Deleting
 
+**Symptom:** Cluster stuck in `Deleting` phase. CAPC controller logs show:
+
+```
+"CloudStackClusterID is not set Requeuing." controller="cks-machine-controller"
+```
+
+**Root cause:** Fleet deletes all resources simultaneously, including the `CloudStackCluster`. The CKS controller (CloudStack Kubernetes Service) inside CAPC tries to reconcile machine deletion but can't find the `CloudStackClusterID` because the parent `CloudStackCluster` is already gone. The CKS finalizer (`cksMachine.infrastructure.cluster.x-k8s.io`) blocks the `cloudstackmachine` finalizer from running, so the VM never gets destroyed.
+
+This only happens with GitOps deletion — manual `kubectl delete cluster` cascades deletion through CAPI and the `CloudStackCluster` stays alive until all machines are cleaned up.
+
+**Workaround 1 — Set `syncWithACS: false` (recommended):**
+
+The `syncWithACS` field on `CloudStackCluster` controls whether CAPC registers the cluster with CloudStack's CKS service. When `false`, the CKS controller doesn't add its finalizer to machines, avoiding the stuck deletion entirely. The cluster still works — CCM, CSI, and all Kubernetes functionality are unaffected. The cluster just won't appear in CloudStack UI.
+
+```yaml
+# In 10-cluster.yaml, CloudStackCluster spec:
+spec:
+  syncWithACS: false   # Prevents CKS finalizer from blocking deletion
+```
+
+**Workaround 2 — Remove finalizers manually:**
+
+If a machine is already stuck, remove the finalizers to unblock deletion:
+
+```bash
+# Remove finalizers from CloudStackMachine
+kubectl patch cloudstackmachine <machine-name> -n <namespace> \
+  --type='json' -p='[{"op":"remove","path":"/metadata/finalizers"}]'
+
+# Remove finalizer from Machine
+kubectl patch machine <machine-name> -n <namespace> \
+  --type='json' -p='[{"op":"remove","path":"/metadata/finalizers"}]'
+
+# If CloudStack VM is still running, destroy it manually
+ssh <cloudstack-management-server> "cmk destroyVirtualMachine id=<vm-id>"
+
+# If cluster-level resources are stuck, remove their finalizers too
+kubectl patch cloudstackcluster <name> -n <namespace> \
+  --type='json' -p='[{"op":"remove","path":"/metadata/finalizers"}]'
+kubectl patch cloudstackfailuredomain <name> -n <namespace> \
+  --type='json' -p='[{"op":"remove","path":"/metadata/finalizers"}]'
+kubectl patch cloudstackisolatednetwork <name> -n <namespace> \
+  --type='json' -p='[{"op":"remove","path":"/metadata/finalizers"}]'
+kubectl patch cluster <name> -n <namespace> \
+  --type='json' -p='[{"op":"remove","path":"/metadata/finalizers"}]'
+```
+
+**Workaround 3 — Two-phase deletion (prevents the issue):**
+
+Delete in phases to keep `cloudstack-credentials` available during VM cleanup:
+
+```bash
+# Phase 1: Remove cluster manifests only, keep 00-namespace-credentials.yaml
+git rm 10-cluster.yaml 20-ccm-csi-configmap.yaml 21-clusterresourceset.yaml
+git commit -m "Delete cluster (keep credentials for CAPC cleanup)"
+git push origin main
+
+# Wait for all machines to be deleted
+kubectl get machines -n <namespace>
+# Should show: No resources found
+
+# Phase 2: Remove credentials
+git rm 00-namespace-credentials.yaml
+git commit -m "Remove credentials, full cleanup complete"
+git push origin main
+```
+
+**Diagnosis commands:**
+
 ```bash
 # Check if CKS controller is blocking
 kubectl logs -n cattle-capi-system deployment/capc-controller-manager --tail=20 | grep "CloudStackClusterID is not set"
@@ -693,5 +762,6 @@ kubectl logs -n cattle-capi-system deployment/capc-controller-manager --tail=20 
 # Check finalizers on stuck machines
 kubectl get cloudstackmachine -n <namespace> -o jsonpath='{range .items[*]}{.metadata.name}{" "}{.metadata.finalizers}{"\n"}{end}'
 
-# See deletion section above for workaround
+# Check if VM is already destroyed in CloudStack
+ssh <cloudstack-management-server> "cmk list virtualmachines keyword=<cluster-name> filter=name,state"
 ```
