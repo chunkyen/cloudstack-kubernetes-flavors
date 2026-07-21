@@ -696,15 +696,17 @@ kubectl logs -n cattle-capi-system deployment/capc-controller-manager --tail=50 
 
 This only happens with GitOps deletion — manual `kubectl delete cluster` cascades deletion through CAPI and the `CloudStackCluster` stays alive until all machines are cleaned up.
 
-**Workaround 1 — Set `syncWithACS: false` (recommended):**
+**Workaround 1 — Set `syncWithACS: false` (prevents CKS finalizer):**
 
-The `syncWithACS` field on `CloudStackCluster` controls whether CAPC registers the cluster with CloudStack's CKS service. When `false`, the CKS controller doesn't add its finalizer to machines, avoiding the stuck deletion entirely. The cluster still works — CCM, CSI, and all Kubernetes functionality are unaffected. The cluster just won't appear in CloudStack UI.
+The `syncWithACS` field on `CloudStackCluster` controls whether CAPC registers the cluster with CloudStack's CKS service. When `false`, the CKS controller doesn't add its finalizer to machines, eliminating the "CloudStackClusterID is not set" stuck loop. The cluster still works — CCM, CSI, and all Kubernetes functionality are unaffected. The cluster just won't appear in CloudStack UI.
 
 ```yaml
 # In 10-cluster.yaml, CloudStackCluster spec:
 spec:
   syncWithACS: false   # Prevents CKS finalizer from blocking deletion
 ```
+
+> **Note:** `syncWithACS: false` eliminates the CKS finalizer issue but **does not** solve the credentials problem — Fleet still deletes `cloudstack-credentials` at the same time as everything else, preventing CAPC from destroying VMs. Use this **together with** the two-phase deletion below for fully clean GitOps deletion.
 
 **Workaround 2 — Remove finalizers manually:**
 
