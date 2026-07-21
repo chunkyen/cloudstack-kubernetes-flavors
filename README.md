@@ -173,11 +173,6 @@ These two components are shared across all Kubernetes flavors on CloudStack. The
 - [CloudStack Kubernetes Provider (CCM)](setup/cloudstack-kubernetes-provider.md)
 - [CloudStack CSI Driver](setup/cloudstack-csi-driver.md)
 
-### 2.3 Analysis
-
-- Feature comparison matrix and analysis (not yet created)
-- External references and documentation links (not yet created)
-
 ## 3. Quick Comparison
 
 | **Feature** | CKS | CAPC | Rancher+CAPC | Rancher+CAPC+RKE2 | Talos (standalone) | Talos (Omni-managed) |
