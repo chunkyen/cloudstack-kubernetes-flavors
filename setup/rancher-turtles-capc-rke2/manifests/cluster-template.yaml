@@ -1,0 +1,143 @@
+#@ load("@ytt:data", "data")
+---
+apiVersion: cluster.x-k8s.io/v1beta1
+kind: Cluster
+metadata:
+  name: #@ data.values.cluster_name
+  namespace: #@ data.values.namespace
+  labels:
+    cluster-api.cattle.io/rancher-auto-import: "true"
+    capc-rke2-ccm-csi: "true"
+spec:
+  clusterNetwork:
+    pods:
+      cidrBlocks:
+        - "10.168.0.0/16"
+    serviceDomain: cluster.local
+  controlPlaneRef:
+    apiVersion: controlplane.cluster.x-k8s.io/v1beta2
+    kind: RKE2ControlPlane
+    name: #@ data.values.cluster_name + "-control-plane"
+  infrastructureRef:
+    apiVersion: infrastructure.cluster.x-k8s.io/v1beta3
+    kind: CloudStackCluster
+    name: #@ data.values.cluster_name
+---
+apiVersion: infrastructure.cluster.x-k8s.io/v1beta3
+kind: CloudStackCluster
+metadata:
+  name: #@ data.values.cluster_name
+  namespace: #@ data.values.namespace
+spec:
+  controlPlaneEndpoint:
+    host: #@ data.values.control_plane_ip
+    port: 6443
+  failureDomains:
+  - acsEndpoint:
+      name: cloudstack-credentials
+      namespace: #@ data.values.namespace
+    name: #@ data.values.zone_name
+    zone:
+      name: #@ data.values.zone_name
+      network:
+        name: #@ data.values.network_name
+        offering: #@ data.values.network_offering
+  syncWithACS: true
+---
+apiVersion: controlplane.cluster.x-k8s.io/v1beta2
+kind: RKE2ControlPlane
+metadata:
+  name: #@ data.values.cluster_name + "-control-plane"
+  namespace: #@ data.values.namespace
+spec:
+  replicas: 1
+  version: #@ data.values.rke2_version
+  agentConfig:
+    kubelet:
+      extraArgs:
+        - provider-id=cloudstack:///{{ ds.meta_data.instance_id }}
+        - register-with-taints=node-role.kubernetes.io/control-plane=:NoSchedule
+    nodeName: '{{ ds.meta_data.local_hostname }}'
+  serverConfig:
+    cni: calico
+  registrationMethod: internal-first
+  rolloutStrategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+  machineTemplate:
+    spec:
+      infrastructureRef:
+        apiGroup: infrastructure.cluster.x-k8s.io
+        kind: CloudStackMachineTemplate
+        name: #@ data.values.cluster_name + "-control-plane"
+---
+apiVersion: infrastructure.cluster.x-k8s.io/v1beta3
+kind: CloudStackMachineTemplate
+metadata:
+  name: #@ data.values.cluster_name + "-control-plane"
+  namespace: #@ data.values.namespace
+spec:
+  template:
+    spec:
+      offering:
+        name: #@ data.values.control_plane_offering
+      sshKey: #@ data.values.ssh_key
+      template:
+        name: #@ data.values.template_name
+      details:
+        guest.cpu.mode: host-passthrough
+---
+apiVersion: cluster.x-k8s.io/v1beta1
+kind: MachineDeployment
+metadata:
+  name: #@ data.values.cluster_name + "-md-0"
+  namespace: #@ data.values.namespace
+spec:
+  clusterName: #@ data.values.cluster_name
+  replicas: #@ data.values.worker_count
+  selector:
+    matchLabels: null
+  template:
+    spec:
+      bootstrap:
+        configRef:
+          apiVersion: bootstrap.cluster.x-k8s.io/v1beta2
+          kind: RKE2ConfigTemplate
+          name: #@ data.values.cluster_name + "-md-0"
+      clusterName: #@ data.values.cluster_name
+      infrastructureRef:
+        apiVersion: infrastructure.cluster.x-k8s.io/v1beta3
+        kind: CloudStackMachineTemplate
+        name: #@ data.values.cluster_name + "-md-0"
+      version: #@ data.values.rke2_version
+---
+apiVersion: infrastructure.cluster.x-k8s.io/v1beta3
+kind: CloudStackMachineTemplate
+metadata:
+  name: #@ data.values.cluster_name + "-md-0"
+  namespace: #@ data.values.namespace
+spec:
+  template:
+    spec:
+      offering:
+        name: #@ data.values.worker_offering
+      sshKey: #@ data.values.ssh_key
+      template:
+        name: #@ data.values.template_name
+      details:
+        guest.cpu.mode: host-passthrough
+---
+apiVersion: bootstrap.cluster.x-k8s.io/v1beta2
+kind: RKE2ConfigTemplate
+metadata:
+  name: #@ data.values.cluster_name + "-md-0"
+  namespace: #@ data.values.namespace
+spec:
+  template:
+    spec:
+      agentConfig:
+        kubelet:
+          extraArgs:
+            - provider-id=cloudstack:///{{ ds.meta_data.instance_id }}
+        nodeName: '{{ ds.meta_data.local_hostname }}'

@@ -1,0 +1,28 @@
+#@data/values
+---
+# Cluster identity
+cluster_name: capc-rke2-cluster-1
+namespace: capc-rke2-cluster-1
+
+# RKE2
+rke2_version: v1.36.2+rke2r1
+control_plane_ip: 192.168.200.61
+worker_count: 2
+
+# CloudStack
+zone_name: cyz1
+network_name: capc-rke2-cluster-1-net
+network_offering: DefaultNetworkOfferingforKubernetesService
+control_plane_offering: "kube control"
+worker_offering: "kube worker1"
+ssh_key: cylabnb-k1
+template_name: "ubuntu 24.04"
+
+# Air-gap (optional — set to "" to skip)
+artifact_server: ""
+
+# CloudStack API credentials (used by CCM and CSI on the workload cluster)
+cloudstack_api_url: http://YOUR_CLOUDSTACK_API_URL:8080/client/api
+cloudstack_api_key: YOUR_API_KEY
+cloudstack_secret_key: YOUR_SECRET_KEY
+cloudstack_verify_ssl: "false"

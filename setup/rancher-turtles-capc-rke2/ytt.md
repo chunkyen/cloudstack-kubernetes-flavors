@@ -73,16 +73,29 @@ ssh_key: cylabnb-k1
 template_name: "ubuntu 24.04"
 
 # Air-gap (optional — set to "" to skip)
-artifact_server: "http://192.168.200.1:8080"
+artifact_server: ""
+
+# CloudStack API credentials (used by CCM and CSI on the workload cluster)
+cloudstack_api_url: http://YOUR_CLOUDSTACK_API_URL:8080/client/api
+cloudstack_api_key: YOUR_API_KEY
+cloudstack_secret_key: YOUR_SECRET_KEY
+cloudstack_verify_ssl: "false"
 ```
 
-### 3. Write the template
+### 3. Write the templates
 
-**`cluster-template.yaml`** — the reusable cluster definition:
+The repo includes three ytt templates in `manifests/`:
+
+| Template | Generates | Purpose |
+|----------|-----------|---------|
+| `cluster-template.yaml` | `10-cluster.yaml` | Cluster, CloudStackCluster, RKE2ControlPlane, MachineDeployment |
+| `credentials-template.yaml` | `00-cloudstack-credentials.yaml` | Management cluster secret for CAPC |
+| `cloudstack-secret-template.yaml` | `01-workload-secret.yaml` | Workload cluster secret for CCM/CSI |
+
+**`cluster-template.yaml`** — the reusable cluster definition (7 YAML documents):
 
 ```yaml
 #@ load("@ytt:data", "data")
-#@ load("@ytt:assert", "assert")
 ---
 apiVersion: cluster.x-k8s.io/v1beta1
 kind: Cluster
@@ -137,9 +150,6 @@ spec:
   replicas: 1
   version: #@ data.values.rke2_version
   agentConfig:
-    #@ if data.values.artifact_server != "":
-    airGapped: true
-    #@ end
     kubelet:
       extraArgs:
         - provider-id=cloudstack:///{{ ds.meta_data.instance_id }}
@@ -152,15 +162,6 @@ spec:
     type: RollingUpdate
     rollingUpdate:
       maxSurge: 1
-  #@ if data.values.artifact_server != "":
-  preRKE2Commands:
-    - sleep 30
-    - mkdir -p /opt/rke2-artifacts
-    - curl -sL -o /opt/rke2-artifacts/rke2.linux-amd64.tar.gz #@ data.values.artifact_server + "/rke2.linux-amd64.tar.gz"
-    - curl -sL -o /opt/rke2-artifacts/rke2-images.linux-amd64.tar.zst #@ data.values.artifact_server + "/rke2-images.linux-amd64.tar.zst"
-    - curl -sL -o /opt/rke2-artifacts/sha256sum-amd64.txt #@ data.values.artifact_server + "/sha256sum-amd64.txt"
-    - curl -sL -o /opt/install.sh #@ data.values.artifact_server + "/install.sh"
-  #@ end
   machineTemplate:
     spec:
       infrastructureRef:
@@ -232,17 +233,6 @@ metadata:
 spec:
   template:
     spec:
-      #@ if data.values.artifact_server != "":
-      preRKE2Commands:
-        - sleep 30
-        - mkdir -p /opt/rke2-artifacts
-        - curl -sL -o /opt/rke2-artifacts/rke2.linux-amd64.tar.gz #@ data.values.artifact_server + "/rke2.linux-amd64.tar.gz"
-        - curl -sL -o /opt/rke2-artifacts/rke2-images.linux-amd64.tar.zst #@ data.values.artifact_server + "/rke2-images.linux-amd64.tar.zst"
-        - curl -sL -o /opt/rke2-artifacts/sha256sum-amd64.txt #@ data.values.artifact_server + "/sha256sum-amd64.txt"
-        - curl -sL -o /opt/install.sh #@ data.values.artifact_server + "/install.sh"
-      agentConfig:
-        airGapped: true
-      #@ end
       agentConfig:
         kubelet:
           extraArgs:
@@ -250,21 +240,87 @@ spec:
         nodeName: '{{ ds.meta_data.local_hostname }}'
 ```
 
-### 4. Generate the final manifest
+**`credentials-template.yaml`** — management cluster secret for CAPC:
 
-```bash
-ytt -f cluster-template.yaml -f values.yaml > 10-cluster.yaml
+```yaml
+#@ load("@ytt:data", "data")
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: cloudstack-credentials
+  namespace: #@ data.values.namespace
+type: Opaque
+stringData:
+  api-url: #@ data.values.cloudstack_api_url
+  api-key: #@ data.values.cloudstack_api_key
+  secret-key: #@ data.values.cloudstack_secret_key
+  verify-ssl: #@ data.values.cloudstack_verify_ssl
 ```
 
-### 5. Create a second cluster
+**`cloudstack-secret-template.yaml`** — workload cluster secret for CCM/CSI:
+
+```yaml
+#@ load("@ytt:data", "data")
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: cloudstack-secret
+  namespace: kube-system
+type: Opaque
+stringData:
+  cloud-config: #@ "[Global]\napi-url = " + data.values.cloudstack_api_url + "\napi-key = " + data.values.cloudstack_api_key + "\nsecret-key = " + data.values.cloudstack_secret_key + "\nssl-no-verify = " + data.values.cloudstack_verify_ssl + "\n"
+```
+
+### 4. Generate the final manifests
+
+```bash
+# Cluster resources
+ytt -f cluster-template.yaml -f values.yaml > 10-cluster.yaml
+
+# Management cluster credentials
+ytt -f credentials-template.yaml -f values.yaml > 00-cloudstack-credentials.yaml
+
+# Workload cluster secret (for CCM/CSI)
+ytt -f cloudstack-secret-template.yaml -f values.yaml > 01-workload-secret.yaml
+```
+
+### 5. Deploy
+
+```bash
+# Create namespace and credentials
+kubectl create namespace capc-rke2-cluster-1
+kubectl apply -f 00-cloudstack-credentials.yaml
+
+# Deploy cluster + CCM/CSI ConfigMap + CRS
+kubectl apply -f 10-cluster.yaml \
+  -f 20-ccm-csi-configmap.yaml \
+  -f 21-clusterresourceset.yaml
+
+# After the cluster is up, apply the workload secret
+kubectl get secret capc-rke2-cluster-1-kubeconfig -n capc-rke2-cluster-1 \
+  -o jsonpath='{.data.value}' | base64 -d > kubeconfig
+KUBECONFIG=kubeconfig kubectl apply -f 01-workload-secret.yaml
+```
+
+### 6. Create a second cluster
 
 Just copy `values.yaml`, edit the variables, and re-run:
 
 ```bash
 cp values.yaml values-cluster2.yaml
 # Edit values-cluster2.yaml: change cluster_name, control_plane_ip, etc.
+
 ytt -f cluster-template.yaml -f values-cluster2.yaml > 10-cluster2.yaml
-kubectl apply -f 10-cluster2.yaml
+ytt -f credentials-template.yaml -f values-cluster2.yaml > 00-creds2.yaml
+ytt -f cloudstack-secret-template.yaml -f values-cluster2.yaml > 01-workload-secret2.yaml
+
+kubectl create namespace capc-rke2-cluster-2
+kubectl apply -f 00-creds2.yaml
+kubectl apply -f 10-cluster2.yaml \
+  -f 20-ccm-csi-configmap.yaml \
+  -f 21-clusterresourceset.yaml
 ```
 
 ## Why ClusterClass is preferred (and why it doesn't work here)
