@@ -642,6 +642,16 @@ To create multiple clusters from the same manifest set, change these values:
 | ConfigMap name | `capc-rke2-cluster-2-post-deploy` |
 | CRS name | `capc-rke2-cluster-2-ccm-csi` |
 
+### 6.3 Templating with ytt or Kustomize
+
+For managing multiple clusters without copy-paste, the repo already includes both ytt templates and Kustomize overlays that can be adapted for the GitOps workflow. See [`ytt.md`](ytt.md) and [`../rancher-turtles-capc/kustomize.md`](../rancher-turtles-capc/kustomize.md) for full documentation.
+
+| Approach | How it works with Fleet | Pros | Cons |
+|----------|------------------------|------|------|
+| **ytt** | Pre-render locally → push rendered YAML to Gitea | Powerful templating, conditionals (e.g., air-gap toggle), data values | Extra step (ytt render before push) |
+| **Kustomize** | Fleet renders `kustomization.yaml` natively — no pre-rendering needed | No pre-rendering, simple YAML patches | Limited to patch overlays, no logic |
+| **Helm** | Fleet supports HelmCharts natively | Versioning, sharing, ecosystem | More complex to set up |
+
 ## 7. Troubleshooting
 
 ### Fleet Not Syncing
