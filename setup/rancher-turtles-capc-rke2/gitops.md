@@ -165,19 +165,31 @@ kubectl create secret generic tls-ca-additional -n cattle-fleet-system \
   --from-literal=ca-additional.pem=""
 ```
 
-### 2.2 Create the GitRepo
+### 2.2 Create the GitRepo with Secret-Based Authentication
+
+**Do NOT embed credentials in the repo URL** — the token would be visible in `kubectl get gitrepo -o yaml` and in Fleet controller logs. Instead, use a Kubernetes Secret:
 
 ```yaml
-# fleet-gitea.yaml
+# gitea-credentials.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: gitea-credentials
+  namespace: fleet-local
+type: kubernetes.io/basic-auth
+stringData:
+  username: admin
+  password: <gitea-token>
+---
 apiVersion: fleet.cattle.io/v1alpha1
 kind: GitRepo
 metadata:
   name: capc-rke2-git
   namespace: fleet-local
 spec:
-  # Embed API token in URL for authentication
-  repo: http://<user>:<token>@<gitea-url>/<user>/capc-rke2-git.git
+  repo: http://<gitea-url>/<user>/capc-rke2-git.git
   branch: main
+  clientSecretName: gitea-credentials
   paths:
     - .
   targets:
@@ -186,14 +198,16 @@ spec:
           name: local
 ```
 
+```bash
+kubectl apply -f gitea-credentials.yaml
+```
+
+> **Security:** The `clientSecretName` field references a Kubernetes Secret of type `kubernetes.io/basic-auth`. The Gitea token is stored only in the Secret (base64-encoded, not encrypted at rest unless etcd encryption is enabled). The GitRepo `repo` field contains only the URL without credentials.
+>
 > **Important:** The `clusterSelector` must match the **local (management) cluster** labels.
 > Check with: `kubectl get clusters.fleet.cattle.io -A -o jsonpath='{range .items[*]}{.metadata.name}{" "}{.metadata.labels}{"\n"}{end}'`
 >
 > The local cluster has label `name: local` — use that. Do **not** use `provider.cattle.io/name: local` (that label doesn't exist on the local cluster).
-
-```bash
-kubectl apply -f fleet-gitea.yaml
-```
 
 ### 2.3 Verify Fleet Sync
 
