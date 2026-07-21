@@ -168,6 +168,8 @@ Key capabilities:
 
 #### 2.2.5 Cross-Cutting Components
 
+These two components are shared across all Kubernetes flavors on CloudStack. The CCM bridges CloudStack networking (load balancers, firewall rules, node metadata) into Kubernetes, while the CSI driver maps CloudStack disk offerings to persistent storage. Both must be deployed on every cluster — CKS handles them automatically, all other flavors require manual or CRS-based deployment.
+
 - [CloudStack Kubernetes Provider (CCM)](setup/cloudstack-kubernetes-provider.md)
 - [CloudStack CSI Driver](setup/cloudstack-csi-driver.md)
 
