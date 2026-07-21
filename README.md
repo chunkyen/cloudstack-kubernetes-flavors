@@ -37,6 +37,25 @@ These components are required or recommended for **every flavor**:
 
 #### CKS (CloudStack Kubernetes Service)
 
+CKS is Apache CloudStack's native Kubernetes integration — a fully managed service that provisions, scales, and manages Kubernetes clusters directly from the CloudStack UI and API. It uses kubeadm under the hood with pre-packaged ISOs containing all Kubernetes binaries and container images.
+
+| Feature | Details |
+|---------|---------|
+| **Management** | Native CloudStack UI/API — no external management cluster needed |
+| **Bootstrap** | kubeadm with pre-packaged ISOs (Calico CNI, Docker/containerd, Dashboard) |
+| **Node OS** | User-defined via CKS-marked templates (Ubuntu, Rocky, custom) |
+| **Control Plane HA** | Multi-control-node clusters with external LB (from 4.16+) |
+| **Flexible node types** | Separate templates/offerings for control, worker, and dedicated etcd nodes (from 4.21) |
+| **CNI** | Calico (default); Cilium via custom ISO |
+| **CCM/CSI** | Auto-deployed (baked into the CKS provisioning flow) |
+| **Upgrade** | Manual via UI or API (`upgradeKubernetesCluster`) |
+| **Scaling** | UI/API buttons (`scaleKubernetesCluster`) |
+| **GitOps** | Not supported — no declarative YAML model |
+| **Offline** | Partial — ISOs bundle images, but kubeadm init requires internet |
+| **Complexity** | Low — simplest path to a K8s cluster on CloudStack |
+
+Guides:
+
 - [Main deployment](setup/cks/cks.md)
 - [Custom ISO build](setup/cks/cks-custom-iso.md)
 - [Custom VM template](setup/cks/cks-custom-template.md)
@@ -45,6 +64,25 @@ These components are required or recommended for **every flavor**:
 - [Improvements & notes](setup/cks/cks-improvements.md)
 
 #### CAPC (Cluster API Provider for CloudStack)
+
+CAPC is the official Kubernetes SIGs infrastructure provider that brings declarative, Kubernetes-native cluster lifecycle management to CloudStack. It uses Cluster API (CAPI) controllers and CRDs to provision, scale, upgrade, and delete Kubernetes clusters — all managed from a separate management cluster via `kubectl`.
+
+| Feature | Details |
+|---------|---------|
+| **Management** | External Kubernetes cluster running CAPI controllers — `clusterctl` + `kubectl` |
+| **Bootstrap** | kubeadm (requires CAPI-compatible image with kubelet + kubeadm pre-installed) |
+| **Node OS** | User-defined — any cloud-init-compatible image with K8s prereqs (Ubuntu, Rocky, custom) |
+| **CNI** | Manual install post-deployment (Calico, Cilium, Flannel) |
+| **CCM/CSI** | Manual install post-deployment (not auto-deployed) |
+| **Upgrade** | Image-based rolling update — new template per K8s version |
+| **Scaling** | Declarative — `replicas` field on `MachineDeployment` |
+| **GitOps** | Yes — all resources are declarative YAML, version-controllable |
+| **Multi-cluster** | Native — CAPI manages many clusters from one management cluster |
+| **ClusterClass** | Not supported — CAPC lacks `CloudStackClusterTemplate` CRD |
+| **Offline** | Requires pre-baked images or private registry |
+| **Complexity** | Medium — requires a separate management cluster and CAPI-compatible images |
+
+Guides:
 
 - [Main deployment](setup/capc/capc.md)
 - [Custom image build](setup/capc/capc-custom-image.md)
