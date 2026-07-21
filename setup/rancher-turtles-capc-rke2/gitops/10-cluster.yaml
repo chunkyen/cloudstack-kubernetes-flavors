@@ -1,0 +1,145 @@
+# Minimal CAPC + RKE2 cluster — 1 control plane + 2 workers
+# Includes ClusterResourceSet label for automatic CCM + CSI deployment
+# Replace all placeholder values before pushing to your GitOps repo
+---
+apiVersion: cluster.x-k8s.io/v1beta1
+kind: Cluster
+metadata:
+  name: capc-rke2-cluster-1
+  namespace: capc-rke2-cluster-1
+  labels:
+    cluster-api.cattle.io/rancher-auto-import: "true"
+    capc-rke2-ccm-csi: "true"
+spec:
+  clusterNetwork:
+    pods:
+      cidrBlocks:
+        - "10.168.0.0/16"
+    serviceDomain: cluster.local
+  controlPlaneRef:
+    apiVersion: controlplane.cluster.x-k8s.io/v1beta2
+    kind: RKE2ControlPlane
+    name: capc-rke2-cluster-1-control-plane
+  infrastructureRef:
+    apiVersion: infrastructure.cluster.x-k8s.io/v1beta3
+    kind: CloudStackCluster
+    name: capc-rke2-cluster-1
+---
+apiVersion: infrastructure.cluster.x-k8s.io/v1beta3
+kind: CloudStackCluster
+metadata:
+  name: capc-rke2-cluster-1
+  namespace: capc-rke2-cluster-1
+spec:
+  controlPlaneEndpoint:
+    host: 192.168.200.63   # Must be a free public IP in CloudStack
+    port: 6443
+  failureDomains:
+  - acsEndpoint:
+      name: cloudstack-credentials
+      namespace: capc-rke2-cluster-1
+    name: cyz1
+    zone:
+      name: cyz1
+      network:
+        name: capc-rke2-cluster-1-net
+        offering: DefaultNetworkOfferingforKubernetesService
+  syncWithACS: true
+---
+apiVersion: controlplane.cluster.x-k8s.io/v1beta2
+kind: RKE2ControlPlane
+metadata:
+  name: capc-rke2-cluster-1-control-plane
+  namespace: capc-rke2-cluster-1
+spec:
+  replicas: 1
+  version: v1.36.2+rke2r1
+  agentConfig:
+    kubelet:
+      extraArgs:
+        - provider-id=cloudstack:///{{ ds.meta_data.instance_id }}
+        - register-with-taints=node-role.kubernetes.io/control-plane=:NoSchedule
+    nodeName: '{{ ds.meta_data.local_hostname }}'
+  serverConfig:
+    cni: calico
+  registrationMethod: internal-first
+  rolloutStrategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+  machineTemplate:
+    spec:
+      infrastructureRef:
+        apiGroup: infrastructure.cluster.x-k8s.io
+        kind: CloudStackMachineTemplate
+        name: capc-rke2-cluster-1-control-plane
+---
+apiVersion: infrastructure.cluster.x-k8s.io/v1beta3
+kind: CloudStackMachineTemplate
+metadata:
+  name: capc-rke2-cluster-1-control-plane
+  namespace: capc-rke2-cluster-1
+spec:
+  template:
+    spec:
+      offering:
+        name: "kube control"
+      sshKey: "cylabnb-k1"
+      template:
+        name: "ubuntu 26 server"
+      details:
+        guest.cpu.mode: host-passthrough
+---
+apiVersion: cluster.x-k8s.io/v1beta1
+kind: MachineDeployment
+metadata:
+  name: capc-rke2-cluster-1-md-0
+  namespace: capc-rke2-cluster-1
+spec:
+  clusterName: capc-rke2-cluster-1
+  replicas: 2
+  selector:
+    matchLabels: null
+  template:
+    spec:
+      bootstrap:
+        configRef:
+          apiVersion: bootstrap.cluster.x-k8s.io/v1beta2
+          kind: RKE2ConfigTemplate
+          name: capc-rke2-cluster-1-md-0
+      clusterName: capc-rke2-cluster-1
+      infrastructureRef:
+        apiVersion: infrastructure.cluster.x-k8s.io/v1beta3
+        kind: CloudStackMachineTemplate
+        name: capc-rke2-cluster-1-md-0
+      version: v1.36.2+rke2r1
+---
+apiVersion: infrastructure.cluster.x-k8s.io/v1beta3
+kind: CloudStackMachineTemplate
+metadata:
+  name: capc-rke2-cluster-1-md-0
+  namespace: capc-rke2-cluster-1
+spec:
+  template:
+    spec:
+      offering:
+        name: "kube worker1"
+      sshKey: "cylabnb-k1"
+      template:
+        name: "ubuntu 26 server"
+      details:
+        guest.cpu.mode: host-passthrough
+---
+apiVersion: bootstrap.cluster.x-k8s.io/v1beta2
+kind: RKE2ConfigTemplate
+metadata:
+  name: capc-rke2-cluster-1-md-0
+  namespace: capc-rke2-cluster-1
+spec:
+  template:
+    spec:
+      agentConfig:
+        kubelet:
+          extraArgs:
+            - provider-id=cloudstack:///{{ ds.meta_data.instance_id }}
+        nodeName: '{{ ds.meta_data.local_hostname }}'

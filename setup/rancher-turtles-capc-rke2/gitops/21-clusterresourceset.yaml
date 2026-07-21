@@ -1,0 +1,13 @@
+apiVersion: addons.cluster.x-k8s.io/v1beta2
+kind: ClusterResourceSet
+metadata:
+  name: capc-rke2-cluster-1-ccm-csi
+  namespace: capc-rke2-cluster-1
+spec:
+  clusterSelector:
+    matchLabels:
+      capc-rke2-ccm-csi: "true"
+  resources:
+    - kind: ConfigMap
+      name: capc-rke2-cluster-1-post-deploy
+  strategy: Reconcile
