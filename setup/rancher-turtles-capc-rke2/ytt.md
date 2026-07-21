@@ -91,6 +91,7 @@ The repo includes three ytt templates in `manifests/`:
 | `cluster-template.yaml` | `10-cluster.yaml` | Cluster, CloudStackCluster, RKE2ControlPlane, MachineDeployment |
 | `credentials-template.yaml` | `00-cloudstack-credentials.yaml` | Management cluster secret for CAPC |
 | `cloudstack-secret-template.yaml` | `01-workload-secret.yaml` | Workload cluster secret for CCM/CSI |
+| `storageclass-template.yaml` | `02-storageclass.yaml` | CSI StorageClass with disk offering UUID |
 
 **`cluster-template.yaml`** — the reusable cluster definition (7 YAML documents):
 
@@ -273,6 +274,25 @@ stringData:
   cloud-config: #@ "[Global]\napi-url = " + data.values.cloudstack_api_url + "\napi-key = " + data.values.cloudstack_api_key + "\nsecret-key = " + data.values.cloudstack_secret_key + "\nssl-no-verify = " + data.values.cloudstack_verify_ssl + "\n"
 ```
 
+**`storageclass-template.yaml`** — CSI StorageClass with disk offering UUID:
+
+```yaml
+#@ load("@ytt:data", "data")
+---
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: cloudstack-standard
+  annotations:
+    storageclass.kubernetes.io/is-default-class: "true"
+provisioner: csi.cloudstack.apache.org
+parameters:
+  csi.cloudstack.apache.org/disk-offering-id: #@ data.values.disk_offering_id
+reclaimPolicy: Delete
+volumeBindingMode: Immediate
+allowVolumeExpansion: true
+```
+
 ### 4. Generate the final manifests
 
 ```bash
@@ -284,6 +304,9 @@ ytt -f credentials-template.yaml -f values.yaml > 00-cloudstack-credentials.yaml
 
 # Workload cluster secret (for CCM/CSI)
 ytt -f cloudstack-secret-template.yaml -f values.yaml > 01-workload-secret.yaml
+
+# CSI StorageClass
+ytt -f storageclass-template.yaml -f values.yaml > 02-storageclass.yaml
 ```
 
 ### 5. Deploy
@@ -298,10 +321,11 @@ kubectl apply -f 10-cluster.yaml \
   -f 20-ccm-csi-configmap.yaml \
   -f 21-clusterresourceset.yaml
 
-# After the cluster is up, apply the workload secret
+# After the cluster is up, apply the workload secret and storage class
 kubectl get secret capc-rke2-cluster-1-kubeconfig -n capc-rke2-cluster-1 \
   -o jsonpath='{.data.value}' | base64 -d > kubeconfig
 KUBECONFIG=kubeconfig kubectl apply -f 01-workload-secret.yaml
+KUBECONFIG=kubeconfig kubectl apply -f 02-storageclass.yaml
 ```
 
 ### 6. Create a second cluster

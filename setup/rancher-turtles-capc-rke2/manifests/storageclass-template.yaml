@@ -1,0 +1,14 @@
+#@ load("@ytt:data", "data")
+---
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: cloudstack-standard
+  annotations:
+    storageclass.kubernetes.io/is-default-class: "true"
+provisioner: csi.cloudstack.apache.org
+parameters:
+  csi.cloudstack.apache.org/disk-offering-id: #@ data.values.disk_offering_id
+reclaimPolicy: Delete
+volumeBindingMode: Immediate
+allowVolumeExpansion: true

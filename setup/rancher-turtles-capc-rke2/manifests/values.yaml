@@ -26,3 +26,7 @@ cloudstack_api_url: http://YOUR_CLOUDSTACK_API_URL:8080/client/api
 cloudstack_api_key: YOUR_API_KEY
 cloudstack_secret_key: YOUR_SECRET_KEY
 cloudstack_verify_ssl: "false"
+
+# Disk offering UUID for CSI storage class
+# Find with: cmk list diskofferings | grep -E "id|name"
+disk_offering_id: REPLACE_WITH_YOUR_DISK_OFFERING_UUID
