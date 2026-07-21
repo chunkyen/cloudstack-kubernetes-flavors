@@ -41,11 +41,11 @@ The ytt templates live in a dedicated folder separate from the static manifests:
 ```
 setup/rancher-turtles-capc-rke2/
 ├── ytt-templates/              ← ytt source files (templates + values)
-│   ├── values.yaml
-│   ├── cluster-template.yaml
-│   ├── credentials-template.yaml
-│   ├── cloudstack-secret-template.yaml
-│   └── storageclass-template.yaml
+│   ├── 00-values.yaml
+│   ├── 01-cluster-template.yaml
+│   ├── 02-credentials-template.yaml
+│   ├── 03-cloudstack-secret-template.yaml
+│   └── 04-storageclass-template.yaml
 ├── manifests/                  ← static / generated manifests
 │   ├── 10-minimal-cluster.yaml
 │   ├── 10-airgap-cluster.yaml
@@ -74,7 +74,7 @@ chmod +x /usr/local/bin/ytt
 
 ### 2. Define data values
 
-**`ytt-templates/values.yaml`** — the variables that change per cluster:
+**`ytt-templates/00-values.yaml`** — the variables that change per cluster:
 
 ```yaml
 #@data/values
@@ -117,12 +117,13 @@ The repo includes four ytt templates in `ytt-templates/`:
 
 | Template | Generates | Purpose |
 |----------|-----------|---------|
-| `cluster-template.yaml` | `10-cluster.yaml` | Cluster, CloudStackCluster, RKE2ControlPlane, MachineDeployment |
-| `credentials-template.yaml` | `00-cloudstack-credentials.yaml` | Management cluster secret for CAPC |
-| `cloudstack-secret-template.yaml` | `01-workload-secret.yaml` | Workload cluster secret for CCM/CSI |
-| `storageclass-template.yaml` | `02-storageclass.yaml` | CSI StorageClass with disk offering UUID |
+| `00-values.yaml` | — | All cluster variables (edit this per cluster) |
+| `01-cluster-template.yaml` | `10-cluster.yaml` | Cluster, CloudStackCluster, RKE2ControlPlane, MachineDeployment |
+| `02-credentials-template.yaml` | `00-cloudstack-credentials.yaml` | Management cluster secret for CAPC |
+| `03-cloudstack-secret-template.yaml` | `01-workload-secret.yaml` | Workload cluster secret for CCM/CSI |
+| `04-storageclass-template.yaml` | `02-storageclass.yaml` | CSI StorageClass with disk offering UUID |
 
-**`cluster-template.yaml`** — the reusable cluster definition (7 YAML documents):
+**`01-cluster-template.yaml`** — the reusable cluster definition (7 YAML documents):
 
 ```yaml
 #@ load("@ytt:data", "data")
@@ -270,7 +271,7 @@ spec:
         nodeName: '{{ ds.meta_data.local_hostname }}'
 ```
 
-**`credentials-template.yaml`** — management cluster secret for CAPC:
+**`02-credentials-template.yaml`** — management cluster secret for CAPC:
 
 ```yaml
 #@ load("@ytt:data", "data")
@@ -288,7 +289,7 @@ stringData:
   verify-ssl: #@ data.values.cloudstack_verify_ssl
 ```
 
-**`cloudstack-secret-template.yaml`** — workload cluster secret for CCM/CSI:
+**`03-cloudstack-secret-template.yaml`** — workload cluster secret for CCM/CSI:
 
 ```yaml
 #@ load("@ytt:data", "data")
@@ -303,7 +304,7 @@ stringData:
   cloud-config: #@ "[Global]\napi-url = " + data.values.cloudstack_api_url + "\napi-key = " + data.values.cloudstack_api_key + "\nsecret-key = " + data.values.cloudstack_secret_key + "\nssl-no-verify = " + data.values.cloudstack_verify_ssl + "\n"
 ```
 
-**`storageclass-template.yaml`** — CSI StorageClass with disk offering UUID:
+**`04-storageclass-template.yaml`** — CSI StorageClass with disk offering UUID:
 
 ```yaml
 #@ load("@ytt:data", "data")
@@ -336,14 +337,14 @@ cp <repo>/setup/rancher-turtles-capc-rke2/manifests/20-ccm-csi-configmap.yaml ma
 cp <repo>/setup/rancher-turtles-capc-rke2/manifests/21-clusterresourceset.yaml manifests/
 cp <repo>/setup/rancher-turtles-capc-rke2/manifests/rke2-providers.yaml manifests/
 
-# Edit values.yaml with your cluster parameters
-vim ytt-templates/values.yaml
+# Edit 00-values.yaml with your cluster parameters
+vim ytt-templates/00-values.yaml
 
 # Generate all manifests
-ytt -f ytt-templates/cluster-template.yaml -f ytt-templates/values.yaml > manifests/10-cluster.yaml
-ytt -f ytt-templates/credentials-template.yaml -f ytt-templates/values.yaml > manifests/00-cloudstack-credentials.yaml
-ytt -f ytt-templates/cloudstack-secret-template.yaml -f ytt-templates/values.yaml > manifests/01-workload-secret.yaml
-ytt -f ytt-templates/storageclass-template.yaml -f ytt-templates/values.yaml > manifests/02-storageclass.yaml
+ytt -f ytt-templates/01-cluster-template.yaml -f ytt-templates/00-values.yaml > manifests/10-cluster.yaml
+ytt -f ytt-templates/02-credentials-template.yaml -f ytt-templates/00-values.yaml > manifests/00-cloudstack-credentials.yaml
+ytt -f ytt-templates/03-cloudstack-secret-template.yaml -f ytt-templates/00-values.yaml > manifests/01-workload-secret.yaml
+ytt -f ytt-templates/04-storageclass-template.yaml -f ytt-templates/00-values.yaml > manifests/02-storageclass.yaml
 ```
 
 ### 5. Deploy
@@ -373,14 +374,14 @@ Just copy the project folder, edit `ytt-templates/values.yaml`, and re-run:
 cp -r ~/projects/capc-rke2-cluster-1 ~/projects/capc-rke2-cluster-2
 cd ~/projects/capc-rke2-cluster-2
 
-# Edit values.yaml: change cluster_name, control_plane_ip, network_name, etc.
-vim ytt-templates/values.yaml
+# Edit 00-values.yaml: change cluster_name, control_plane_ip, network_name, etc.
+vim ytt-templates/00-values.yaml
 
 # Regenerate
-ytt -f ytt-templates/cluster-template.yaml -f ytt-templates/values.yaml > manifests/10-cluster.yaml
-ytt -f ytt-templates/credentials-template.yaml -f ytt-templates/values.yaml > manifests/00-cloudstack-credentials.yaml
-ytt -f ytt-templates/cloudstack-secret-template.yaml -f ytt-templates/values.yaml > manifests/01-workload-secret.yaml
-ytt -f ytt-templates/storageclass-template.yaml -f ytt-templates/values.yaml > manifests/02-storageclass.yaml
+ytt -f ytt-templates/01-cluster-template.yaml -f ytt-templates/00-values.yaml > manifests/10-cluster.yaml
+ytt -f ytt-templates/02-credentials-template.yaml -f ytt-templates/00-values.yaml > manifests/00-cloudstack-credentials.yaml
+ytt -f ytt-templates/03-cloudstack-secret-template.yaml -f ytt-templates/00-values.yaml > manifests/01-workload-secret.yaml
+ytt -f ytt-templates/04-storageclass-template.yaml -f ytt-templates/00-values.yaml > manifests/02-storageclass.yaml
 
 # Deploy
 kubectl create namespace capc-rke2-cluster-2
