@@ -1,0 +1,29 @@
+# Fleet GitRepo + Gitea credentials
+# Apply this on the management cluster to connect Fleet to your Gitea repo
+# Replace <GITEA_URL>, <GITEA_USER>, and <GITEA_TOKEN> with real values
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: gitea-credentials
+  namespace: fleet-local
+type: kubernetes.io/basic-auth
+stringData:
+  username: <GITEA_USER>
+  password: <GITEA_TOKEN>
+---
+apiVersion: fleet.cattle.io/v1alpha1
+kind: GitRepo
+metadata:
+  name: capc-rke2-git
+  namespace: fleet-local
+spec:
+  repo: http://<GITEA_URL>/<GITEA_USER>/capc-rke2-git.git
+  branch: main
+  clientSecretName: gitea-credentials
+  paths:
+    - .
+  targets:
+    - clusterSelector:
+        matchLabels:
+          name: local

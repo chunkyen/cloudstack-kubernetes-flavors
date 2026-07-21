@@ -6,10 +6,13 @@ These manifests are designed for use with [Fleet GitOps](../gitops.md). Copy the
 
 | File | Purpose | Contains Secrets? |
 |------|---------|-------------------|
-| `00-namespace-credentials.yaml` | Namespace + CloudStack API credentials | **Yes** — replace placeholders |
+| `fleet-gitrepo.yaml` | Fleet GitRepo + Gitea auth secret (apply on mgmt cluster) | **Yes** — replace `<GITEA_TOKEN>` |
+| `00-namespace-credentials.yaml` | Namespace + CloudStack API credentials (pushed to Gitea) | **Yes** — replace placeholders |
 | `10-cluster.yaml` | Cluster, CloudStackCluster, control plane, workers | No |
 | `20-ccm-csi-configmap.yaml` | CCM + CSI manifests as ConfigMap data | **Yes** — embedded workload secret has placeholders |
 | `21-clusterresourceset.yaml` | ClusterResourceSet for CCM/CSI | No |
+
+> **Note:** `fleet-gitrepo.yaml` is applied directly on the management cluster with `kubectl apply` — it is NOT pushed to the Gitea repo. It tells Fleet which repo to watch and how to authenticate.
 
 ## Usage
 
