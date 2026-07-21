@@ -2,11 +2,11 @@
 
 A detailed exploration of various Kubernetes deployment options on CloudStack infrastructure, including architecture analysis, setup guides, and comparative evaluation.
 
-## Overview
+## 1. Overview
 
 This repository examines four primary approaches to running Kubernetes on CloudStack, plus two foundational components that apply across all flavors.
 
-### Four Flavors
+### 1.1 Four Flavors
 
 1. **CKS (CloudStack Kubernetes Service)** — Native CloudStack Kubernetes integration
 2. **CAPC (Cluster API Provider for CloudStack)** — Infrastructure-as-Code approach using Cluster API (with user-defined node OS)
@@ -15,16 +15,16 @@ This repository examines four primary approaches to running Kubernetes on CloudS
    - **RKE2** — Rancher's Kubernetes distribution with built-in CNI (Calico), embedded etcd, and native air-gap support via tarball
 4. **Talos Linux** — Minimal, immutable Linux designed for Kubernetes. Can be managed standalone (via `cmk` or Terraform), or with **Sidero Omni** — a Kubernetes management platform that automates cluster lifecycle (self-hosted on CloudStack as a single Docker VM, or SaaS).
 
-### Cross-Cutting Components
+### 1.2 Cross-Cutting Components
 
 These components are required or recommended for **every flavor**:
 
 - **CloudStack Kubernetes Provider (CCM)** — External Cloud Controller Manager that replaces the deprecated in-tree provider (removed K8s 1.16). Handles node metadata labels, CloudStack load balancers for `LoadBalancer` services, and firewall rules. Auto-deployed on CKS 4.16+, must be manually deployed on all other flavors.
 - **CloudStack CSI Driver** — Persistent storage plugin that maps CloudStack disk offerings to Kubernetes StorageClasses. Supports dynamic provisioning, volume snapshots, and lifecycle management. Deployed separately on each cluster.
 
-## Contents
+## 2. Contents
 
-### Architecture
+### 2.1 Architecture
 
 - [CloudStack Kubernetes Provider (external CCM)](architecture/cloudstack-kubernetes-provider.md) — applies to all flavors
 - [CloudStack CSI Driver (persistent storage)](architecture/cloudstack-csi-driver.md) — applies to all flavors
@@ -33,9 +33,9 @@ These components are required or recommended for **every flavor**:
 - [Rancher+CAPC architecture](architecture/rancher-turtles-capc.md)
 - [Talos architecture](architecture/talos.md)
 
-### Setup Guides
+### 2.2 Setup Guides
 
-#### CKS (CloudStack Kubernetes Service)
+#### 2.2.1 CKS (CloudStack Kubernetes Service)
 
 CKS is Apache CloudStack's native Kubernetes integration — a fully managed service that provisions, scales, and manages Kubernetes clusters directly from the CloudStack UI and API. It uses kubeadm under the hood with pre-packaged ISOs containing all Kubernetes binaries and container images.
 
@@ -63,7 +63,7 @@ Guides:
 - [Offline / air-gapped deployment](setup/cks/cks-offline.md)
 - [Improvements & notes](setup/cks/cks-improvements.md)
 
-#### CAPC (Cluster API Provider for CloudStack)
+#### 2.2.2 CAPC (Cluster API Provider for CloudStack)
 
 CAPC is the official Kubernetes SIGs infrastructure provider that brings declarative, Kubernetes-native cluster lifecycle management to CloudStack. It uses Cluster API (CAPI) controllers and CRDs to provision, scale, upgrade, and delete Kubernetes clusters — all managed from a separate management cluster via `kubectl`.
 
@@ -90,7 +90,7 @@ Guides:
 - [Upgrade](setup/capc/capc-upgrade.md)
 - [CNI automation options](setup/capc/cni-automation-options.md)
 
-#### Rancher Turtles + CAPC
+#### 2.2.3 Rancher Turtles + CAPC
 
 The Rancher Turtles integration combines three layers — Rancher (management plane with UI, Fleet GitOps, RBAC), Turtles (CAPI operator for declarative provider management), and CAPC (CloudStack infrastructure provider). See [Rancher+CAPC architecture](architecture/rancher-turtles-capc.md) for the full architecture breakdown.
 
@@ -141,7 +141,7 @@ RKE2 differs from kubeadm in several key ways:
 >
 > For RKE2-based CAPC clusters, CNI is built-in (Calico). CCM + CSI are deployed automatically via ClusterResourceSet as part of the cluster provisioning in [`cluster.md`](setup/rancher-turtles-capc-rke2/cluster.md).
 
-#### Talos Linux
+#### 2.2.4 Talos Linux
 
 Talos Linux is a minimal, immutable OS designed specifically for Kubernetes. It can be managed through three approaches, each documented here:
 
@@ -173,17 +173,17 @@ Key capabilities:
 | **Air-gap** | Omni can operate fully offline — no internet dependency after initial setup |
 | **Self-hosted** | Single Docker VM on CloudStack (~4 GB RAM, 2 vCPU) — no Kubernetes cluster needed to run it |
 
-#### Cross-Cutting Components
+#### 2.2.5 Cross-Cutting Components
 
 - [CloudStack Kubernetes Provider (CCM)](setup/cloudstack-kubernetes-provider.md)
 - [CloudStack CSI Driver](setup/cloudstack-csi-driver.md)
 
-### Analysis
+### 2.3 Analysis
 
 - Feature comparison matrix and analysis (not yet created)
 - External references and documentation links (not yet created)
 
-## Quick Comparison
+## 3. Quick Comparison
 
 | **Feature** | CKS | CAPC | Rancher+CAPC | Rancher+CAPC+RKE2 | Talos (standalone) | Talos (Omni-managed) |
 |---------|-----|------|-------------------|-------------------|-------------------|---------------------|
@@ -196,6 +196,6 @@ Key capabilities:
 | **ClusterClass** | N/A | Not supported (no CloudStackClusterTemplate) | Not supported (no CloudStackClusterTemplate) | Not supported (no CloudStackClusterTemplate) | N/A (manual config) | N/A (Omni manages configs) |
 | **Complexity** | Low | Medium | High | Medium | Medium | High (self-hosted) / Low (SaaS) |
 
-## Status
+## 4. Status
 
 ✅ **First Release** — All four Kubernetes flavors on CloudStack are documented with architecture analysis, setup guides, and comparative evaluation.
