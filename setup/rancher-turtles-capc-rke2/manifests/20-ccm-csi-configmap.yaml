@@ -762,42 +762,6 @@ data:
       kind: ClusterRole
       name: cloudstack-csi-snapshotter-role
       apiGroup: rbac.authorization.k8s.io
-  cloudstack-csi-storageclass.yaml: |
-    # NOTE: Replace the disk-offering-id parameter below with your CloudStack storage offering UUID.
-    # This is the disk offering that CloudStack will use when provisioning volumes.
-    # Find the correct UUID with: cmk list diskofferings
-    ---
-    apiVersion: storage.k8s.io/v1
-    kind: StorageClass
-    metadata:
-      name: cloudstack-standard
-      annotations:
-        storageclass.kubernetes.io/is-default-class: "true"
-    provisioner: csi.cloudstack.apache.org
-    parameters:
-      # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-      # ⚠️  REPLACE THIS VALUE ⚠️
-      # Set to your CloudStack disk offering UUID (not the name!)
-      # Run: cmk list diskofferings | grep -E "id|name"
-      # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-      csi.cloudstack.apache.org/disk-offering-id: "REPLACE_WITH_YOUR_DISK_OFFERING_UUID"
-    reclaimPolicy: Delete
-    volumeBindingMode: Immediate
-    allowVolumeExpansion: true
-  cloudstack-secret.yaml: |
-    apiVersion: v1
-    kind: Secret
-    metadata:
-      name: cloudstack-secret
-      namespace: kube-system
-    stringData:
-      cloud-config: |
-        [Global]
-        api-url = http://YOUR_CLOUDSTACK_API_URL:8080/client/api
-        api-key = YOUR_API_KEY
-        secret-key = YOUR_SECRET_KEY
-        ssl-no-verify = "true"
-    type: Opaque
 kind: ConfigMap
 metadata:
   name: capc-rke2-cluster-1-post-deploy
