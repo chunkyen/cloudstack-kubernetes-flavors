@@ -248,11 +248,18 @@ The repo should contain numbered manifest files applied in order:
 
 ```
 capc-rke2-git/
-├── 00-namespace-credentials.yaml   # Namespace + CloudStack API credentials
-├── 10-cluster.yaml                  # Cluster, CloudStackCluster, control plane, workers
+├── 00-namespace-credentials.yaml   # Namespace + CloudStack API credentials (deleted last)
+├── 10-cluster.yaml                  # Cluster, CloudStackCluster, RKE2ControlPlane, MachineDeployment, RKE2ConfigTemplate
+├── 11-templates.yaml                # CloudStackMachineTemplates for CP + workers (deleted after machines gone)
 ├── 20-ccm-csi-configmap.yaml        # CCM + CSI manifests as ConfigMap data
 └── 21-clusterresourceset.yaml       # ClusterResourceSet referencing the ConfigMap
 ```
+
+> **Why split templates into `11-templates.yaml`?** The RKE2 pre-terminate hook (`WaitingForPreTerminateHook`) needs the `CloudStackMachineTemplate` to be alive during node drain — the RKE2 controller retrieves the template to compute the desired InfraMachine. If templates are in the same file as the cluster manifests (`10-cluster.yaml`), Fleet deletes them simultaneously, causing the pre-terminate hook to fail with:
+> ```
+> failed to retrieve CloudStackMachineTemplate "capc-rke2-cluster-1-control-plane": cloudstackmachinetemplates.infrastructure.cluster.x-k8s.io "capc-rke2-cluster-1-control-plane" not found
+> ```
+> Keeping templates in a separate file (`11-templates.yaml`) ensures they survive Phase 1 deletion, allowing the pre-terminate hook to complete. See [§5.2](#52-graceful-deletion-three-phase-approach).
 
 ### 3.1 `00-namespace-credentials.yaml` — Namespace + Credentials
 
@@ -325,7 +332,7 @@ spec:
       network:
         name: capc-rke2-cluster-1-net
         offering: DefaultNetworkOfferingforKubernetesService
-  syncWithACS: true             # See "syncWithACS" section below
+  syncWithACS: false             # See "syncWithACS" section below
 ---
 apiVersion: controlplane.cluster.x-k8s.io/v1beta2
 kind: RKE2ControlPlane
@@ -351,22 +358,6 @@ spec:
         kind: CloudStackMachineTemplate
         name: capc-rke2-cluster-1-control-plane
 ---
-apiVersion: infrastructure.cluster.x-k8s.io/v1beta3
-kind: CloudStackMachineTemplate
-metadata:
-  name: capc-rke2-cluster-1-control-plane
-  namespace: capc-rke2-cluster-1
-spec:
-  template:
-    spec:
-      offering:
-        name: "kube control"
-      sshKey: "cylabnb-k1"
-      template:
-        name: "ubuntu 26 server"
-      details:
-        guest.cpu.mode: host-passthrough
----
 apiVersion: cluster.x-k8s.io/v1beta1
 kind: MachineDeployment
 metadata:
@@ -391,22 +382,6 @@ spec:
         name: capc-rke2-cluster-1-md-0
       version: v1.36.2+rke2r1
 ---
-apiVersion: infrastructure.cluster.x-k8s.io/v1beta3
-kind: CloudStackMachineTemplate
-metadata:
-  name: capc-rke2-cluster-1-md-0
-  namespace: capc-rke2-cluster-1
-spec:
-  template:
-    spec:
-      offering:
-        name: "kube worker1"
-      sshKey: "cylabnb-k1"
-      template:
-        name: "ubuntu 26 server"
-      details:
-        guest.cpu.mode: host-passthrough
----
 apiVersion: bootstrap.cluster.x-k8s.io/v1beta2
 kind: RKE2ConfigTemplate
 metadata:
@@ -422,7 +397,49 @@ spec:
         nodeName: '{{ ds.meta_data.local_hostname }}'
 ```
 
+> **Note:** `CloudStackMachineTemplate` definitions are in `11-templates.yaml` (see [§3.2a](#32a-11-templatesyaml--cloudstackmachinetemplates)). They are intentionally **not** in this file so they survive Phase 1 deletion.
+
 **For Kubeadm:** Replace `RKE2ControlPlane` with `KubeadmControlPlane` and `RKE2ConfigTemplate` with `KubeadmConfigTemplate`. The `CloudStackCluster`, `CloudStackMachineTemplate`, `MachineDeployment`, and `Cluster` objects remain the same.
+
+### 3.2a `11-templates.yaml` — CloudStackMachineTemplates
+
+This file contains the `CloudStackMachineTemplate` definitions for both control plane and worker nodes. It is kept separate from `10-cluster.yaml` so that during deletion, the templates remain available for the RKE2 pre-terminate hook (which needs the template to drain the node).
+
+```yaml
+apiVersion: infrastructure.cluster.x-k8s.io/v1beta3
+kind: CloudStackMachineTemplate
+metadata:
+  name: capc-rke2-cluster-1-control-plane
+  namespace: capc-rke2-cluster-1
+spec:
+  template:
+    spec:
+      offering:
+        name: "kube control"
+      sshKey: "cylabnb-k1"
+      template:
+        name: "rocky9"
+      details:
+        guest.cpu.mode: host-passthrough
+---
+apiVersion: infrastructure.cluster.x-k8s.io/v1beta3
+kind: CloudStackMachineTemplate
+metadata:
+  name: capc-rke2-cluster-1-md-0
+  namespace: capc-rke2-cluster-1
+spec:
+  template:
+    spec:
+      offering:
+        name: "kube worker1"
+      sshKey: "cylabnb-k1"
+      template:
+        name: "rocky9"
+      details:
+        guest.cpu.mode: host-passthrough
+```
+
+> **`CloudStackMachineTemplate` is immutable** — the admission webhook rejects updates to `spec.template`. To change the template (e.g., OS upgrade), delete and recreate the template, or use a different name.
 
 ### 3.3 `20-ccm-csi-configmap.yaml` — CCM + CSI
 
@@ -465,7 +482,7 @@ into the current release: invalid ownership metadata
 
 ```bash
 # 1. Copy manifests to the Gitea repo working directory
-cp 00-namespace-credentials.yaml 10-cluster.yaml 20-ccm-csi-configmap.yaml 21-clusterresourceset.yaml /path/to/capc-rke2-git/
+cp 00-namespace-credentials.yaml 10-cluster.yaml 11-templates.yaml 20-ccm-csi-configmap.yaml 21-clusterresourceset.yaml /path/to/capc-rke2-git/
 
 # 2. Commit and push
 cd /path/to/capc-rke2-git
@@ -520,31 +537,51 @@ ssh <cloudstack-management-server> "cmk list publicipaddresses filter=ipaddress,
 
 **Manual `kubectl delete cluster`** doesn't hit this because you delete only the `Cluster` object — CAPI cascades the deletion in order, and the `CloudStackCluster` stays alive until all machines are cleaned up.
 
-### 5.2 Graceful Deletion: Two-Phase Approach
+### 5.2 Graceful Deletion: Three-Phase Approach
 
-**Phase 1 — Remove cluster manifests, keep credentials:**
+With templates split into `11-templates.yaml`, deletion becomes three phases. This prevents the pre-terminate hook deadlock and keeps credentials available for CAPC to destroy VMs.
+
+**Phase 1 — Remove cluster manifests, keep templates + credentials:**
 
 ```bash
 cd /path/to/capc-rke2-git
 git rm 10-cluster.yaml 20-ccm-csi-configmap.yaml 21-clusterresourceset.yaml
-git commit -m "Delete cluster-1 (keep credentials for CAPC cleanup)"
+git commit -m "Delete cluster-1 (keep templates + credentials for CAPC cleanup)"
 git push origin main
 ```
 
-This triggers Cluster deletion while `cloudstack-credentials` remains available for CAPC to destroy VMs.
-
-**Phase 2 — Remove credentials after machines are gone:**
+This triggers Cluster deletion while `cloudstack-credentials` and `CloudStackMachineTemplate`s remain available. CAPC destroys the VMs, and the RKE2 pre-terminate hook can complete because the templates are still alive.
 
 ```bash
 # Wait for all machines to be deleted
 kubectl get machines -n capc-rke2-cluster-1
 # Should show: No resources found
+```
 
-# Then remove credentials
+**Phase 2 — Remove templates after machines are gone:**
+
+```bash
+git rm 11-templates.yaml
+git commit -m "Remove templates, machines deleted"
+git push origin main
+```
+
+**Phase 3 — Remove credentials, final cleanup:**
+
+```bash
 git rm 00-namespace-credentials.yaml
 git commit -m "Remove credentials, full cleanup complete"
 git push origin main
 ```
+
+**Post-deletion: Clean up CloudStack network:**
+
+After all K8s resources are deleted, the CloudStack isolated network may linger in `Implemented` state. The `CloudStackIsolatedNetwork` K8s resource is deleted by CAPC, but the CloudStack network itself remains because the virtual router (VR) is still running. To clean up:
+
+1. **Stop the virtual router** attached to the isolated network — once stopped, CloudStack automatically deletes the network.
+2. Alternatively, manually delete the network: `cmk deleteNetwork id=<network-id>`
+
+> **Note:** If you skip this step, the network and VR will remain in CloudStack, consuming a public IP. The network does **not** auto-delete while the VR is running.
 
 ### 5.3 Optional Pre-Step: Scale Workers to 0 First
 
@@ -781,25 +818,9 @@ kubectl patch cluster <name> -n <namespace> \
   --type='json' -p='[{"op":"remove","path":"/metadata/finalizers"}]'
 ```
 
-**Workaround 3 — Two-phase deletion (prevents the issue):**
+**Workaround 3 — Three-phase deletion (prevents the issue):**
 
-Delete in phases to keep `cloudstack-credentials` available during VM cleanup:
-
-```bash
-# Phase 1: Remove cluster manifests only, keep 00-namespace-credentials.yaml
-git rm 10-cluster.yaml 20-ccm-csi-configmap.yaml 21-clusterresourceset.yaml
-git commit -m "Delete cluster (keep credentials for CAPC cleanup)"
-git push origin main
-
-# Wait for all machines to be deleted
-kubectl get machines -n <namespace>
-# Should show: No resources found
-
-# Phase 2: Remove credentials
-git rm 00-namespace-credentials.yaml
-git commit -m "Remove credentials, full cleanup complete"
-git push origin main
-```
+See [§5.2](#52-graceful-deletion-three-phase-approach) for the full three-phase deletion approach. The key insight is that `CloudStackMachineTemplate`s must be in a separate file (`11-templates.yaml`) from the cluster manifests (`10-cluster.yaml`), so they survive Phase 1 deletion and the RKE2 pre-terminate hook can find them during node drain.
 
 **Diagnosis commands:**
 
@@ -813,3 +834,49 @@ kubectl get cloudstackmachine -n <namespace> -o jsonpath='{range .items[*]}{.met
 # Check if VM is already destroyed in CloudStack
 ssh <cloudstack-management-server> "cmk list virtualmachines keyword=<cluster-name> filter=name,state"
 ```
+
+### Pre-Terminate Hook Stuck (WaitingForPreTerminateHook)
+
+**Symptom:** Control plane machine stuck in `Deleting` with:
+
+```
+* Deleting: Machine deletion in progress, stage: WaitingForPreTerminateHook
+```
+
+RKE2 controller logs show:
+
+```
+failed to retrieve CloudStackMachineTemplate "capc-rke2-cluster-1-control-plane": cloudstackmachinetemplates.infrastructure.cluster.x-k8s.io "capc-rke2-cluster-1-control-plane" not found
+```
+
+**Cause:** The RKE2 pre-terminate hook needs the `CloudStackMachineTemplate` to be alive so it can compute the desired InfraMachine for node drain. When `CloudStackMachineTemplate` is in the same file as the cluster manifests (`10-cluster.yaml`), Fleet deletes them simultaneously, and the pre-terminate hook can never find the template.
+
+**Fix:** Split `CloudStackMachineTemplate` definitions into a separate `11-templates.yaml` file (see [§3.2a](#32a-11-templatesyaml--cloudstackmachinetemplates)). During deletion, only remove `10-cluster.yaml` in Phase 1 — the templates in `11-templates.yaml` stay alive until Phase 2.
+
+**If already stuck:** Clear the pre-terminate hook annotation to unblock:
+
+```bash
+kubectl annotate machine <cp-machine-name> -n <namespace> \
+  "pre-terminate.delete.hook.machine.cluster.x-k8s.io/rke2-cleanup-" --overwrite
+```
+
+> **Warning:** Removing the pre-terminate hook skips the RKE2 cleanup (node drain, etcd member removal). This may leave stale etcd members. Only use as a last resort when the cluster is already being deleted.
+
+### Isolated Network Not Deleted After Cluster Removal
+
+**Symptom:** After all K8s resources are deleted, the CloudStack isolated network (e.g., `capc-rke2-cluster-1-net`) remains in `Implemented` state with a virtual router still running.
+
+**Cause:** CAPC deletes the `CloudStackIsolatedNetwork` K8s resource, but the CloudStack network itself is not garbage-collected while the virtual router (VR) is still running. The VR must be stopped first.
+
+**Fix:**
+
+```bash
+# Option 1: Stop the VR — network auto-deletes once VR is stopped
+cmk list routers networkid=<network-id> filter=id,name,state
+cmk stopRouter id=<router-id>
+
+# Option 2: Manually delete the network
+cmk deleteNetwork id=<network-id>
+```
+
+> **Note:** If you skip this step, the network and VR will remain in CloudStack, consuming a public IP.
