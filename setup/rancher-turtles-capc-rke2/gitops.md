@@ -710,7 +710,37 @@ git push origin main
 
 Fleet syncs the change, CAPI performs a rolling upgrade — same process as manual. See [`cluster.md`](cluster.md#upgrading-rke2-version) for details on the rolling upgrade flow, monitoring, and etcd leadership transfer troubleshooting.
 
-### 7.2 Scale Workers
+### 7.2 Upgrade OS Template
+
+To change the OS template (e.g., from `rocky9` to a newer version), you need to replace the `CloudStackMachineTemplate` definitions. However, **`CloudStackMachineTemplate` is immutable** — the admission webhook rejects updates to `spec.template`. You cannot simply edit `11-templates.yaml` and push.
+
+**Approach: Create new templates with different names, then update references in `10-cluster.yaml`**
+
+```bash
+# 1. Edit 11-templates.yaml: add new templates with updated template name
+#    Use new names, e.g. capc-rke2-cluster-1-control-plane-v2 and capc-rke2-cluster-1-md-0-v2
+#    Set the new template name (e.g., "rocky9-new")
+git add 11-templates.yaml
+git commit -m "Add new OS templates for upgrade"
+git push origin main
+
+# 2. Wait for Fleet to sync the new templates
+
+# 3. Edit 10-cluster.yaml: update infrastructureRef to point to the new templates
+#    RKE2ControlPlane.spec.machineTemplate.spec.infrastructureRef.name → ...-control-plane-v2
+#    MachineDeployment.spec.template.spec.infrastructureRef.name → ...-md-0-v2
+git add 10-cluster.yaml
+git commit -m "Upgrade cluster-1 OS template to rocky9-new"
+git push origin main
+```
+
+Fleet syncs the change, CAPI performs a rolling upgrade — old machines are deleted one at a time, new machines are created from the new template. The old `CloudStackMachineTemplate`s can be removed from `11-templates.yaml` after all machines have rolled over.
+
+> **Warning:** Do not delete old templates from `11-templates.yaml` until all machines referencing them are deleted. The pre-terminate hook needs the old template during node drain.
+
+> **Note:** See [`cluster.md`](cluster.md#upgrading-os-template) for details on the rolling upgrade flow, including etcd leadership transfer troubleshooting.
+
+### 7.3 Scale Workers
 
 Edit `10-cluster.yaml`, change `MachineDeployment.spec.replicas`, commit, and push:
 
