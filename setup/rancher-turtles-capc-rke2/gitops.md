@@ -652,7 +652,41 @@ For managing multiple clusters without copy-paste, the repo already includes bot
 | **Kustomize** | Fleet renders `kustomization.yaml` natively — no pre-rendering needed | No pre-rendering, simple YAML patches | Limited to patch overlays, no logic |
 | **Helm** | Fleet supports HelmCharts natively | Versioning, sharing, ecosystem | More complex to set up |
 
-## 7. Troubleshooting
+## 7. Upgrading and Scaling via GitOps
+
+Upgrading RKE2 versions and scaling workers follow the same procedure as manual clusters — the only difference is you edit the YAML in your Gitea repo and push, instead of using `kubectl` directly.
+
+### 7.1 Upgrade RKE2 Version
+
+Edit `10-cluster.yaml` in the Gitea repo, change the `version` field in both `RKE2ControlPlane` and `MachineDeployment`, then commit and push:
+
+```bash
+# Edit version in 10-cluster.yaml
+# RKE2ControlPlane.spec.version
+# MachineDeployment.spec.template.spec.version
+git add 10-cluster.yaml
+git commit -m "Upgrade cluster-1 to v1.36.3+rke2r1"
+git push origin main
+```
+
+Fleet syncs the change, CAPI performs a rolling upgrade — same process as manual. See [`cluster.md`](cluster.md#upgrading-rke2-version) for details on the rolling upgrade flow, monitoring, and etcd leadership transfer troubleshooting.
+
+### 7.2 Scale Workers
+
+Edit `10-cluster.yaml`, change `MachineDeployment.spec.replicas`, commit, and push:
+
+```bash
+# Edit 10-cluster.yaml: change replicas from 2 to 3
+git add 10-cluster.yaml
+git commit -m "Scale cluster-1 workers to 3"
+git push origin main
+```
+
+Fleet syncs, CAPI creates or deletes Machines accordingly. See [`cluster.md`](cluster.md#scaling-workers) for scale-up/down behavior and how CAPI selects which Machine to delete during scale-down.
+
+> **Note:** `RKE2ControlPlane` does **not** accept `replicas: 0` — the webhook rejects it. Only `MachineDeployment` can be scaled to zero (useful as a pre-deletion step — see [§5.3](#53-optional-pre-step-scale-workers-to-0-first)).
+
+## 8. Troubleshooting
 
 ### Fleet Not Syncing
 
