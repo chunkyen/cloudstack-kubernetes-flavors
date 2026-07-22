@@ -1,0 +1,36 @@
+# CloudStackMachineTemplates — kept separate from 10-cluster.yaml
+# so they survive Phase 1 deletion and the RKE2 pre-terminate hook
+# can find the template during node drain.
+# Replace template name, offering, and sshKey with your values.
+---
+apiVersion: infrastructure.cluster.x-k8s.io/v1beta3
+kind: CloudStackMachineTemplate
+metadata:
+  name: capc-rke2-cluster-1-control-plane
+  namespace: capc-rke2-cluster-1
+spec:
+  template:
+    spec:
+      offering:
+        name: "kube control"
+      sshKey: "cylabnb-k1"
+      template:
+        name: "rocky9"
+      details:
+        guest.cpu.mode: host-passthrough
+---
+apiVersion: infrastructure.cluster.x-k8s.io/v1beta3
+kind: CloudStackMachineTemplate
+metadata:
+  name: capc-rke2-cluster-1-md-0
+  namespace: capc-rke2-cluster-1
+spec:
+  template:
+    spec:
+      offering:
+        name: "kube worker1"
+      sshKey: "cylabnb-k1"
+      template:
+        name: "rocky9"
+      details:
+        guest.cpu.mode: host-passthrough

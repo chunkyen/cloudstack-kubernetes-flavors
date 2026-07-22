@@ -1,5 +1,5 @@
 # Minimal CAPC + RKE2 cluster — 1 control plane + 2 workers
-# Includes ClusterResourceSet label for automatic CCM + CSI deployment
+# CloudStackMachineTemplates are in 11-templates.yaml (kept separate for clean deletion)
 # Replace all placeholder values before pushing to your GitOps repo
 ---
 apiVersion: cluster.x-k8s.io/v1beta1
@@ -44,7 +44,7 @@ spec:
       network:
         name: capc-rke2-cluster-1-net
         offering: DefaultNetworkOfferingforKubernetesService
-  syncWithACS: true
+  syncWithACS: false
 ---
 apiVersion: controlplane.cluster.x-k8s.io/v1beta2
 kind: RKE2ControlPlane
@@ -74,22 +74,6 @@ spec:
         kind: CloudStackMachineTemplate
         name: capc-rke2-cluster-1-control-plane
 ---
-apiVersion: infrastructure.cluster.x-k8s.io/v1beta3
-kind: CloudStackMachineTemplate
-metadata:
-  name: capc-rke2-cluster-1-control-plane
-  namespace: capc-rke2-cluster-1
-spec:
-  template:
-    spec:
-      offering:
-        name: "kube control"
-      sshKey: "cylabnb-k1"
-      template:
-        name: "ubuntu 26 server"
-      details:
-        guest.cpu.mode: host-passthrough
----
 apiVersion: cluster.x-k8s.io/v1beta1
 kind: MachineDeployment
 metadata:
@@ -113,22 +97,6 @@ spec:
         kind: CloudStackMachineTemplate
         name: capc-rke2-cluster-1-md-0
       version: v1.36.2+rke2r1
----
-apiVersion: infrastructure.cluster.x-k8s.io/v1beta3
-kind: CloudStackMachineTemplate
-metadata:
-  name: capc-rke2-cluster-1-md-0
-  namespace: capc-rke2-cluster-1
-spec:
-  template:
-    spec:
-      offering:
-        name: "kube worker1"
-      sshKey: "cylabnb-k1"
-      template:
-        name: "ubuntu 26 server"
-      details:
-        guest.cpu.mode: host-passthrough
 ---
 apiVersion: bootstrap.cluster.x-k8s.io/v1beta2
 kind: RKE2ConfigTemplate
