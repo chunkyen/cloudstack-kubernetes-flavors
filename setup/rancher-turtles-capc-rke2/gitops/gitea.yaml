@@ -2,6 +2,10 @@
 # Self-hosted Git server for Fleet GitOps
 # Apply with: kubectl apply -f gitea.yaml
 # After deployment, complete initial setup via Gitea web UI and create an API token
+#
+# NOTE: This manifest uses HTTP (no TLS) for testing convenience.
+# In production, configure HTTPS — either add a TLS section to the Ingress
+# with a valid certificate, or use an ingress controller that terminates TLS.
 ---
 apiVersion: v1
 kind: Namespace

@@ -38,6 +38,8 @@ Git push → Gitea → webhook → Rancher Fleet → apply manifests to manageme
 
 ## 1. Deploy Gitea
 
+> **Security note:** This guide uses **HTTP** for Gitea (no TLS) for testing convenience. In production, Gitea should be configured with **HTTPS** — either by terminating TLS at an ingress controller with a valid certificate, or by configuring Gitea's built-in TLS. The GitOps workflow is identical either way; only the URL scheme changes (`https://` instead of `http://`).
+
 ### 1.1 Install Gitea on Management Cluster
 
 ```yaml
