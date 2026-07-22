@@ -289,6 +289,47 @@ KUBECONFIG=~/.kube/kube-rancher-config \
 
 > ⚠️ Do **not** use `kubectl delete node` directly on the workload cluster — this leaves the CAPI `Machine` and CloudStack VM in place. Always delete the `Machine` object on the management cluster so CAPI handles the full lifecycle.
 
+## VM Deleted Outside CAPI (CloudStack UI / API)
+
+If a VM is deleted directly from CloudStack (UI, `cmk`, or API) — bypassing CAPI — CAPC **does not automatically detect the deletion**. The `CloudStackMachine` resource continues to show `instanceState: Running` and `ready: true` because the `cloudstackmachine_controller` only reconciles on resource changes (annotations, spec updates, owner Machine state changes), not on periodic VM health checks.
+
+### Detection
+
+The deletion is visible through:
+
+- **Kubernetes node** — goes `NotReady` with `Kubelet stopped posting node status`
+- **Machine** — shows `NodeHealthy: False` with reason `NodeDeleted`
+- **CloudStackMachine** — still shows `Running` (stale)
+
+### Recovery
+
+To trigger CAPC to recreate the VM, force a reconcile by annotating the `CloudStackMachine`:
+
+```bash
+kubectl annotate cloudstackmachine -n <namespace> <machine-name> \
+  "reconcile-trigger=$(date +%s)" --overwrite
+```
+
+CAPC will reconcile, find the VM missing, create a new one with a new `providerID` and IP, and inject the bootstrap data. The new kubelet will attempt to register with the same node name.
+
+**If the old node object is still present** (blocking the new kubelet), delete it:
+
+```bash
+kubectl --kubeconfig <workload-kubeconfig> delete node <node-name>
+```
+
+The new node will join and become Ready within ~60 seconds.
+
+### Why not automatic
+
+The `cloudstackmachine_controller` does not periodically verify VM existence. It reconciles only when:
+
+1. The `CloudStackMachine` resource changes (spec, annotations, labels)
+2. The owner `Machine` object changes state
+3. A `MachineHealthCheck` timeout triggers CAPI to mark the Machine unhealthy
+
+A `MachineHealthCheck` can be configured to detect this automatically after a timeout period, but is not set up by default in the minimal cluster manifests.
+
 ## Upgrading RKE2 Version
 
 CAPI + CAPRKE2 supports **rolling upgrades** by changing the `version` field in the `RKE2ControlPlane` and `MachineDeployment` objects. CAPI then creates new VMs with the new RKE2 version, joins them to the cluster, migrates etcd leadership (for control plane), and deletes the old machines.
